@@ -40,6 +40,21 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Status tracking (Pending, Completed)
 - Due date tracking with overdue indicators
 
+### Client Portal
+- Separate portal for clients to view their job progress
+- Invite system: Admin sends email invites from contacts page
+- Token-based authentication (separate from admin Replit Auth)
+- Job list view showing client's projects only
+- Visual 16-stage progress timeline on job detail page
+- Payment requests section (deposit prompts, balance due)
+- Profile management page
+- Reviews page with configurable social media links (Facebook, Google, Trustpilot)
+
+### Settings (Admin)
+- Company settings management
+- Review URL configuration for social platforms
+- Client portal invite management
+
 ## Project Architecture
 
 ```
