@@ -89,6 +89,10 @@ export const jobs = pgTable("jobs", {
   // Partner status
   partnerStatus: text("partner_status"), // offered, accepted, declined, in_progress, completed, invoiced, paid
   
+  // Partner portal sharing
+  shareQuoteWithPartner: boolean("share_quote_with_partner").default(false),
+  shareNotesWithPartner: boolean("share_notes_with_partner").default(false),
+  
   // Quote details
   taxEnabled: boolean("tax_enabled").default(false),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("20"), // Default 20% VAT
@@ -486,3 +490,58 @@ export const partnerInvitesRelations = relations(partnerInvites, ({ one }) => ({
 export const insertPartnerInviteSchema = createInsertSchema(partnerInvites).omit({ id: true, createdAt: true });
 export type InsertPartnerInvite = z.infer<typeof insertPartnerInviteSchema>;
 export type PartnerInvite = typeof partnerInvites.$inferSelect;
+
+// ==================== JOB NOTES ====================
+
+// Job Notes (structured notes with visibility controls)
+export const jobNotes = pgTable("job_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  visibility: text("visibility").notNull().default("internal"), // internal, partner, client, all
+  authorName: text("author_name"), // Name of who wrote the note
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const jobNotesRelations = relations(jobNotes, ({ one, many }) => ({
+  job: one(jobs, {
+    fields: [jobNotes.jobId],
+    references: [jobs.id],
+  }),
+  attachments: many(jobNoteAttachments),
+}));
+
+export const insertJobNoteSchema = createInsertSchema(jobNotes).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertJobNote = z.infer<typeof insertJobNoteSchema>;
+export type JobNote = typeof jobNotes.$inferSelect;
+
+// Job Note Attachments (photos and files)
+export const jobNoteAttachments = pgTable("job_note_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  noteId: varchar("note_id").notNull().references(() => jobNotes.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(), // URL to the stored file
+  mimeType: text("mime_type"),
+  fileSize: integer("file_size"), // Size in bytes
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const jobNoteAttachmentsRelations = relations(jobNoteAttachments, ({ one }) => ({
+  note: one(jobNotes, {
+    fields: [jobNoteAttachments.noteId],
+    references: [jobNotes.id],
+  }),
+}));
+
+export const insertJobNoteAttachmentSchema = createInsertSchema(jobNoteAttachments).omit({ id: true, createdAt: true });
+export type InsertJobNoteAttachment = z.infer<typeof insertJobNoteAttachmentSchema>;
+export type JobNoteAttachment = typeof jobNoteAttachments.$inferSelect;
+
+// Note visibility options
+export const NOTE_VISIBILITY = [
+  { value: "internal", label: "Internal Only", description: "Only visible to CCC team" },
+  { value: "partner", label: "Partner", description: "Visible to assigned trade partner" },
+  { value: "client", label: "Client", description: "Visible to client" },
+  { value: "all", label: "All", description: "Visible to everyone" },
+] as const;
