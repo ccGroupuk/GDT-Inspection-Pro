@@ -441,3 +441,47 @@ export const PAYMENT_STATUSES = [
   { value: "paid", label: "Paid", color: "bg-green-500" },
   { value: "overdue", label: "Overdue", color: "bg-red-500" },
 ] as const;
+
+// Partner Portal Access (for trade partners to view their jobs)
+export const partnerPortalAccess = pgTable("partner_portal_access", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
+  accessToken: text("access_token").unique(),
+  tokenExpiry: timestamp("token_expiry"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastLoginAt: timestamp("last_login_at"),
+});
+
+export const partnerPortalAccessRelations = relations(partnerPortalAccess, ({ one }) => ({
+  partner: one(tradePartners, {
+    fields: [partnerPortalAccess.partnerId],
+    references: [tradePartners.id],
+  }),
+}));
+
+export const insertPartnerPortalAccessSchema = createInsertSchema(partnerPortalAccess).omit({ id: true, createdAt: true });
+export type InsertPartnerPortalAccess = z.infer<typeof insertPartnerPortalAccessSchema>;
+export type PartnerPortalAccess = typeof partnerPortalAccess.$inferSelect;
+
+// Partner Invites (for sending portal invitations to trade partners)
+export const partnerInvites = pgTable("partner_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
+  inviteToken: text("invite_token").notNull().unique(),
+  email: text("email").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const partnerInvitesRelations = relations(partnerInvites, ({ one }) => ({
+  partner: one(tradePartners, {
+    fields: [partnerInvites.partnerId],
+    references: [tradePartners.id],
+  }),
+}));
+
+export const insertPartnerInviteSchema = createInsertSchema(partnerInvites).omit({ id: true, createdAt: true });
+export type InsertPartnerInvite = z.infer<typeof insertPartnerInviteSchema>;
+export type PartnerInvite = typeof partnerInvites.$inferSelect;
