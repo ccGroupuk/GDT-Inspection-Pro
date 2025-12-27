@@ -233,29 +233,70 @@ export async function registerRoutes(
       // Auto-create finance transaction when job moves to "paid" status
       if (data.status === "paid" && currentJob.status !== "paid" && job.quotedValue != null) {
         try {
-          // Find the "Client Payments" category
-          const category = await storage.getFinancialCategoryByName("Client Payments");
+          // Find categories
+          const incomeCategory = await storage.getFinancialCategoryByName("Client Payments");
+          const partnerExpenseCategory = await storage.getFinancialCategoryByName("Partner Payments");
           
           // Get contact info for description
           const contact = currentJob.contactId 
             ? await storage.getContact(currentJob.contactId) 
             : null;
           
+          const grossAmount = parseFloat(job.quotedValue);
+          let cccMargin = grossAmount;
+          let partnerEarnings = 0;
+          
+          // Calculate CCC margin vs partner earnings for partner jobs
+          if (job.deliveryType === "partner" && job.partnerId && job.partnerCharge) {
+            const partnerCharge = parseFloat(job.partnerCharge);
+            if (job.partnerChargeType === "percentage") {
+              // CCC keeps the percentage as their margin
+              cccMargin = Math.min(grossAmount, Math.max(0, grossAmount * (partnerCharge / 100)));
+            } else {
+              // Fixed amount is CCC's margin
+              cccMargin = Math.min(grossAmount, Math.max(0, partnerCharge));
+            }
+            partnerEarnings = grossAmount - cccMargin;
+          }
+          
+          // Create income transaction for CCC's actual profit (margin only for partner jobs)
           await storage.createFinancialTransaction({
             date: new Date(),
             type: "income",
-            categoryId: category?.id,
-            amount: job.quotedValue,
-            description: `Payment received for ${job.jobNumber}${contact ? ` - ${contact.name}` : ""}`,
+            categoryId: incomeCategory?.id,
+            amount: cccMargin.toFixed(2),
+            description: job.deliveryType === "partner" 
+              ? `CCC Margin for ${job.jobNumber}${contact ? ` - ${contact.name}` : ""} (${job.partnerChargeType === "percentage" ? job.partnerCharge + "%" : "£" + job.partnerCharge} of £${grossAmount.toFixed(2)})`
+              : `Payment received for ${job.jobNumber}${contact ? ` - ${contact.name}` : ""}`,
             jobId: job.id,
             partnerId: undefined,
             invoiceId: undefined,
             sourceType: "job_payment",
-            grossAmount: job.quotedValue,
-            partnerCost: undefined,
-            profitAmount: undefined,
+            grossAmount: grossAmount.toFixed(2),
+            partnerCost: partnerEarnings > 0 ? partnerEarnings.toFixed(2) : undefined,
+            profitAmount: cccMargin.toFixed(2),
           });
-          console.log(`Auto-created finance transaction for job ${job.jobNumber} - £${job.quotedValue}`);
+          console.log(`Auto-created income transaction for job ${job.jobNumber} - CCC Margin: £${cccMargin.toFixed(2)}`);
+          
+          // If partner job, create pending expense for partner payment
+          if (job.deliveryType === "partner" && job.partnerId && partnerEarnings > 0) {
+            const partner = await storage.getTradePartner(job.partnerId);
+            await storage.createFinancialTransaction({
+              date: new Date(),
+              type: "expense",
+              categoryId: partnerExpenseCategory?.id,
+              amount: partnerEarnings.toFixed(2),
+              description: `Partner payment due to ${partner?.businessName || "Partner"} for ${job.jobNumber}`,
+              jobId: job.id,
+              partnerId: job.partnerId,
+              invoiceId: undefined,
+              sourceType: "partner_payment_due",
+              grossAmount: grossAmount.toFixed(2),
+              partnerCost: partnerEarnings.toFixed(2),
+              profitAmount: cccMargin.toFixed(2),
+            });
+            console.log(`Auto-created partner expense for job ${job.jobNumber} - Partner Earnings: £${partnerEarnings.toFixed(2)}`);
+          }
         } catch (financeError) {
           // Log but don't fail the job update if finance transaction fails
           console.error("Failed to auto-create finance transaction:", financeError);

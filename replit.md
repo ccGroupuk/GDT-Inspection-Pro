@@ -88,6 +88,11 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Financial categories: Client Payments, Partner Payments, Materials, Overheads, Vehicle & Fuel, Tools & Equipment, Marketing, Other
 - Manual transaction entry with category, amount, date, description
 - Auto-transaction creation: When job moves to "Paid" status, automatically creates income transaction
+- Partner job profit separation:
+  - For partner jobs: CCC margin (income) vs Partner earnings (expense) are calculated automatically
+  - Income shows only CCC's profit (the margin percentage/amount)
+  - Expense created for partner payment due (what the partner earns)
+  - Clear breakdown in transaction descriptions showing gross, margin, and partner share
 - Optional job linking for transactions
 - Month-by-month navigation to view historical data
 - Summary statistics: total income, expenses, profit, margin percentage
