@@ -209,11 +209,11 @@ export default function JobDetail() {
 
   // Schedule proposal mutations
   const createScheduleProposalMutation = useMutation({
-    mutationFn: async (data: { proposedStartDate: string; proposedEndDate?: string; notes?: string }) => {
+    mutationFn: async (data: { proposedStartDate: string; proposedEndDate?: string; adminNotes?: string }) => {
       return apiRequest("POST", `/api/jobs/${id}/schedule-proposals`, {
         proposedStartDate: new Date(data.proposedStartDate).toISOString(),
         proposedEndDate: data.proposedEndDate ? new Date(data.proposedEndDate).toISOString() : null,
-        notes: data.notes || null,
+        adminNotes: data.adminNotes || null,
       });
     },
     onSuccess: () => {
@@ -805,9 +805,9 @@ export default function JobDetail() {
                       )}
                     </div>
                     
-                    {scheduleProposal.notes && (
+                    {scheduleProposal.adminNotes && (
                       <div className="mt-3 pt-3 border-t">
-                        <p className="text-xs text-muted-foreground">Notes: {scheduleProposal.notes}</p>
+                        <p className="text-xs text-muted-foreground">Notes: {scheduleProposal.adminNotes}</p>
                       </div>
                     )}
                   </div>
@@ -1123,7 +1123,7 @@ export default function JobDetail() {
                 createScheduleProposalMutation.mutate({
                   proposedStartDate,
                   proposedEndDate: proposedEndDate || undefined,
-                  notes: proposalNotes || undefined,
+                  adminNotes: proposalNotes || undefined,
                 });
               }}
               disabled={createScheduleProposalMutation.isPending}

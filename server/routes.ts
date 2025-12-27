@@ -1946,12 +1946,17 @@ export async function registerRoutes(
       // Archive any existing active proposals for this job
       await storage.archiveScheduleProposals(req.params.jobId);
       
-      const data = insertJobScheduleProposalSchema.parse({
+      // Convert date strings to Date objects before validation
+      const bodyWithDates = {
         ...req.body,
+        proposedStartDate: req.body.proposedStartDate ? new Date(req.body.proposedStartDate) : undefined,
+        proposedEndDate: req.body.proposedEndDate ? new Date(req.body.proposedEndDate) : null,
         jobId: req.params.jobId,
         proposedByRole: "admin",
         status: "pending_client",
-      });
+      };
+      
+      const data = insertJobScheduleProposalSchema.parse(bodyWithDates);
       const proposal = await storage.createScheduleProposal(data);
       res.status(201).json(proposal);
     } catch (error) {

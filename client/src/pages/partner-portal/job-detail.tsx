@@ -167,7 +167,7 @@ export default function PartnerPortalJobDetail() {
               <CardContent>
                 <div className="relative">
                   <div className="flex items-center justify-between mb-2">
-                    {PIPELINE_STAGES.slice(0, 12).map((stage, index) => {
+                    {PIPELINE_STAGES.map((stage, index) => {
                       const isCompleted = index < currentStageIndex;
                       const isCurrent = index === currentStageIndex;
                       return (
@@ -177,15 +177,15 @@ export default function PartnerPortalJobDetail() {
                           title={stage}
                         >
                           <div className={`
-                            w-6 h-6 rounded-full flex items-center justify-center
+                            w-4 h-4 md:w-6 md:h-6 rounded-full flex items-center justify-center
                             ${isCompleted ? 'bg-green-500 text-white' : 
                               isCurrent ? 'bg-primary text-white' : 
                               'bg-muted text-muted-foreground'}
                           `}>
                             {isCompleted ? (
-                              <CheckCircle2 className="w-4 h-4" />
+                              <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4" />
                             ) : (
-                              <Circle className="w-4 h-4" />
+                              <Circle className="w-3 h-3 md:w-4 md:h-4" />
                             )}
                           </div>
                         </div>
@@ -195,7 +195,7 @@ export default function PartnerPortalJobDetail() {
                   <div className="h-1 bg-muted rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-primary transition-all duration-300"
-                      style={{ width: `${(currentStageIndex / 11) * 100}%` }}
+                      style={{ width: `${(currentStageIndex / (PIPELINE_STAGES.length - 1)) * 100}%` }}
                     />
                   </div>
                   <p className="text-center text-sm text-muted-foreground mt-2">
