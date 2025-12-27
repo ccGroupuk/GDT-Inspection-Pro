@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema } from "@shared/schema";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(
@@ -1913,6 +1913,231 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Delete partner availability error:", error);
       res.status(500).json({ message: "Failed to delete availability" });
+    }
+  });
+
+  // ==================== SCHEDULE PROPOSALS ====================
+  
+  // Admin: Get schedule proposals for a job
+  app.get("/api/jobs/:jobId/schedule-proposals", async (req, res) => {
+    try {
+      const proposals = await storage.getScheduleProposalsByJob(req.params.jobId);
+      res.json(proposals);
+    } catch (error) {
+      console.error("Get schedule proposals error:", error);
+      res.status(500).json({ message: "Failed to load schedule proposals" });
+    }
+  });
+
+  // Admin: Get active proposal for a job
+  app.get("/api/jobs/:jobId/schedule-proposals/active", async (req, res) => {
+    try {
+      const proposal = await storage.getActiveScheduleProposal(req.params.jobId);
+      res.json(proposal || null);
+    } catch (error) {
+      console.error("Get active schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to load active schedule proposal" });
+    }
+  });
+
+  // Admin: Create a new schedule proposal
+  app.post("/api/jobs/:jobId/schedule-proposals", async (req, res) => {
+    try {
+      // Archive any existing active proposals for this job
+      await storage.archiveScheduleProposals(req.params.jobId);
+      
+      const data = insertJobScheduleProposalSchema.parse({
+        ...req.body,
+        jobId: req.params.jobId,
+        proposedByRole: "admin",
+        status: "pending_client",
+      });
+      const proposal = await storage.createScheduleProposal(data);
+      res.status(201).json(proposal);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to create schedule proposal" });
+    }
+  });
+
+  // Admin: Update a schedule proposal (accept client counter, etc.)
+  app.patch("/api/schedule-proposals/:id", async (req, res) => {
+    try {
+      const data = insertJobScheduleProposalSchema.partial().parse(req.body);
+      const proposal = await storage.updateScheduleProposal(req.params.id, data);
+      if (!proposal) {
+        return res.status(404).json({ message: "Schedule proposal not found" });
+      }
+      res.json(proposal);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to update schedule proposal" });
+    }
+  });
+
+  // Admin: Confirm client's counter proposal and create calendar event
+  app.post("/api/schedule-proposals/:id/confirm", async (req, res) => {
+    try {
+      const proposal = await storage.getScheduleProposal(req.params.id);
+      if (!proposal) {
+        return res.status(404).json({ message: "Schedule proposal not found" });
+      }
+
+      const job = await storage.getJob(proposal.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Create calendar event
+      const eventDate = proposal.counterProposedDate || proposal.proposedStartDate;
+      const endDate = proposal.proposedEndDate || eventDate;
+      
+      const calendarEvent = await storage.createCalendarEvent({
+        title: `Project Start: ${job.jobNumber}`,
+        jobId: job.id,
+        partnerId: job.partnerId || undefined,
+        startDate: eventDate,
+        endDate: endDate,
+        allDay: true,
+        eventType: "project_start",
+        teamType: job.deliveryType === "in_house" ? "in_house" : job.deliveryType === "partner" ? "partner" : "hybrid",
+        status: "confirmed",
+        confirmedByAdmin: true,
+        confirmedByClient: true,
+        clientConfirmedAt: new Date(),
+        confirmedAt: new Date(),
+      });
+
+      // Update proposal to scheduled status
+      const updatedProposal = await storage.updateScheduleProposal(req.params.id, {
+        status: "scheduled",
+        linkedCalendarEventId: calendarEvent.id,
+      });
+
+      // Update job status to scheduled
+      await storage.updateJob(job.id, { status: "scheduled" });
+
+      res.json({ proposal: updatedProposal, calendarEvent });
+    } catch (error) {
+      console.error("Confirm schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to confirm schedule proposal" });
+    }
+  });
+
+  // Client Portal: Get active schedule proposal for a job
+  app.get("/api/portal/jobs/:jobId/schedule-proposal", async (req, res) => {
+    try {
+      // @ts-ignore
+      const clientAccess = req.clientAccess;
+      if (!clientAccess) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Verify job belongs to this client
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.contactId !== clientAccess.contactId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      const proposal = await storage.getActiveScheduleProposal(req.params.jobId);
+      res.json(proposal || null);
+    } catch (error) {
+      console.error("Get portal schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to load schedule proposal" });
+    }
+  });
+
+  // Client Portal: Respond to schedule proposal (accept/decline/counter)
+  app.post("/api/portal/jobs/:jobId/schedule-proposal/respond", async (req, res) => {
+    try {
+      // @ts-ignore
+      const clientAccess = req.clientAccess;
+      if (!clientAccess) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Verify job belongs to this client
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.contactId !== clientAccess.contactId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      const proposal = await storage.getActiveScheduleProposal(req.params.jobId);
+      if (!proposal) {
+        return res.status(404).json({ message: "No active schedule proposal found" });
+      }
+
+      const { response, counterDate, reason } = req.body;
+
+      if (response === "accepted") {
+        // Client accepted - create calendar event
+        const eventDate = proposal.proposedStartDate;
+        const endDate = proposal.proposedEndDate || eventDate;
+        
+        const calendarEvent = await storage.createCalendarEvent({
+          title: `Project Start: ${job.jobNumber}`,
+          jobId: job.id,
+          partnerId: job.partnerId || undefined,
+          startDate: eventDate,
+          endDate: endDate,
+          allDay: true,
+          eventType: "project_start",
+          teamType: job.deliveryType === "in_house" ? "in_house" : job.deliveryType === "partner" ? "partner" : "hybrid",
+          status: "confirmed",
+          confirmedByAdmin: true,
+          confirmedByClient: true,
+          clientConfirmedAt: new Date(),
+          confirmedAt: new Date(),
+        });
+
+        const updatedProposal = await storage.updateScheduleProposal(proposal.id, {
+          status: "scheduled",
+          clientResponse: "accepted",
+          respondedAt: new Date(),
+          linkedCalendarEventId: calendarEvent.id,
+        });
+
+        // Update job status to scheduled
+        await storage.updateJob(job.id, { status: "scheduled" });
+
+        res.json({ proposal: updatedProposal, calendarEvent });
+      } else if (response === "countered") {
+        // Client is proposing alternative date
+        if (!counterDate) {
+          return res.status(400).json({ message: "Counter date is required" });
+        }
+
+        const updatedProposal = await storage.updateScheduleProposal(proposal.id, {
+          status: "client_countered",
+          clientResponse: "countered",
+          counterProposedDate: new Date(counterDate),
+          counterReason: reason || null,
+          respondedAt: new Date(),
+        });
+
+        res.json({ proposal: updatedProposal });
+      } else if (response === "declined") {
+        // Client declined without alternative
+        const updatedProposal = await storage.updateScheduleProposal(proposal.id, {
+          status: "client_declined",
+          clientResponse: "declined",
+          counterReason: reason || null,
+          respondedAt: new Date(),
+        });
+
+        res.json({ proposal: updatedProposal });
+      } else {
+        return res.status(400).json({ message: "Invalid response type" });
+      }
+    } catch (error) {
+      console.error("Respond to schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to respond to schedule proposal" });
     }
   });
 
