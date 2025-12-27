@@ -54,6 +54,34 @@ export default function JobDetail() {
     enabled: Boolean(id),
   });
 
+  // Calculate quote totals from items - must be before any conditional returns
+  const quoteTotals = useMemo(() => {
+    const job = data?.job;
+    if (!quoteItems || quoteItems.length === 0 || !job) return null;
+    
+    const subtotal = quoteItems.reduce((sum, item) => sum + (parseFloat(item.lineTotal) || 0), 0);
+    
+    let discountAmount = 0;
+    if (job.discountType && job.discountValue) {
+      if (job.discountType === "percentage") {
+        discountAmount = subtotal * (parseFloat(job.discountValue) / 100);
+      } else if (job.discountType === "fixed") {
+        discountAmount = parseFloat(job.discountValue) || 0;
+      }
+    }
+    
+    const afterDiscount = subtotal - discountAmount;
+    
+    let taxAmount = 0;
+    if (job.taxEnabled && job.taxRate) {
+      taxAmount = afterDiscount * (parseFloat(job.taxRate) / 100);
+    }
+    
+    const grandTotal = afterDiscount + taxAmount;
+    
+    return { subtotal, discountAmount, taxAmount, grandTotal };
+  }, [quoteItems, data?.job]);
+
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
       return apiRequest("PATCH", `/api/jobs/${id}`, { status });
@@ -137,33 +165,6 @@ export default function JobDetail() {
   const marginPercentage = margin && job.quotedValue
     ? ((margin / Number(job.quotedValue)) * 100).toFixed(1)
     : null;
-
-  // Calculate quote totals from items
-  const quoteTotals = useMemo(() => {
-    if (!quoteItems || quoteItems.length === 0) return null;
-    
-    const subtotal = quoteItems.reduce((sum, item) => sum + (parseFloat(item.lineTotal) || 0), 0);
-    
-    let discountAmount = 0;
-    if (job.discountType && job.discountValue) {
-      if (job.discountType === "percentage") {
-        discountAmount = subtotal * (parseFloat(job.discountValue) / 100);
-      } else if (job.discountType === "fixed") {
-        discountAmount = parseFloat(job.discountValue) || 0;
-      }
-    }
-    
-    const afterDiscount = subtotal - discountAmount;
-    
-    let taxAmount = 0;
-    if (job.taxEnabled && job.taxRate) {
-      taxAmount = afterDiscount * (parseFloat(job.taxRate) / 100);
-    }
-    
-    const grandTotal = afterDiscount + taxAmount;
-    
-    return { subtotal, discountAmount, taxAmount, grandTotal };
-  }, [quoteItems, job.discountType, job.discountValue, job.taxEnabled, job.taxRate]);
 
   return (
     <div className="p-6">
