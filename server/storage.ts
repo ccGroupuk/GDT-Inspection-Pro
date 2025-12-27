@@ -11,6 +11,8 @@ import {
   reviewRequests, type ReviewRequest, type InsertReviewRequest,
   invoices, type Invoice, type InsertInvoice,
   invoiceLineItems, type InvoiceLineItem, type InsertInvoiceLineItem,
+  partnerPortalAccess, type PartnerPortalAccess, type InsertPartnerPortalAccess,
+  partnerInvites, type PartnerInvite, type InsertPartnerInvite,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, isNull } from "drizzle-orm";
@@ -83,6 +85,19 @@ export interface IStorage {
   getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]>;
   createInvoiceLineItem(item: InsertInvoiceLineItem): Promise<InvoiceLineItem>;
   deleteInvoiceLineItems(invoiceId: string): Promise<boolean>;
+
+  // Partner Portal
+  getPartnerPortalAccess(partnerId: string): Promise<PartnerPortalAccess | undefined>;
+  getPartnerPortalAccessByToken(token: string): Promise<PartnerPortalAccess | undefined>;
+  createPartnerPortalAccess(access: InsertPartnerPortalAccess): Promise<PartnerPortalAccess>;
+  updatePartnerPortalAccessLastLogin(partnerId: string): Promise<void>;
+  
+  getPartnerInviteByToken(token: string): Promise<PartnerInvite | undefined>;
+  getPartnerInviteByPartner(partnerId: string): Promise<PartnerInvite | undefined>;
+  createPartnerInvite(invite: InsertPartnerInvite): Promise<PartnerInvite>;
+  acceptPartnerInvite(token: string): Promise<void>;
+  
+  getJobsByPartner(partnerId: string): Promise<Job[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -354,6 +369,56 @@ export class DatabaseStorage implements IStorage {
   async deleteInvoiceLineItems(invoiceId: string): Promise<boolean> {
     await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
     return true;
+  }
+
+  // Partner Portal Methods
+  async getPartnerPortalAccess(partnerId: string): Promise<PartnerPortalAccess | undefined> {
+    const [access] = await db.select().from(partnerPortalAccess).where(eq(partnerPortalAccess.partnerId, partnerId));
+    return access || undefined;
+  }
+
+  async getPartnerPortalAccessByToken(token: string): Promise<PartnerPortalAccess | undefined> {
+    const [access] = await db.select().from(partnerPortalAccess).where(eq(partnerPortalAccess.accessToken, token));
+    return access || undefined;
+  }
+
+  async createPartnerPortalAccess(access: InsertPartnerPortalAccess): Promise<PartnerPortalAccess> {
+    const [created] = await db.insert(partnerPortalAccess).values(access).returning();
+    return created;
+  }
+
+  async updatePartnerPortalAccessLastLogin(partnerId: string): Promise<void> {
+    await db.update(partnerPortalAccess)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(partnerPortalAccess.partnerId, partnerId));
+  }
+
+  async getPartnerInviteByToken(token: string): Promise<PartnerInvite | undefined> {
+    const [invite] = await db.select().from(partnerInvites).where(eq(partnerInvites.inviteToken, token));
+    return invite || undefined;
+  }
+
+  async getPartnerInviteByPartner(partnerId: string): Promise<PartnerInvite | undefined> {
+    const [invite] = await db.select().from(partnerInvites)
+      .where(and(
+        eq(partnerInvites.partnerId, partnerId),
+        isNull(partnerInvites.acceptedAt)
+      ))
+      .orderBy(desc(partnerInvites.createdAt));
+    return invite || undefined;
+  }
+
+  async createPartnerInvite(invite: InsertPartnerInvite): Promise<PartnerInvite> {
+    const [created] = await db.insert(partnerInvites).values(invite).returning();
+    return created;
+  }
+
+  async acceptPartnerInvite(token: string): Promise<void> {
+    await db.update(partnerInvites).set({ acceptedAt: new Date() }).where(eq(partnerInvites.inviteToken, token));
+  }
+
+  async getJobsByPartner(partnerId: string): Promise<Job[]> {
+    return db.select().from(jobs).where(eq(jobs.partnerId, partnerId)).orderBy(desc(jobs.createdAt));
   }
 }
 
