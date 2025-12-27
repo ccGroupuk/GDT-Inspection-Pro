@@ -19,6 +19,7 @@ import {
   financialTransactions, type FinancialTransaction, type InsertFinancialTransaction,
   calendarEvents, type CalendarEvent, type InsertCalendarEvent,
   partnerAvailability, type PartnerAvailability, type InsertPartnerAvailability,
+  jobScheduleProposals, type JobScheduleProposal, type InsertJobScheduleProposal,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, isNull, gte, lte } from "drizzle-orm";
@@ -151,6 +152,14 @@ export interface IStorage {
   createPartnerAvailability(availability: InsertPartnerAvailability): Promise<PartnerAvailability>;
   updatePartnerAvailability(id: string, availability: Partial<InsertPartnerAvailability>): Promise<PartnerAvailability | undefined>;
   deletePartnerAvailability(id: string): Promise<boolean>;
+
+  // Job Schedule Proposals
+  getScheduleProposalsByJob(jobId: string): Promise<JobScheduleProposal[]>;
+  getActiveScheduleProposal(jobId: string): Promise<JobScheduleProposal | undefined>;
+  getScheduleProposal(id: string): Promise<JobScheduleProposal | undefined>;
+  createScheduleProposal(proposal: InsertJobScheduleProposal): Promise<JobScheduleProposal>;
+  updateScheduleProposal(id: string, proposal: Partial<InsertJobScheduleProposal>): Promise<JobScheduleProposal | undefined>;
+  archiveScheduleProposals(jobId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -692,6 +701,52 @@ export class DatabaseStorage implements IStorage {
   async deletePartnerAvailability(id: string): Promise<boolean> {
     await db.delete(partnerAvailability).where(eq(partnerAvailability.id, id));
     return true;
+  }
+
+  // Job Schedule Proposal Methods
+  async getScheduleProposalsByJob(jobId: string): Promise<JobScheduleProposal[]> {
+    return db.select()
+      .from(jobScheduleProposals)
+      .where(eq(jobScheduleProposals.jobId, jobId))
+      .orderBy(desc(jobScheduleProposals.createdAt));
+  }
+
+  async getActiveScheduleProposal(jobId: string): Promise<JobScheduleProposal | undefined> {
+    const [proposal] = await db.select()
+      .from(jobScheduleProposals)
+      .where(and(
+        eq(jobScheduleProposals.jobId, jobId),
+        eq(jobScheduleProposals.isArchived, false)
+      ))
+      .orderBy(desc(jobScheduleProposals.createdAt))
+      .limit(1);
+    return proposal || undefined;
+  }
+
+  async getScheduleProposal(id: string): Promise<JobScheduleProposal | undefined> {
+    const [proposal] = await db.select()
+      .from(jobScheduleProposals)
+      .where(eq(jobScheduleProposals.id, id));
+    return proposal || undefined;
+  }
+
+  async createScheduleProposal(proposal: InsertJobScheduleProposal): Promise<JobScheduleProposal> {
+    const [created] = await db.insert(jobScheduleProposals).values(proposal).returning();
+    return created;
+  }
+
+  async updateScheduleProposal(id: string, proposal: Partial<InsertJobScheduleProposal>): Promise<JobScheduleProposal | undefined> {
+    const [updated] = await db.update(jobScheduleProposals)
+      .set({ ...proposal, updatedAt: new Date() })
+      .where(eq(jobScheduleProposals.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async archiveScheduleProposals(jobId: string): Promise<void> {
+    await db.update(jobScheduleProposals)
+      .set({ isArchived: true, updatedAt: new Date() })
+      .where(eq(jobScheduleProposals.jobId, jobId));
   }
 }
 
