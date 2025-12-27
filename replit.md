@@ -4,9 +4,9 @@
 A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The system manages clients, jobs, trade partners, and tasks with a visual pipeline for tracking job progress.
 
 ## Current State
-- **Version**: MVP Complete + Quote Builder
+- **Version**: MVP Complete + Quote Builder + Job Notes with Attachments
 - **Last Updated**: December 2024
-- **Status**: Fully functional CRM with persistent data storage and detailed quoting
+- **Status**: Fully functional CRM with persistent data storage, detailed quoting, and job notes with photo attachments
 
 ## Core Features
 
@@ -50,6 +50,14 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Quote items displayed on admin job detail and client portal
 - Bulk save endpoint for atomic quote item updates
 
+### Job Notes with Attachments
+- Notes with photo attachments for each job
+- Four visibility levels: internal (admin only), partner, client, all
+- Photo upload via Replit Object Storage with presigned URLs
+- Admin toggles to share quotes and notes with partners
+- Notes displayed on admin job detail page with full CRUD
+- Partner portal shows notes when sharing is enabled (filtered by visibility)
+
 ### Client Portal
 - Separate portal for clients to view their job progress
 - Invite system: Admin sends email invites from contacts page
@@ -67,6 +75,8 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Job list view showing partner's assigned projects only
 - Job detail page with client contact info, job notes, and tasks
 - Visual 16-stage progress timeline on job detail page
+- Quote items displayed when admin enables quote sharing
+- Job notes with photos displayed when admin enables notes sharing (filtered by visibility)
 - Access via /partner-portal/* routes
 
 ### Settings (Admin)
@@ -145,6 +155,22 @@ shared/
 - `POST /api/partners` - Create partner
 - `PATCH /api/partners/:id` - Update partner
 - `DELETE /api/partners/:id` - Delete partner
+
+### Job Notes
+- `GET /api/jobs/:jobId/notes` - List notes for a job (with attachments)
+- `POST /api/jobs/:jobId/notes` - Create note
+- `PATCH /api/jobs/:jobId/notes/:noteId` - Update note
+- `DELETE /api/jobs/:jobId/notes/:noteId` - Delete note
+- `POST /api/jobs/:jobId/notes/:noteId/attachments` - Add attachment to note
+- `DELETE /api/notes/attachments/:attachmentId` - Remove attachment
+
+### Partner Sharing
+- `PATCH /api/jobs/:jobId/share-quote` - Toggle quote sharing with partner
+- `PATCH /api/jobs/:jobId/share-notes` - Toggle notes sharing with partner
+
+### Partner Portal API
+- `GET /api/partner-portal/jobs/:jobId/quote-items` - Get quote items (if sharing enabled)
+- `GET /api/partner-portal/jobs/:jobId/notes` - Get notes (if sharing enabled, filtered by visibility)
 
 ### Tasks
 - `GET /api/tasks` - List all tasks with jobs
