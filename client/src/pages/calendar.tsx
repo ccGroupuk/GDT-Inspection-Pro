@@ -41,6 +41,7 @@ const eventFormSchema = z.object({
   endDate: z.string().min(1, "End date is required"),
   allDay: z.boolean().default(true),
   teamType: z.enum(["in_house", "partner", "hybrid"]),
+  eventType: z.enum(["general", "home_visit_ccc", "home_visit_partner", "project_start"]).default("general"),
   jobId: z.string().optional(),
   partnerId: z.string().optional(),
   notes: z.string().optional(),
@@ -192,6 +193,7 @@ function AddEventDialog({
       endDate: defaultDate ? format(defaultDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
       allDay: true,
       teamType: "in_house",
+      eventType: "general",
       jobId: "",
       partnerId: "",
       notes: "",
@@ -295,28 +297,54 @@ function AddEventDialog({
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="teamType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Team Type</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-team-type">
-                        <SelectValue placeholder="Select team type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="in_house">In-House (CCC Team)</SelectItem>
-                      <SelectItem value="partner">Partner (Trade Partner)</SelectItem>
-                      <SelectItem value="hybrid">Hybrid (CCC + Partner)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="eventType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Event Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-event-type">
+                          <SelectValue placeholder="Select event type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="general">General Work</SelectItem>
+                        <SelectItem value="home_visit_ccc">Home Visit (CCC)</SelectItem>
+                        <SelectItem value="home_visit_partner">Home Visit (Partner)</SelectItem>
+                        <SelectItem value="project_start">Project Start</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="teamType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Team Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-team-type">
+                          <SelectValue placeholder="Select team type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="in_house">In-House (CCC Team)</SelectItem>
+                        <SelectItem value="partner">Partner (Trade Partner)</SelectItem>
+                        <SelectItem value="hybrid">Hybrid (CCC + Partner)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
