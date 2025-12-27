@@ -229,7 +229,12 @@ function AddEventDialog({
   });
 
   const onSubmit = (data: EventFormData) => {
-    createMutation.mutate(data);
+    const submitData = {
+      ...data,
+      jobId: data.jobId === "none" ? undefined : data.jobId,
+      partnerId: data.partnerId === "none" ? undefined : data.partnerId,
+    };
+    createMutation.mutate(submitData);
   };
 
   return (
@@ -326,7 +331,7 @@ function AddEventDialog({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">No job linked</SelectItem>
+                      <SelectItem value="none">No job linked</SelectItem>
                       {jobs.map((job) => (
                         <SelectItem key={job.id} value={job.id}>
                           {job.jobNumber} - {job.serviceType}
@@ -353,7 +358,7 @@ function AddEventDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No partner selected</SelectItem>
+                        <SelectItem value="none">No partner selected</SelectItem>
                         {partners.filter(p => p.isActive).map((partner) => (
                           <SelectItem key={partner.id} value={partner.id}>
                             {partner.businessName} ({partner.tradeCategory})
