@@ -1506,6 +1506,74 @@ export async function registerRoutes(
     }
   });
 
+  // Financial Forecast - jobs confirmed at quote_accepted stage and beyond
+  app.get("/api/financial-forecast", async (req, res) => {
+    try {
+      const jobs = await storage.getJobs();
+      
+      // Stages that represent confirmed/expected income
+      const confirmedStages = [
+        "quote_accepted",
+        "deposit_requested", 
+        "deposit_paid",
+        "scheduled",
+        "in_progress",
+        "completed",
+        "invoice_sent"
+      ];
+      
+      const confirmedJobs = jobs.filter(j => confirmedStages.includes(j.status));
+      
+      // Calculate forecast totals
+      let totalForecast = 0;
+      let depositsPending = 0;
+      let balanceDue = 0;
+      
+      const forecastJobs = confirmedJobs.map(job => {
+        const quotedValue = parseFloat(job.quotedValue || "0");
+        const depositAmount = job.depositRequired 
+          ? (job.depositType === "percentage" 
+              ? quotedValue * (parseFloat(job.depositAmount || "0") / 100)
+              : parseFloat(job.depositAmount || "0"))
+          : 0;
+        
+        const depositPaid = job.depositReceived;
+        const isPaid = job.status === "paid" || job.status === "closed";
+        
+        totalForecast += quotedValue;
+        
+        if (!depositPaid && job.depositRequired) {
+          depositsPending += depositAmount;
+        }
+        
+        if (!isPaid) {
+          balanceDue += depositPaid ? (quotedValue - depositAmount) : quotedValue;
+        }
+        
+        return {
+          id: job.id,
+          jobNumber: job.jobNumber,
+          serviceType: job.serviceType,
+          status: job.status,
+          quotedValue,
+          depositAmount,
+          depositPaid,
+        };
+      });
+      
+      res.json({
+        totalForecast,
+        depositsPending,
+        balanceDue,
+        confirmedJobCount: confirmedJobs.length,
+        jobs: forecastJobs
+      });
+    } catch (error) {
+      console.error("Get financial forecast error:", error);
+      res.status(500).json({ message: "Failed to load financial forecast" });
+    }
+  });
+
   // Register object storage routes
   registerObjectStorageRoutes(app);
 

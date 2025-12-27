@@ -90,6 +90,9 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Month-by-month navigation to view historical data
 - Summary statistics: total income, expenses, profit, margin percentage
 - Auto vs manual transaction source tracking
+- Cash flow forecast: Shows expected income from confirmed jobs (quote_accepted and beyond)
+- Forecast displays: total confirmed value, deposits pending, balance due
+- List of confirmed jobs with their quoted values and deposit status
 
 ### Settings (Admin)
 - Company settings management

@@ -35,6 +35,24 @@ interface FinancialSummary {
   transactionCount: number;
 }
 
+interface ForecastJob {
+  id: string;
+  jobNumber: string;
+  serviceType: string;
+  status: string;
+  quotedValue: number;
+  depositAmount: number;
+  depositPaid: boolean;
+}
+
+interface FinancialForecast {
+  totalForecast: number;
+  depositsPending: number;
+  balanceDue: number;
+  confirmedJobCount: number;
+  jobs: ForecastJob[];
+}
+
 export default function Finance() {
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -68,6 +86,10 @@ export default function Finance() {
 
   const { data: allJobs = [] } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
+  });
+
+  const { data: forecast } = useQuery<FinancialForecast>({
+    queryKey: ["/api/financial-forecast"],
   });
 
   const createMutation = useMutation({
@@ -182,6 +204,66 @@ export default function Finance() {
           data-testid="stat-transactions"
         />
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Cash Flow Forecast</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="p-4 rounded-md bg-muted/50">
+              <p className="text-sm text-muted-foreground">Total Confirmed</p>
+              <p className="text-2xl font-semibold" data-testid="text-forecast-total">
+                £{(forecast?.totalForecast || 0).toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">{forecast?.confirmedJobCount || 0} confirmed jobs</p>
+            </div>
+            <div className="p-4 rounded-md bg-muted/50">
+              <p className="text-sm text-muted-foreground">Deposits Pending</p>
+              <p className="text-2xl font-semibold" data-testid="text-deposits-pending">
+                £{(forecast?.depositsPending || 0).toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">Awaiting payment</p>
+            </div>
+            <div className="p-4 rounded-md bg-muted/50">
+              <p className="text-sm text-muted-foreground">Balance Due</p>
+              <p className="text-2xl font-semibold" data-testid="text-balance-due">
+                £{(forecast?.balanceDue || 0).toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">Outstanding balances</p>
+            </div>
+          </div>
+          
+          {forecast?.jobs && forecast.jobs.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Confirmed Jobs</p>
+              {forecast.jobs.map(job => (
+                <div key={job.id} className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/30" data-testid={`forecast-job-${job.id}`}>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="font-medium">{job.jobNumber}</span>
+                    <span className="text-sm text-muted-foreground">{job.serviceType}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {job.status.replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium">£{job.quotedValue.toLocaleString()}</p>
+                    {job.depositAmount > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Deposit: £{job.depositAmount.toLocaleString()} {job.depositPaid ? "(Paid)" : "(Pending)"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {(!forecast?.jobs || forecast.jobs.length === 0) && (
+            <p className="text-center text-muted-foreground py-4">No confirmed jobs yet</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">
