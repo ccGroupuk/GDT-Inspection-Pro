@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Link } from "wouter";
 import {
   ChevronLeft,
   ChevronRight,
@@ -99,9 +100,9 @@ function EventCard({ event, onConfirm }: { event: EnrichedCalendarEvent; onConfi
   const needsPartnerConfirmation = (event.teamType === "partner" || event.teamType === "hybrid") && !event.confirmedByPartner;
   const isFullyConfirmed = event.status === "confirmed";
 
-  return (
+  const cardContent = (
     <div
-      className={`p-2 rounded-md border-l-4 ${teamTypeColors[event.teamType as keyof typeof teamTypeColors] || "border-l-gray-500"} mb-2`}
+      className={`p-2 rounded-md border-l-4 ${teamTypeColors[event.teamType as keyof typeof teamTypeColors] || "border-l-gray-500"} mb-2 hover-elevate active-elevate-2 cursor-pointer`}
       data-testid={`event-card-${event.id}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -156,7 +157,11 @@ function EventCard({ event, onConfirm }: { event: EnrichedCalendarEvent; onConfi
             <Button
               size="sm"
               variant="outline"
-              onClick={onConfirm}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onConfirm();
+              }}
               className="w-full text-xs"
               data-testid={`button-confirm-event-${event.id}`}
             >
@@ -168,6 +173,13 @@ function EventCard({ event, onConfirm }: { event: EnrichedCalendarEvent; onConfi
       )}
     </div>
   );
+
+  // If event has a job, make it clickable to go to job detail
+  if (event.jobId) {
+    return <Link href={`/jobs/${event.jobId}`}>{cardContent}</Link>;
+  }
+
+  return cardContent;
 }
 
 function AddEventDialog({ 
