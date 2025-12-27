@@ -65,6 +65,9 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Job list view showing client's projects only
 - Visual 16-stage progress timeline on job detail page
 - Payment requests section (deposit prompts, balance due)
+- Quote accept/decline: Clients can respond to quotes when status is "Quote Sent"
+  - Accept button moves job status to "Quote Accepted" automatically
+  - Response recorded with timestamp (one-time submission)
 - Profile management page
 - Reviews page with configurable social media links (Facebook, Google, Trustpilot)
 
@@ -167,6 +170,9 @@ shared/
 ### Partner Sharing
 - `PATCH /api/jobs/:jobId/share-quote` - Toggle quote sharing with partner
 - `PATCH /api/jobs/:jobId/share-notes` - Toggle notes sharing with partner
+
+### Client Portal Quote Response
+- `POST /api/portal/jobs/:jobId/quote-response` - Accept or decline a quote (body: { response: 'accepted' | 'declined' })
 
 ### Partner Portal API
 - `GET /api/partner-portal/jobs/:jobId/quote-items` - Get quote items (if sharing enabled)
