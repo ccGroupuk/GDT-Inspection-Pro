@@ -13,7 +13,7 @@ import { PortalLayout } from "@/components/portal-layout";
 import { usePortalAuth, portalApiRequest } from "@/hooks/use-portal-auth";
 import { StatusBadge } from "@/components/status-badge";
 import { PIPELINE_STAGES, PAYMENT_STATUSES } from "@shared/schema";
-import { ArrowLeft, MapPin, Calendar, CheckCircle, Circle, PoundSterling, FileText, Receipt, Check, X, Clock, MessageSquare } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, CheckCircle, Circle, PoundSterling, FileText, Receipt, Check, X, Clock, MessageSquare, CreditCard, Building2 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -66,6 +66,15 @@ interface ScheduleProposal {
   counterProposedDate: string | null;
   counterReason: string | null;
   createdAt: string;
+}
+
+interface PaymentDetails {
+  bankName: string;
+  accountName: string;
+  sortCode: string;
+  accountNumber: string;
+  paymentMethods: string;
+  paymentNotes: string;
 }
 
 interface PortalJobDetail {
@@ -166,6 +175,18 @@ export default function PortalJobDetail() {
       return response.json();
     },
     enabled: !!token && !!jobId,
+  });
+
+  // Fetch payment details
+  const { data: paymentDetails } = useQuery<PaymentDetails>({
+    queryKey: ["/api/portal/payment-details"],
+    queryFn: async () => {
+      const response = await fetch("/api/portal/payment-details");
+      if (!response.ok) {
+        throw new Error("Failed to fetch payment details");
+      }
+      return response.json();
+    },
   });
 
   // Accept schedule proposal
@@ -626,6 +647,55 @@ export default function PortalJobDetail() {
                         </div>
                       </div>
                     ))}
+
+                    {paymentDetails && (paymentDetails.bankName || paymentDetails.accountNumber) && (
+                      <div className="p-4 rounded-lg bg-primary/5 border border-primary/20" data-testid="payment-details">
+                        <div className="flex items-center gap-2 mb-3">
+                          <CreditCard className="w-4 h-4 text-primary" />
+                          <span className="font-semibold text-sm">Payment Details</span>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          {paymentDetails.bankName && (
+                            <div className="flex items-start gap-2">
+                              <Building2 className="w-4 h-4 text-muted-foreground mt-0.5" />
+                              <div>
+                                <p className="font-medium">{paymentDetails.bankName}</p>
+                                {paymentDetails.accountName && (
+                                  <p className="text-muted-foreground">{paymentDetails.accountName}</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          {(paymentDetails.sortCode || paymentDetails.accountNumber) && (
+                            <div className="grid grid-cols-2 gap-4 mt-2">
+                              {paymentDetails.sortCode && (
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Sort Code</p>
+                                  <p className="font-mono font-medium">{paymentDetails.sortCode}</p>
+                                </div>
+                              )}
+                              {paymentDetails.accountNumber && (
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Account Number</p>
+                                  <p className="font-mono font-medium">{paymentDetails.accountNumber}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {paymentDetails.paymentMethods && (
+                            <div className="mt-2 pt-2 border-t border-border">
+                              <p className="text-xs text-muted-foreground">Accepted Methods</p>
+                              <p className="text-sm">{paymentDetails.paymentMethods}</p>
+                            </div>
+                          )}
+                          {paymentDetails.paymentNotes && (
+                            <p className="mt-2 pt-2 border-t border-border text-xs text-muted-foreground">
+                              {paymentDetails.paymentNotes}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

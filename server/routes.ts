@@ -933,6 +933,25 @@ export async function registerRoutes(
     }
   });
 
+  // Client Portal: Get payment details for invoices
+  app.get("/api/portal/payment-details", async (req, res) => {
+    try {
+      const settings = await storage.getCompanySettings();
+      const paymentDetails = {
+        bankName: settings.find(s => s.settingKey === "payment_bank_name")?.settingValue || "",
+        accountName: settings.find(s => s.settingKey === "payment_account_name")?.settingValue || "",
+        sortCode: settings.find(s => s.settingKey === "payment_sort_code")?.settingValue || "",
+        accountNumber: settings.find(s => s.settingKey === "payment_account_number")?.settingValue || "",
+        paymentMethods: settings.find(s => s.settingKey === "payment_methods")?.settingValue || "",
+        paymentNotes: settings.find(s => s.settingKey === "payment_notes")?.settingValue || "",
+      };
+      res.json(paymentDetails);
+    } catch (error) {
+      console.error("Get payment details error:", error);
+      res.status(500).json({ message: "Failed to load payment details" });
+    }
+  });
+
   // ==================== PARTNER PORTAL ADMIN ENDPOINTS ====================
 
   // Send partner portal invite
