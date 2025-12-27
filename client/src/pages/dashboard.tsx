@@ -12,7 +12,10 @@ import {
   Clock,
   AlertCircle,
   CheckCircle,
+  ThumbsUp,
+  Sparkles,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import type { Job, Contact, TradePartner, Task } from "@shared/schema";
 
@@ -46,6 +49,7 @@ export default function Dashboard() {
   const newEnquiries = jobs.filter(j => j.status === "new_enquiry");
   const inProgressJobs = jobs.filter(j => j.status === "in_progress");
   const pendingDeposits = jobs.filter(j => j.depositRequired && !j.depositReceived);
+  const quotesAccepted = jobs.filter(j => j.quoteResponse === "accepted" || j.status === "quote_accepted");
   const totalQuotedValue = jobs.reduce((sum, j) => sum + Number(j.quotedValue || 0), 0);
   const partnerJobs = jobs.filter(j => j.deliveryType === "partner" || j.deliveryType === "hybrid");
   const inHouseJobs = jobs.filter(j => j.deliveryType === "in_house");
@@ -63,12 +67,19 @@ export default function Dashboard() {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatCard
           title="Active Jobs"
           value={activeJobs.length}
           icon={Briefcase}
           description={`${newEnquiries.length} new enquiries`}
+        />
+        <StatCard
+          title="Quotes Accepted"
+          value={quotesAccepted.length}
+          icon={ThumbsUp}
+          description="Ready to schedule"
+          data-testid="stat-quotes-accepted"
         />
         <StatCard
           title="Total Contacts"
@@ -105,26 +116,40 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground text-center py-8">No jobs yet</p>
             ) : (
               <div className="space-y-3">
-                {recentJobs.map(job => (
-                  <Link key={job.id} href={`/jobs/${job.id}`}>
-                    <div className="flex items-center justify-between gap-4 p-3 rounded-lg hover-elevate active-elevate-2 cursor-pointer" data-testid={`dashboard-job-${job.id}`}>
-                      <div className="flex flex-col gap-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs text-muted-foreground">{job.jobNumber}</span>
-                          <StatusBadge status={job.status} />
+                {recentJobs.map(job => {
+                  const isQuoteAccepted = job.quoteResponse === "accepted" || job.status === "quote_accepted";
+                  return (
+                    <Link key={job.id} href={`/jobs/${job.id}`}>
+                      <div 
+                        className={`flex items-center justify-between gap-4 p-3 rounded-lg hover-elevate active-elevate-2 cursor-pointer ${
+                          isQuoteAccepted ? "ring-1 ring-green-500/30 bg-green-500/5" : ""
+                        }`} 
+                        data-testid={`dashboard-job-${job.id}`}
+                      >
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-xs text-muted-foreground">{job.jobNumber}</span>
+                            <StatusBadge status={job.status} />
+                            {isQuoteAccepted && (
+                              <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 text-xs">
+                                <Sparkles className="w-3 h-3 mr-1" />
+                                Accepted
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="text-sm font-medium truncate">{job.serviceType}</span>
                         </div>
-                        <span className="text-sm font-medium truncate">{job.serviceType}</span>
+                        <div className="text-right shrink-0">
+                          {job.quotedValue && (
+                            <span className="font-mono text-sm font-semibold">
+                              £{Number(job.quotedValue).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        {job.quotedValue && (
-                          <span className="font-mono text-sm font-semibold">
-                            £{Number(job.quotedValue).toLocaleString()}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </CardContent>
