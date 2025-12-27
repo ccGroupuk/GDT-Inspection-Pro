@@ -150,7 +150,7 @@ export default function Partners() {
   };
 
   const copyPartnerPortalLink = (token: string, isPending: boolean) => {
-    const path = isPending ? `/partner-portal/login?token=${token}` : `/partner-portal/login?token=${token}`;
+    const path = isPending ? `/partner-portal/invite/${token}` : `/partner-portal/login?token=${token}`;
     const url = `${window.location.origin}${path}`;
     navigator.clipboard.writeText(url);
     toast({
@@ -159,9 +159,9 @@ export default function Partners() {
     });
   };
 
-  const openPartnerPortal = (token: string) => {
-    const url = `/partner-portal/login?token=${token}`;
-    window.open(url, "_blank");
+  const openPartnerPortal = (token: string, isPending: boolean = false) => {
+    const path = isPending ? `/partner-portal/invite/${token}` : `/partner-portal/login?token=${token}`;
+    window.open(path, "_blank");
   };
 
   const { data: partnerPortalAccessMap = {} } = useQuery({
@@ -549,7 +549,7 @@ export default function Partners() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => openPartnerPortal(portalAccess.portalToken!)}
+                                  onClick={() => openPartnerPortal(portalAccess.portalToken!, portalAccess.inviteStatus === "pending")}
                                   data-testid={`button-open-partner-portal-${partner.id}`}
                                 >
                                   <ExternalLink className="w-3 h-3" />
