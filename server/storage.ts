@@ -13,7 +13,7 @@ import {
   invoiceLineItems, type InvoiceLineItem, type InsertInvoiceLineItem,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, and, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getContacts(): Promise<Contact[]>;
@@ -55,6 +55,7 @@ export interface IStorage {
   createClientPortalAccess(access: InsertClientPortalAccess): Promise<ClientPortalAccess>;
 
   getClientInviteByToken(token: string): Promise<ClientInvite | undefined>;
+  getClientInviteByContact(contactId: string): Promise<ClientInvite | undefined>;
   createClientInvite(invite: InsertClientInvite): Promise<ClientInvite>;
   acceptClientInvite(token: string): Promise<void>;
 
@@ -211,6 +212,17 @@ export class DatabaseStorage implements IStorage {
 
   async getClientInviteByToken(token: string): Promise<ClientInvite | undefined> {
     const [invite] = await db.select().from(clientInvites).where(eq(clientInvites.inviteToken, token));
+    return invite || undefined;
+  }
+
+  async getClientInviteByContact(contactId: string): Promise<ClientInvite | undefined> {
+    // Only return pending (unaccepted) invites
+    const [invite] = await db.select().from(clientInvites)
+      .where(and(
+        eq(clientInvites.contactId, contactId),
+        isNull(clientInvites.acceptedAt)
+      ))
+      .orderBy(desc(clientInvites.createdAt));
     return invite || undefined;
   }
 

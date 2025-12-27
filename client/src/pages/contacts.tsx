@@ -18,7 +18,7 @@ import { TableRowSkeleton } from "@/components/loading-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2, UserPlus, CheckCircle } from "lucide-react";
+import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2, UserPlus, CheckCircle, Copy, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -26,6 +26,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Contact, InsertContact, ClientPortalAccess } from "@shared/schema";
+
+interface PortalAccessWithToken {
+  isActive?: boolean;
+  portalToken?: string;
+  inviteStatus?: "pending" | "accepted";
+  inviteSentAt?: string;
+  inviteExpiresAt?: string;
+}
 import { insertContactSchema } from "@shared/schema";
 import { z } from "zod";
 import { Link } from "wouter";
@@ -122,7 +130,7 @@ export default function Contacts() {
     },
   });
 
-  const getPortalAccess = async (contactId: string): Promise<ClientPortalAccess | null> => {
+  const getPortalAccess = async (contactId: string): Promise<PortalAccessWithToken | null> => {
     try {
       const response = await fetch(`/api/contacts/${contactId}/portal-access`);
       if (response.ok) {
@@ -134,10 +142,25 @@ export default function Contacts() {
     }
   };
 
+  const copyPortalLink = (token: string, isPending: boolean) => {
+    const path = isPending ? `/portal/invite/${token}` : `/portal/login?token=${token}`;
+    const url = `${window.location.origin}${path}`;
+    navigator.clipboard.writeText(url);
+    toast({
+      title: "Link Copied",
+      description: isPending ? "Invite link copied to clipboard" : "Portal link copied to clipboard",
+    });
+  };
+
+  const openPortalAsClient = (token: string, isPending: boolean) => {
+    const url = isPending ? `/portal/invite/${token}` : `/portal/login?token=${token}`;
+    window.open(url, "_blank");
+  };
+
   const { data: portalAccessMap = {} } = useQuery({
     queryKey: ["/api/contacts/portal-access", contacts.map(c => c.id).join(",")],
     queryFn: async () => {
-      const accessMap: Record<string, ClientPortalAccess | null> = {};
+      const accessMap: Record<string, PortalAccessWithToken | null> = {};
       await Promise.all(
         contacts.map(async (contact) => {
           accessMap[contact.id] = await getPortalAccess(contact.id);
@@ -364,7 +387,48 @@ export default function Contacts() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {hasPortalAccess ? (
+                      {portalAccess?.portalToken ? (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge 
+                            variant={portalAccess.isActive ? "secondary" : "outline"} 
+                            className="gap-1" 
+                            data-testid={`badge-portal-access-${contact.id}`}
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                            {portalAccess.isActive ? "Active" : "Pending"}
+                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => copyPortalLink(portalAccess.portalToken!, !portalAccess.isActive)}
+                                data-testid={`button-copy-portal-link-${contact.id}`}
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{portalAccess.isActive ? "Copy portal link" : "Copy invite link"}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openPortalAsClient(portalAccess.portalToken!, !portalAccess.isActive)}
+                                data-testid={`button-open-portal-${contact.id}`}
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{portalAccess.isActive ? "View portal as client" : "Open invite page"}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      ) : hasPortalAccess ? (
                         <Badge variant="secondary" className="gap-1" data-testid={`badge-portal-access-${contact.id}`}>
                           <CheckCircle className="w-3 h-3" />
                           Active

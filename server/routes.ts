@@ -587,8 +587,34 @@ export async function registerRoutes(
 
   app.get("/api/contacts/:contactId/portal-access", async (req, res) => {
     try {
-      const access = await storage.getClientPortalAccess(req.params.contactId);
-      res.json(access);
+      const { contactId } = req.params;
+      const access = await storage.getClientPortalAccess(contactId);
+      const invite = await storage.getClientInviteByContact(contactId);
+      
+      // Priority 1: Active portal access (client has accepted invite)
+      if (access && access.isActive) {
+        res.json({
+          ...access,
+          inviteStatus: "accepted",
+          portalToken: access.accessToken,
+        });
+      // Priority 2: Pending invite (not yet accepted)
+      } else if (invite) {
+        res.json({
+          id: null,
+          contactId,
+          isActive: false,
+          inviteStatus: "pending",
+          portalToken: invite.inviteToken,
+          accessToken: null,
+          createdAt: invite.createdAt,
+          inviteSentAt: invite.createdAt,
+          inviteExpiresAt: invite.expiresAt,
+        });
+      // Priority 3: No active access or pending invite
+      } else {
+        res.json(access || null);
+      }
     } catch (error) {
       console.error("Get portal access error:", error);
       res.status(500).json({ message: "Failed to get portal access" });
