@@ -22,9 +22,13 @@ import {
   AlertCircle,
   Trash2,
   FileText,
+  Send,
+  Plus,
+  Eye,
+  Receipt,
 } from "lucide-react";
-import type { Job, Contact, TradePartner, Task, QuoteItem } from "@shared/schema";
-import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice } from "@shared/schema";
+import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES } from "@shared/schema";
 
 interface JobDetailData {
   job: Job;
@@ -49,6 +53,17 @@ export default function JobDetail() {
     queryFn: async () => {
       const response = await fetch(`/api/jobs/${id}/quote-items`);
       if (!response.ok) throw new Error("Failed to fetch quote items");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
+  // Fetch invoices for this job
+  const { data: invoices } = useQuery<Invoice[]>({
+    queryKey: ["/api/jobs", id, "invoices"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/invoices`);
+      if (!response.ok) throw new Error("Failed to fetch invoices");
       return response.json();
     },
     enabled: Boolean(id),
@@ -122,6 +137,34 @@ export default function JobDetail() {
     },
     onError: () => {
       toast({ title: "Error deleting job", variant: "destructive" });
+    },
+  });
+
+  const createInvoiceMutation = useMutation({
+    mutationFn: async (type: "quote" | "invoice") => {
+      return apiRequest("POST", `/api/jobs/${id}/invoices`, { type });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "invoices"] });
+      toast({ title: "Document created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error creating document", variant: "destructive" });
+    },
+  });
+
+  const sendInvoiceMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      return apiRequest("POST", `/api/invoices/${invoiceId}/send`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Sent to client portal" });
+    },
+    onError: () => {
+      toast({ title: "Error sending document", variant: "destructive" });
     },
   });
 
@@ -381,6 +424,99 @@ export default function JobDetail() {
                   </>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Receipt className="w-4 h-4" />
+                  Quotes & Invoices
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => createInvoiceMutation.mutate("quote")}
+                    disabled={createInvoiceMutation.isPending || !quoteItems?.length}
+                    data-testid="button-create-quote"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Quote
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => createInvoiceMutation.mutate("invoice")}
+                    disabled={createInvoiceMutation.isPending || !quoteItems?.length}
+                    data-testid="button-create-invoice"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Invoice
+                  </Button>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!quoteItems?.length ? (
+                <p className="text-sm text-muted-foreground">Add quote items first to generate documents.</p>
+              ) : invoices && invoices.length > 0 ? (
+                <div className="space-y-3">
+                  {invoices.map((invoice) => {
+                    const statusInfo = INVOICE_STATUSES.find(s => s.value === invoice.status);
+                    return (
+                      <div 
+                        key={invoice.id} 
+                        className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/50"
+                        data-testid={`invoice-row-${invoice.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-sm font-medium">{invoice.referenceNumber}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {invoice.type === "invoice" ? "Invoice" : "Quote"}
+                            </Badge>
+                            <Badge 
+                              variant="secondary" 
+                              className={`text-xs ${statusInfo?.color || ''} ${statusInfo?.color ? 'text-white' : ''}`}
+                            >
+                              {statusInfo?.label || invoice.status}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                            <span>£{parseFloat(invoice.grandTotal).toFixed(2)}</span>
+                            {invoice.createdAt && (
+                              <span>{new Date(invoice.createdAt).toLocaleDateString()}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {invoice.status === "draft" && (
+                            <Button
+                              size="sm"
+                              onClick={() => sendInvoiceMutation.mutate(invoice.id)}
+                              disabled={sendInvoiceMutation.isPending}
+                              data-testid={`button-send-${invoice.id}`}
+                            >
+                              <Send className="w-3 h-3 mr-1" />
+                              Send to Portal
+                            </Button>
+                          )}
+                          {invoice.status === "sent" && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Eye className="w-3 h-3" />
+                              Visible in Portal
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No quotes or invoices yet. Create one to send to the client.</p>
+              )}
             </CardContent>
           </Card>
         </div>

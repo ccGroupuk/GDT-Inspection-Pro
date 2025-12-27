@@ -9,6 +9,8 @@ import {
   paymentRequests, type PaymentRequest, type InsertPaymentRequest,
   companySettings, type CompanySetting, type InsertCompanySetting,
   reviewRequests, type ReviewRequest, type InsertReviewRequest,
+  invoices, type Invoice, type InsertInvoice,
+  invoiceLineItems, type InvoiceLineItem, type InsertInvoiceLineItem,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc } from "drizzle-orm";
@@ -65,6 +67,21 @@ export interface IStorage {
   upsertCompanySetting(setting: InsertCompanySetting): Promise<CompanySetting>;
 
   createReviewRequest(request: InsertReviewRequest): Promise<ReviewRequest>;
+
+  // Invoices
+  getInvoicesByJob(jobId: string): Promise<Invoice[]>;
+  getInvoice(id: string): Promise<Invoice | undefined>;
+  getInvoiceByReference(referenceNumber: string): Promise<Invoice | undefined>;
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice | undefined>;
+  deleteInvoice(id: string): Promise<boolean>;
+  getNextInvoiceNumber(jobNumber: string, type: string): Promise<string>;
+  getPortalInvoicesByJob(jobId: string): Promise<Invoice[]>;
+
+  // Invoice Line Items
+  getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]>;
+  createInvoiceLineItem(item: InsertInvoiceLineItem): Promise<InvoiceLineItem>;
+  deleteInvoiceLineItems(invoiceId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -266,6 +283,64 @@ export class DatabaseStorage implements IStorage {
 
   async deleteQuoteItemsByJob(jobId: string): Promise<boolean> {
     await db.delete(quoteItems).where(eq(quoteItems.jobId, jobId));
+    return true;
+  }
+
+  // Invoices
+  async getInvoicesByJob(jobId: string): Promise<Invoice[]> {
+    return db.select().from(invoices).where(eq(invoices.jobId, jobId)).orderBy(desc(invoices.createdAt));
+  }
+
+  async getInvoice(id: string): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return invoice || undefined;
+  }
+
+  async getInvoiceByReference(referenceNumber: string): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.referenceNumber, referenceNumber));
+    return invoice || undefined;
+  }
+
+  async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
+    const [created] = await db.insert(invoices).values(invoice).returning();
+    return created;
+  }
+
+  async updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice | undefined> {
+    const [updated] = await db.update(invoices).set({ ...invoice, updatedAt: new Date() }).where(eq(invoices.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteInvoice(id: string): Promise<boolean> {
+    await db.delete(invoices).where(eq(invoices.id, id));
+    return true;
+  }
+
+  async getNextInvoiceNumber(jobNumber: string, type: string): Promise<string> {
+    const prefix = type === "invoice" ? "INV" : "QTE";
+    const existingInvoices = await db.select().from(invoices).where(eq(invoices.jobId, jobNumber));
+    const count = existingInvoices.length + 1;
+    return `${jobNumber}-${prefix}-${String(count).padStart(2, "0")}`;
+  }
+
+  async getPortalInvoicesByJob(jobId: string): Promise<Invoice[]> {
+    return db.select().from(invoices)
+      .where(eq(invoices.jobId, jobId))
+      .orderBy(desc(invoices.createdAt));
+  }
+
+  // Invoice Line Items
+  async getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]> {
+    return db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId)).orderBy(asc(invoiceLineItems.sortOrder));
+  }
+
+  async createInvoiceLineItem(item: InsertInvoiceLineItem): Promise<InvoiceLineItem> {
+    const [created] = await db.insert(invoiceLineItems).values(item).returning();
+    return created;
+  }
+
+  async deleteInvoiceLineItems(invoiceId: string): Promise<boolean> {
+    await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
     return true;
   }
 }

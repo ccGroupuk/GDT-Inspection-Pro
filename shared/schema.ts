@@ -162,6 +162,88 @@ export const insertQuoteItemSchema = createInsertSchema(quoteItems).omit({ id: t
 export type InsertQuoteItem = z.infer<typeof insertQuoteItemSchema>;
 export type QuoteItem = typeof quoteItems.$inferSelect;
 
+// Invoices (sent quotes/invoices with snapshots)
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  referenceNumber: text("reference_number").notNull().unique(),
+  type: text("type").notNull().default("quote"), // quote, invoice
+  status: text("status").notNull().default("draft"), // draft, sent, viewed, paid, cancelled
+  
+  // Snapshot of totals at time of creation
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
+  discountType: text("discount_type"),
+  discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }),
+  taxEnabled: boolean("tax_enabled").default(false),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }),
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }),
+  grandTotal: decimal("grand_total", { precision: 10, scale: 2 }).notNull(),
+  
+  // Deposit info snapshot
+  depositRequired: boolean("deposit_required").default(false),
+  depositType: text("deposit_type"),
+  depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }),
+  depositCalculated: decimal("deposit_calculated", { precision: 10, scale: 2 }),
+  
+  // Payment info
+  dueDate: timestamp("due_date"),
+  paymentTerms: text("payment_terms"),
+  notes: text("notes"),
+  
+  // Visibility
+  showInPortal: boolean("show_in_portal").default(false),
+  sentAt: timestamp("sent_at"),
+  viewedAt: timestamp("viewed_at"),
+  paidAt: timestamp("paid_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  job: one(jobs, {
+    fields: [invoices.jobId],
+    references: [jobs.id],
+  }),
+  lineItems: many(invoiceLineItems),
+}));
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Invoice = typeof invoices.$inferSelect;
+
+// Invoice Line Items (snapshot of quote items at time of invoice creation)
+export const invoiceLineItems = pgTable("invoice_line_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const invoiceLineItemsRelations = relations(invoiceLineItems, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [invoiceLineItems.invoiceId],
+    references: [invoices.id],
+  }),
+}));
+
+export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).omit({ id: true });
+export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
+export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
+
+// Invoice statuses for reference
+export const INVOICE_STATUSES = [
+  { value: "draft", label: "Draft", color: "bg-gray-500" },
+  { value: "sent", label: "Sent", color: "bg-blue-500" },
+  { value: "viewed", label: "Viewed", color: "bg-purple-500" },
+  { value: "paid", label: "Paid", color: "bg-green-500" },
+  { value: "cancelled", label: "Cancelled", color: "bg-red-500" },
+] as const;
+
 // Pipeline Stages (for reference)
 export const PIPELINE_STAGES = [
   { value: "new_enquiry", label: "New Enquiry", color: "bg-blue-500" },

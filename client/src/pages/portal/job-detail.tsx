@@ -9,7 +9,7 @@ import { PortalLayout } from "@/components/portal-layout";
 import { usePortalAuth, portalApiRequest } from "@/hooks/use-portal-auth";
 import { StatusBadge } from "@/components/status-badge";
 import { PIPELINE_STAGES, PAYMENT_STATUSES } from "@shared/schema";
-import { ArrowLeft, MapPin, Calendar, CheckCircle, Circle, PoundSterling, FileText } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, CheckCircle, Circle, PoundSterling, FileText, Receipt } from "lucide-react";
 
 interface PaymentRequest {
   id: string;
@@ -28,6 +28,28 @@ interface QuoteItem {
   lineTotal: string;
 }
 
+interface PortalInvoice {
+  id: string;
+  referenceNumber: string;
+  type: string;
+  status: string;
+  subtotal: string;
+  discountType: string | null;
+  discountValue: string | null;
+  discountAmount: string | null;
+  taxEnabled: boolean;
+  taxRate: string | null;
+  taxAmount: string | null;
+  grandTotal: string;
+  depositRequired: boolean;
+  depositType: string | null;
+  depositAmount: string | null;
+  depositCalculated: string | null;
+  notes: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
 interface PortalJobDetail {
   id: string;
   jobNumber: string;
@@ -44,6 +66,7 @@ interface PortalJobDetail {
   createdAt: string;
   paymentRequests: PaymentRequest[];
   quoteItems: QuoteItem[];
+  invoices: PortalInvoice[];
 }
 
 export default function PortalJobDetail() {
@@ -315,6 +338,91 @@ export default function PortalJobDetail() {
                         </div>
                       </div>
                     )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {job.invoices && job.invoices.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Receipt className="w-4 h-4" />
+                    Documents
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {job.invoices.map((invoice) => (
+                      <div
+                        key={invoice.id}
+                        className="p-4 rounded-lg bg-muted/50"
+                        data-testid={`invoice-${invoice.id}`}
+                      >
+                        <div className="flex items-center justify-between gap-4 mb-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-medium">
+                              {invoice.referenceNumber}
+                            </span>
+                            <Badge variant="outline" className="text-xs">
+                              {invoice.type === "invoice" ? "Invoice" : "Quote"}
+                            </Badge>
+                          </div>
+                          <span className="font-mono font-semibold text-lg">
+                            £{parseFloat(invoice.grandTotal).toFixed(2)}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Subtotal</span>
+                            <span className="font-mono">£{parseFloat(invoice.subtotal).toFixed(2)}</span>
+                          </div>
+                          {invoice.discountAmount && parseFloat(invoice.discountAmount) > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Discount {invoice.discountType === "percentage" ? `(${invoice.discountValue}%)` : ""}
+                              </span>
+                              <span className="font-mono text-green-600 dark:text-green-400">
+                                -£{parseFloat(invoice.discountAmount).toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+                          {invoice.taxEnabled && invoice.taxAmount && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">VAT ({invoice.taxRate}%)</span>
+                              <span className="font-mono">£{parseFloat(invoice.taxAmount).toFixed(2)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between pt-2 border-t border-border">
+                            <span className="font-semibold">Total</span>
+                            <span className="font-mono font-semibold">
+                              £{parseFloat(invoice.grandTotal).toFixed(2)}
+                            </span>
+                          </div>
+                          {invoice.depositRequired && invoice.depositCalculated && (
+                            <div className="flex justify-between pt-2 border-t border-border">
+                              <span className="text-muted-foreground">
+                                Deposit Due {invoice.depositType === "percentage" ? `(${invoice.depositAmount}%)` : ""}
+                              </span>
+                              <span className="font-mono font-semibold text-primary">
+                                £{parseFloat(invoice.depositCalculated).toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {invoice.notes && (
+                          <p className="mt-3 text-sm text-muted-foreground border-t border-border pt-3">
+                            {invoice.notes}
+                          </p>
+                        )}
+                        
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          Sent: {invoice.sentAt ? new Date(invoice.sentAt).toLocaleDateString() : "-"}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>

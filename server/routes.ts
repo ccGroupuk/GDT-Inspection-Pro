@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema } from "@shared/schema";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(
@@ -379,6 +379,184 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== INVOICES ====================
+
+  // Get all invoices for a job
+  app.get("/api/jobs/:jobId/invoices", async (req, res) => {
+    try {
+      const invoices = await storage.getInvoicesByJob(req.params.jobId);
+      res.json(invoices);
+    } catch (error) {
+      console.error("Get invoices error:", error);
+      res.status(500).json({ message: "Failed to fetch invoices" });
+    }
+  });
+
+  // Get a single invoice with line items
+  app.get("/api/invoices/:id", async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      const lineItems = await storage.getInvoiceLineItems(req.params.id);
+      res.json({ invoice, lineItems });
+    } catch (error) {
+      console.error("Get invoice error:", error);
+      res.status(500).json({ message: "Failed to fetch invoice" });
+    }
+  });
+
+  // Create an invoice (snapshot current quote items and totals)
+  app.post("/api/jobs/:jobId/invoices", async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      const { type, notes, dueDate, paymentTerms } = req.body;
+      
+      // Get job and quote items
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const quoteItems = await storage.getQuoteItemsByJob(jobId);
+      
+      // Calculate totals
+      const subtotal = quoteItems.reduce((sum, item) => sum + parseFloat(item.lineTotal || "0"), 0);
+      
+      let discountAmount = 0;
+      if (job.discountType && job.discountValue) {
+        if (job.discountType === "percentage") {
+          discountAmount = subtotal * (parseFloat(job.discountValue) / 100);
+        } else {
+          discountAmount = parseFloat(job.discountValue) || 0;
+        }
+      }
+      
+      const afterDiscount = subtotal - discountAmount;
+      
+      let taxAmount = 0;
+      if (job.taxEnabled && job.taxRate) {
+        taxAmount = afterDiscount * (parseFloat(job.taxRate) / 100);
+      }
+      
+      const grandTotal = afterDiscount + taxAmount;
+      
+      // Calculate deposit if applicable
+      let depositCalculated = null;
+      if (job.depositRequired && job.depositAmount) {
+        if (job.depositType === "percentage") {
+          depositCalculated = String(grandTotal * (parseFloat(job.depositAmount) / 100));
+        } else {
+          depositCalculated = job.depositAmount;
+        }
+      }
+      
+      // Normalize type and generate reference number (count by type to ensure uniqueness)
+      const normalizedType = type === "invoice" ? "invoice" : "quote";
+      const existingInvoices = await storage.getInvoicesByJob(jobId);
+      const prefix = normalizedType === "invoice" ? "INV" : "QTE";
+      const sameTypeCount = existingInvoices.filter(inv => inv.type === normalizedType).length + 1;
+      const referenceNumber = `${job.jobNumber}-${prefix}-${String(sameTypeCount).padStart(2, "0")}`;
+      
+      // Create invoice
+      const invoice = await storage.createInvoice({
+        jobId,
+        referenceNumber,
+        type: normalizedType,
+        status: "draft",
+        subtotal: String(subtotal),
+        discountType: job.discountType,
+        discountValue: job.discountValue,
+        discountAmount: String(discountAmount),
+        taxEnabled: job.taxEnabled || false,
+        taxRate: job.taxRate,
+        taxAmount: String(taxAmount),
+        grandTotal: String(grandTotal),
+        depositRequired: job.depositRequired || false,
+        depositType: job.depositType,
+        depositAmount: job.depositAmount,
+        depositCalculated,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        paymentTerms,
+        notes,
+        showInPortal: false,
+      });
+      
+      // Copy quote items to invoice line items
+      for (let i = 0; i < quoteItems.length; i++) {
+        const item = quoteItems[i];
+        await storage.createInvoiceLineItem({
+          invoiceId: invoice.id,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+          sortOrder: i,
+        });
+      }
+      
+      const lineItems = await storage.getInvoiceLineItems(invoice.id);
+      res.status(201).json({ invoice, lineItems });
+    } catch (error) {
+      console.error("Create invoice error:", error);
+      res.status(500).json({ message: "Failed to create invoice" });
+    }
+  });
+
+  // Send an invoice (make it visible in portal)
+  app.post("/api/invoices/:id/send", async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      const updated = await storage.updateInvoice(req.params.id, {
+        status: "sent",
+        showInPortal: true,
+        sentAt: new Date(),
+      });
+      
+      // Update job status based on invoice type
+      const job = await storage.getJob(invoice.jobId);
+      if (job) {
+        const newStatus = invoice.type === "invoice" ? "invoice_sent" : "quote_sent";
+        await storage.updateJob(invoice.jobId, { status: newStatus });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Send invoice error:", error);
+      res.status(500).json({ message: "Failed to send invoice" });
+    }
+  });
+
+  // Update invoice status (e.g., mark as paid)
+  app.patch("/api/invoices/:id", async (req, res) => {
+    try {
+      const invoice = await storage.updateInvoice(req.params.id, req.body);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.json(invoice);
+    } catch (error) {
+      console.error("Update invoice error:", error);
+      res.status(500).json({ message: "Failed to update invoice" });
+    }
+  });
+
+  // Delete an invoice
+  app.delete("/api/invoices/:id", async (req, res) => {
+    try {
+      await storage.deleteInvoice(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete invoice error:", error);
+      res.status(500).json({ message: "Failed to delete invoice" });
+    }
+  });
+
   // ==================== CLIENT PORTAL ADMIN ENDPOINTS ====================
 
   // Client Invites
@@ -605,7 +783,9 @@ export async function registerRoutes(
       
       const paymentRequests = await storage.getPaymentRequestsByJob(req.params.jobId);
       const quoteItems = await storage.getQuoteItemsByJob(req.params.jobId);
-      res.json({ ...job, paymentRequests, quoteItems });
+      const allInvoices = await storage.getInvoicesByJob(req.params.jobId);
+      const invoices = allInvoices.filter(inv => inv.showInPortal);
+      res.json({ ...job, paymentRequests, quoteItems, invoices });
     } catch (error) {
       console.error("Portal job detail error:", error);
       res.status(500).json({ message: "Failed to load job" });
