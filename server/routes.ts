@@ -533,7 +533,7 @@ export async function registerRoutes(
       }
       
       const paymentRequests = await storage.getPaymentRequestsByJob(req.params.jobId);
-      res.json({ job, paymentRequests });
+      res.json({ ...job, paymentRequests });
     } catch (error) {
       console.error("Portal job detail error:", error);
       res.status(500).json({ message: "Failed to load job" });
