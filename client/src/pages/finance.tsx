@@ -400,7 +400,7 @@ function TransactionForm({ transaction, incomeCategories, expenseCategories, job
   const [amount, setAmount] = useState(transaction?.amount || "");
   const [description, setDescription] = useState(transaction?.description || "");
   const [date, setDate] = useState(transaction?.date ? format(new Date(transaction.date), "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"));
-  const [jobId, setJobId] = useState(transaction?.jobId || "");
+  const [jobId, setJobId] = useState(transaction?.jobId || "none");
   const [notes, setNotes] = useState(transaction?.notes || "");
 
   const currentCategories = type === "income" ? incomeCategories : expenseCategories;
@@ -413,7 +413,7 @@ function TransactionForm({ transaction, incomeCategories, expenseCategories, job
       amount: amount.toString(),
       description,
       date: new Date(date),
-      jobId: jobId || null,
+      jobId: jobId === "none" ? null : (jobId || null),
       notes: notes || null,
       sourceType: "manual",
     });
@@ -493,7 +493,7 @@ function TransactionForm({ transaction, incomeCategories, expenseCategories, job
             <SelectValue placeholder="No job linked" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">No job linked</SelectItem>
+            <SelectItem value="none">No job linked</SelectItem>
             {jobs.map(job => (
               <SelectItem key={job.id} value={job.id}>{job.jobNumber} - {job.serviceType}</SelectItem>
             ))}

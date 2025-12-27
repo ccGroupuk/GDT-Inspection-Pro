@@ -651,6 +651,9 @@ export const calendarEvents = pgTable("calendar_events", {
   endDate: timestamp("end_date").notNull(),
   allDay: boolean("all_day").default(true),
   
+  // Event type - general, home_visit_ccc, home_visit_partner, project_start
+  eventType: text("event_type").notNull().default("general"),
+  
   // Team type determines visibility
   teamType: text("team_type").notNull().default("in_house"), // in_house, partner, hybrid
   
@@ -659,6 +662,10 @@ export const calendarEvents = pgTable("calendar_events", {
   confirmedByAdmin: boolean("confirmed_by_admin").default(false),
   confirmedByPartner: boolean("confirmed_by_partner").default(false),
   confirmedAt: timestamp("confirmed_at"),
+  
+  // Client confirmation (for project_start events proposed to clients)
+  confirmedByClient: boolean("confirmed_by_client").default(false),
+  clientConfirmedAt: timestamp("client_confirmed_at"),
   
   // Metadata
   notes: text("notes"),
@@ -723,4 +730,73 @@ export const CALENDAR_EVENT_STATUSES = [
   { value: "pending", label: "Pending", description: "Awaiting confirmation" },
   { value: "confirmed", label: "Confirmed", description: "Confirmed by all parties" },
   { value: "cancelled", label: "Cancelled", description: "Cancelled" },
+] as const;
+
+// Calendar event types
+export const CALENDAR_EVENT_TYPES = [
+  { value: "general", label: "General", description: "General calendar event" },
+  { value: "home_visit_ccc", label: "Home Visit (CCC)", description: "CCC team home visit for measurement/quote" },
+  { value: "home_visit_partner", label: "Home Visit (Partner)", description: "Trade partner home visit for measurement/quote" },
+  { value: "project_start", label: "Project Start", description: "Proposed project start date" },
+] as const;
+
+// ==================== SCHEDULE PROPOSALS ====================
+
+// Job Schedule Proposals - for negotiating start dates with clients
+export const jobScheduleProposals = pgTable("job_schedule_proposals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  
+  // Proposed dates
+  proposedStartDate: timestamp("proposed_start_date").notNull(),
+  proposedEndDate: timestamp("proposed_end_date"),
+  
+  // Status: pending_client, client_accepted, client_declined, client_countered, admin_confirmed, scheduled
+  status: text("status").notNull().default("pending_client"),
+  
+  // Who proposed this date
+  proposedByRole: text("proposed_by_role").notNull().default("admin"), // admin, client
+  
+  // Client response
+  clientResponse: text("client_response"), // accepted, declined
+  counterProposedDate: timestamp("counter_proposed_date"), // If client suggests alternative
+  counterReason: text("counter_reason"), // Why client declined/countered
+  respondedAt: timestamp("responded_at"),
+  
+  // Linked calendar event (created when proposal is confirmed/scheduled)
+  linkedCalendarEventId: varchar("linked_calendar_event_id").references(() => calendarEvents.id),
+  
+  // Notes
+  adminNotes: text("admin_notes"),
+  
+  // Archive old proposals
+  isArchived: boolean("is_archived").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const jobScheduleProposalsRelations = relations(jobScheduleProposals, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobScheduleProposals.jobId],
+    references: [jobs.id],
+  }),
+  linkedCalendarEvent: one(calendarEvents, {
+    fields: [jobScheduleProposals.linkedCalendarEventId],
+    references: [calendarEvents.id],
+  }),
+}));
+
+export const insertJobScheduleProposalSchema = createInsertSchema(jobScheduleProposals).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertJobScheduleProposal = z.infer<typeof insertJobScheduleProposalSchema>;
+export type JobScheduleProposal = typeof jobScheduleProposals.$inferSelect;
+
+// Schedule proposal statuses
+export const SCHEDULE_PROPOSAL_STATUSES = [
+  { value: "pending_client", label: "Awaiting Client", description: "Waiting for client response" },
+  { value: "client_accepted", label: "Client Accepted", description: "Client accepted proposed date" },
+  { value: "client_declined", label: "Client Declined", description: "Client declined without alternative" },
+  { value: "client_countered", label: "Client Countered", description: "Client suggested alternative date" },
+  { value: "admin_confirmed", label: "Admin Confirmed", description: "Admin confirmed client's counter" },
+  { value: "scheduled", label: "Scheduled", description: "Date confirmed and added to calendar" },
 ] as const;
