@@ -33,6 +33,7 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Insurance verification status
 - Rating system (1-5 stars)
 - Active/Inactive status
+- Portal invite system: Send invites, track status, open portal for partner
 
 ### Tasks
 - Task management linked to jobs
@@ -58,6 +59,15 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Payment requests section (deposit prompts, balance due)
 - Profile management page
 - Reviews page with configurable social media links (Facebook, Google, Trustpilot)
+
+### Partner Portal
+- Separate portal for trade partners to view their assigned jobs
+- Invite system: Admin sends portal invites from Trade Partners page
+- Token-based authentication (7-day invite expiry, 30-day access tokens)
+- Job list view showing partner's assigned projects only
+- Job detail page with client contact info, job notes, and tasks
+- Visual 16-stage progress timeline on job detail page
+- Access via /partner-portal/* routes
 
 ### Settings (Admin)
 - Company settings management

@@ -912,11 +912,16 @@ export async function registerRoutes(
       const invite = await storage.getPartnerInviteByPartner(partnerId);
       
       // Priority 1: Active portal access (partner has accepted invite)
+      // Note: We use a separate portalToken for admin to open portal directly
+      // This is the accessToken that allows authentication
       if (access && access.isActive) {
         res.json({
-          ...access,
+          id: access.id,
+          partnerId,
+          isActive: true,
           inviteStatus: "accepted",
-          portalToken: access.accessToken,
+          portalToken: access.accessToken, // This is safe - admin needs to open portal for partner
+          createdAt: access.createdAt,
         });
       // Priority 2: Pending invite (not yet accepted)
       } else if (invite) {
@@ -925,15 +930,14 @@ export async function registerRoutes(
           partnerId,
           isActive: false,
           inviteStatus: "pending",
-          portalToken: invite.inviteToken,
-          accessToken: null,
+          portalToken: invite.inviteToken, // Invite token for pending invites
           createdAt: invite.createdAt,
           inviteSentAt: invite.createdAt,
           inviteExpiresAt: invite.expiresAt,
         });
       // Priority 3: No active access or pending invite
       } else {
-        res.json(access || null);
+        res.json(null);
       }
     } catch (error) {
       console.error("Get partner portal access error:", error);

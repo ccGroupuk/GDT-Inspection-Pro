@@ -20,10 +20,20 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, Handshake, Phone, Mail, Star, Edit, Trash2, CheckCircle } from "lucide-react";
+import { Plus, Search, Handshake, Phone, Mail, Star, Edit, Trash2, CheckCircle, UserPlus, Copy, ExternalLink } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TradePartner, InsertTradePartner } from "@shared/schema";
 import { insertTradePartnerSchema, TRADE_CATEGORIES } from "@shared/schema";
 import { z } from "zod";
+
+type PartnerPortalAccessWithToken = {
+  id: string | null;
+  partnerId: string;
+  isActive: boolean;
+  inviteStatus?: "accepted" | "pending";
+  portalToken?: string;
+  accessToken?: string | null;
+};
 
 const formSchema = insertTradePartnerSchema.extend({
   businessName: z.string().min(1, "Business name is required"),
@@ -102,6 +112,70 @@ export default function Partners() {
     onError: () => {
       toast({ title: "Error removing partner", variant: "destructive" });
     },
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (partnerId: string) => {
+      const response = await apiRequest("POST", `/api/partners/${partnerId}/send-portal-invite`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const inviteUrl = `${window.location.origin}${data.inviteLink}`;
+      queryClient.invalidateQueries({ queryKey: ["/api/partners"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partners/portal-access"] });
+      toast({
+        title: "Invitation sent",
+        description: `Invite link: ${inviteUrl}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const getPartnerPortalAccess = async (partnerId: string): Promise<PartnerPortalAccessWithToken | null> => {
+    try {
+      const response = await fetch(`/api/partners/${partnerId}/portal-access`);
+      if (response.ok) {
+        return await response.json();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const copyPartnerPortalLink = (token: string, isPending: boolean) => {
+    const path = isPending ? `/partner-portal/login?token=${token}` : `/partner-portal/login?token=${token}`;
+    const url = `${window.location.origin}${path}`;
+    navigator.clipboard.writeText(url);
+    toast({
+      title: "Link Copied",
+      description: isPending ? "Invite link copied to clipboard" : "Portal link copied to clipboard",
+    });
+  };
+
+  const openPartnerPortal = (token: string) => {
+    const url = `/partner-portal/login?token=${token}`;
+    window.open(url, "_blank");
+  };
+
+  const { data: partnerPortalAccessMap = {} } = useQuery({
+    queryKey: ["/api/partners/portal-access", partners.map(p => p.id).join(",")],
+    queryFn: async () => {
+      const accessMap: Record<string, PartnerPortalAccessWithToken | null> = {};
+      await Promise.all(
+        partners.map(async (partner) => {
+          accessMap[partner.id] = await getPartnerPortalAccess(partner.id);
+        })
+      );
+      return accessMap;
+    },
+    enabled: partners.length > 0,
   });
 
   const filteredPartners = partners.filter(partner => {
@@ -435,6 +509,79 @@ export default function Partners() {
                     }
                   </span>
                 </div>
+
+                {(() => {
+                  const portalAccess = partnerPortalAccessMap[partner.id];
+                  return (
+                    <div className="flex items-center justify-between pt-3 border-t border-border">
+                      {portalAccess?.isActive ? (
+                        <Badge variant="outline" className="gap-1 text-green-600 border-green-600/20" data-testid={`badge-partner-portal-active-${partner.id}`}>
+                          <CheckCircle className="w-3 h-3" />
+                          Portal Active
+                        </Badge>
+                      ) : portalAccess?.inviteStatus === "pending" ? (
+                        <Badge variant="secondary" className="gap-1" data-testid={`badge-partner-portal-pending-${partner.id}`}>
+                          Invite Pending
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No portal access</span>
+                      )}
+                      <div className="flex items-center gap-1">
+                        {portalAccess?.portalToken ? (
+                          <>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => copyPartnerPortalLink(portalAccess.portalToken!, portalAccess.inviteStatus === "pending")}
+                                  data-testid={`button-copy-partner-portal-link-${partner.id}`}
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{portalAccess.isActive ? "Copy portal link" : "Copy invite link"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openPartnerPortal(portalAccess.portalToken!)}
+                                  data-testid={`button-open-partner-portal-${partner.id}`}
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Open Portal</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </>
+                        ) : partner.email ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => inviteMutation.mutate(partner.id)}
+                                disabled={inviteMutation.isPending}
+                                data-testid={`button-invite-partner-${partner.id}`}
+                              >
+                                <UserPlus className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Send Portal Invite</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           ))}
