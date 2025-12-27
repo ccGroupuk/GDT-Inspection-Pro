@@ -7,6 +7,7 @@ import {
   CheckSquare,
   Plus,
   Building2,
+  Settings,
 } from "lucide-react";
 import {
   Sidebar,
@@ -47,6 +48,11 @@ const menuItems = [
     title: "Tasks",
     url: "/tasks",
     icon: CheckSquare,
+  },
+  {
+    title: "Settings",
+    url: "/settings",
+    icon: Settings,
   },
 ];
 

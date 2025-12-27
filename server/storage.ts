@@ -1,18 +1,18 @@
 import { 
-  users, type User, type InsertUser,
   contacts, type Contact, type InsertContact,
   tradePartners, type TradePartner, type InsertTradePartner,
   jobs, type Job, type InsertJob,
   tasks, type Task, type InsertTask,
+  clientPortalAccess, type ClientPortalAccess, type InsertClientPortalAccess,
+  clientInvites, type ClientInvite, type InsertClientInvite,
+  paymentRequests, type PaymentRequest, type InsertPaymentRequest,
+  companySettings, type CompanySetting, type InsertCompanySetting,
+  reviewRequests, type ReviewRequest, type InsertReviewRequest,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-
   getContacts(): Promise<Contact[]>;
   getContact(id: string): Promise<Contact | undefined>;
   createContact(contact: InsertContact): Promise<Contact>;
@@ -27,6 +27,7 @@ export interface IStorage {
 
   getJobs(): Promise<Job[]>;
   getJob(id: string): Promise<Job | undefined>;
+  getJobsByContact(contactId: string): Promise<Job[]>;
   createJob(job: InsertJob): Promise<Job>;
   updateJob(id: string, job: Partial<InsertJob>): Promise<Job | undefined>;
   deleteJob(id: string): Promise<boolean>;
@@ -37,24 +38,28 @@ export interface IStorage {
   createTask(task: InsertTask): Promise<Task>;
   updateTask(id: string, task: Partial<InsertTask>): Promise<Task | undefined>;
   deleteTask(id: string): Promise<boolean>;
+
+  // Client Portal
+  getClientPortalAccess(contactId: string): Promise<ClientPortalAccess | undefined>;
+  getClientPortalAccessByToken(token: string): Promise<ClientPortalAccess | undefined>;
+  createClientPortalAccess(access: InsertClientPortalAccess): Promise<ClientPortalAccess>;
+
+  getClientInviteByToken(token: string): Promise<ClientInvite | undefined>;
+  createClientInvite(invite: InsertClientInvite): Promise<ClientInvite>;
+  acceptClientInvite(token: string): Promise<void>;
+
+  getPaymentRequestsByJob(jobId: string): Promise<PaymentRequest[]>;
+  createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest>;
+  updatePaymentRequest(id: string, request: Partial<InsertPaymentRequest>): Promise<PaymentRequest | undefined>;
+  deletePaymentRequest(id: string): Promise<boolean>;
+
+  getCompanySettings(): Promise<CompanySetting[]>;
+  upsertCompanySetting(setting: InsertCompanySetting): Promise<CompanySetting>;
+
+  createReviewRequest(request: InsertReviewRequest): Promise<ReviewRequest>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || undefined;
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user || undefined;
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
-  }
-
   async getContacts(): Promise<Contact[]> {
     return db.select().from(contacts).orderBy(desc(contacts.createdAt));
   }
@@ -157,6 +162,78 @@ export class DatabaseStorage implements IStorage {
   async deleteTask(id: string): Promise<boolean> {
     await db.delete(tasks).where(eq(tasks.id, id));
     return true;
+  }
+
+  // Client Portal Methods
+  async getJobsByContact(contactId: string): Promise<Job[]> {
+    return db.select().from(jobs).where(eq(jobs.contactId, contactId)).orderBy(desc(jobs.createdAt));
+  }
+
+  async getClientPortalAccess(contactId: string): Promise<ClientPortalAccess | undefined> {
+    const [access] = await db.select().from(clientPortalAccess).where(eq(clientPortalAccess.contactId, contactId));
+    return access || undefined;
+  }
+
+  async getClientPortalAccessByToken(token: string): Promise<ClientPortalAccess | undefined> {
+    const [access] = await db.select().from(clientPortalAccess).where(eq(clientPortalAccess.accessToken, token));
+    return access || undefined;
+  }
+
+  async createClientPortalAccess(access: InsertClientPortalAccess): Promise<ClientPortalAccess> {
+    const [created] = await db.insert(clientPortalAccess).values(access).returning();
+    return created;
+  }
+
+  async getClientInviteByToken(token: string): Promise<ClientInvite | undefined> {
+    const [invite] = await db.select().from(clientInvites).where(eq(clientInvites.inviteToken, token));
+    return invite || undefined;
+  }
+
+  async createClientInvite(invite: InsertClientInvite): Promise<ClientInvite> {
+    const [created] = await db.insert(clientInvites).values(invite).returning();
+    return created;
+  }
+
+  async acceptClientInvite(token: string): Promise<void> {
+    await db.update(clientInvites).set({ acceptedAt: new Date() }).where(eq(clientInvites.inviteToken, token));
+  }
+
+  async getPaymentRequestsByJob(jobId: string): Promise<PaymentRequest[]> {
+    return db.select().from(paymentRequests).where(eq(paymentRequests.jobId, jobId)).orderBy(desc(paymentRequests.createdAt));
+  }
+
+  async createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest> {
+    const [created] = await db.insert(paymentRequests).values(request).returning();
+    return created;
+  }
+
+  async updatePaymentRequest(id: string, request: Partial<InsertPaymentRequest>): Promise<PaymentRequest | undefined> {
+    const [updated] = await db.update(paymentRequests).set(request).where(eq(paymentRequests.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deletePaymentRequest(id: string): Promise<boolean> {
+    await db.delete(paymentRequests).where(eq(paymentRequests.id, id));
+    return true;
+  }
+
+  async getCompanySettings(): Promise<CompanySetting[]> {
+    return db.select().from(companySettings);
+  }
+
+  async upsertCompanySetting(setting: InsertCompanySetting): Promise<CompanySetting> {
+    const [created] = await db.insert(companySettings).values(setting)
+      .onConflictDoUpdate({
+        target: companySettings.settingKey,
+        set: { settingValue: setting.settingValue, updatedAt: new Date() }
+      })
+      .returning();
+    return created;
+  }
+
+  async createReviewRequest(request: InsertReviewRequest): Promise<ReviewRequest> {
+    const [created] = await db.insert(reviewRequests).values(request).returning();
+    return created;
   }
 }
 

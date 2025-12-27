@@ -3,18 +3,10 @@ import { pgTable, text, varchar, integer, boolean, timestamp, decimal } from "dr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Users (Admin, Director, Engineer roles)
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  role: text("role").notNull().default("admin"), // admin, director, engineer, partner
-  name: text("name").notNull(),
-});
-
-export const insertUserSchema = createInsertSchema(users).omit({ id: true });
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+// Import and re-export auth models (required for Replit Auth)
+import { users, sessions } from "./models/auth";
+export { users, sessions };
+export type { User, UpsertUser } from "./models/auth";
 
 // Contacts (Clients)
 export const contacts = pgTable("contacts", {
@@ -209,4 +201,130 @@ export const PARTNER_STATUSES = [
   "completed",
   "invoiced",
   "paid",
+] as const;
+
+// ==================== CLIENT PORTAL ====================
+
+// Client Portal Access (links contacts to portal users)
+export const clientPortalAccess = pgTable("client_portal_access", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id),
+  userId: varchar("user_id").references(() => users.id), // Replit Auth user
+  accessToken: text("access_token").unique(), // For magic link login
+  tokenExpiry: timestamp("token_expiry"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastLoginAt: timestamp("last_login_at"),
+});
+
+export const clientPortalAccessRelations = relations(clientPortalAccess, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [clientPortalAccess.contactId],
+    references: [contacts.id],
+  }),
+}));
+
+export const insertClientPortalAccessSchema = createInsertSchema(clientPortalAccess).omit({ id: true, createdAt: true });
+export type InsertClientPortalAccess = z.infer<typeof insertClientPortalAccessSchema>;
+export type ClientPortalAccess = typeof clientPortalAccess.$inferSelect;
+
+// Client Invites (for sending portal invitations)
+export const clientInvites = pgTable("client_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id),
+  inviteToken: text("invite_token").notNull().unique(),
+  email: text("email").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const clientInvitesRelations = relations(clientInvites, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [clientInvites.contactId],
+    references: [contacts.id],
+  }),
+}));
+
+export const insertClientInviteSchema = createInsertSchema(clientInvites).omit({ id: true, createdAt: true });
+export type InsertClientInvite = z.infer<typeof insertClientInviteSchema>;
+export type ClientInvite = typeof clientInvites.$inferSelect;
+
+// Payment Requests (for deposit and balance prompts)
+export const paymentRequests = pgTable("payment_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  type: text("type").notNull(), // deposit, balance, milestone
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  description: text("description"),
+  dueDate: timestamp("due_date"),
+  status: text("status").notNull().default("pending"), // pending, sent, paid, overdue
+  sentAt: timestamp("sent_at"),
+  paidAt: timestamp("paid_at"),
+  showInPortal: boolean("show_in_portal").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const paymentRequestsRelations = relations(paymentRequests, ({ one }) => ({
+  job: one(jobs, {
+    fields: [paymentRequests.jobId],
+    references: [jobs.id],
+  }),
+}));
+
+export const insertPaymentRequestSchema = createInsertSchema(paymentRequests).omit({ id: true, createdAt: true });
+export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;
+export type PaymentRequest = typeof paymentRequests.$inferSelect;
+
+// Company Settings (for review links and branding)
+export const companySettings = pgTable("company_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  settingKey: text("setting_key").notNull().unique(),
+  settingValue: text("setting_value"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCompanySettingSchema = createInsertSchema(companySettings).omit({ id: true, updatedAt: true });
+export type InsertCompanySetting = z.infer<typeof insertCompanySettingSchema>;
+export type CompanySetting = typeof companySettings.$inferSelect;
+
+// Review request tracking
+export const reviewRequests = pgTable("review_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id),
+  sentAt: timestamp("sent_at").defaultNow(),
+  facebookClicked: boolean("facebook_clicked").default(false),
+  googleClicked: boolean("google_clicked").default(false),
+  trustpilotClicked: boolean("trustpilot_clicked").default(false),
+});
+
+export const reviewRequestsRelations = relations(reviewRequests, ({ one }) => ({
+  job: one(jobs, {
+    fields: [reviewRequests.jobId],
+    references: [jobs.id],
+  }),
+  contact: one(contacts, {
+    fields: [reviewRequests.contactId],
+    references: [contacts.id],
+  }),
+}));
+
+export const insertReviewRequestSchema = createInsertSchema(reviewRequests).omit({ id: true, sentAt: true });
+export type InsertReviewRequest = z.infer<typeof insertReviewRequestSchema>;
+export type ReviewRequest = typeof reviewRequests.$inferSelect;
+
+// Payment request types
+export const PAYMENT_REQUEST_TYPES = [
+  { value: "deposit", label: "Deposit" },
+  { value: "balance", label: "Final Balance" },
+  { value: "milestone", label: "Milestone Payment" },
+] as const;
+
+// Payment status types
+export const PAYMENT_STATUSES = [
+  { value: "pending", label: "Pending", color: "bg-yellow-500" },
+  { value: "sent", label: "Sent to Client", color: "bg-blue-500" },
+  { value: "paid", label: "Paid", color: "bg-green-500" },
+  { value: "overdue", label: "Overdue", color: "bg-red-500" },
 ] as const;

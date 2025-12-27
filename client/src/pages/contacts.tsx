@@ -18,8 +18,14 @@ import { TableRowSkeleton } from "@/components/loading-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2 } from "lucide-react";
-import type { Contact, InsertContact } from "@shared/schema";
+import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2, UserPlus, CheckCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import type { Contact, InsertContact, ClientPortalAccess } from "@shared/schema";
 import { insertContactSchema } from "@shared/schema";
 import { z } from "zod";
 import { Link } from "wouter";
@@ -92,6 +98,54 @@ export default function Contacts() {
     onError: () => {
       toast({ title: "Error deleting contact", variant: "destructive" });
     },
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const response = await apiRequest("POST", `/api/contacts/${contactId}/invite`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const inviteUrl = `${window.location.origin}/portal/invite/${data.inviteToken}`;
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      toast({
+        title: "Invitation sent",
+        description: `Invite link: ${inviteUrl}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const getPortalAccess = async (contactId: string): Promise<ClientPortalAccess | null> => {
+    try {
+      const response = await fetch(`/api/contacts/${contactId}/portal-access`);
+      if (response.ok) {
+        return await response.json();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const { data: portalAccessMap = {} } = useQuery({
+    queryKey: ["/api/contacts/portal-access", contacts.map(c => c.id).join(",")],
+    queryFn: async () => {
+      const accessMap: Record<string, ClientPortalAccess | null> = {};
+      await Promise.all(
+        contacts.map(async (contact) => {
+          accessMap[contact.id] = await getPortalAccess(contact.id);
+        })
+      );
+      return accessMap;
+    },
+    enabled: contacts.length > 0,
   });
 
   const filteredContacts = contacts.filter(contact => {
@@ -240,12 +294,13 @@ export default function Contacts() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Phone</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Email</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Postcode</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Portal</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <TableRowSkeleton key={i} columns={5} />
+                  <TableRowSkeleton key={i} columns={6} />
                 ))}
               </tbody>
             </table>
@@ -268,11 +323,16 @@ export default function Contacts() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Phone</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Email</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Postcode</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Portal</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredContacts.map(contact => (
+                {filteredContacts.map(contact => {
+                  const portalAccess = portalAccessMap[contact.id];
+                  const hasPortalAccess = portalAccess && portalAccess.isActive;
+                  
+                  return (
                   <tr key={contact.id} className="border-b border-border last:border-0 hover-elevate" data-testid={`contact-row-${contact.id}`}>
                     <td className="px-4 py-3">
                       <span className="font-medium text-sm">{contact.name}</span>
@@ -303,6 +363,35 @@ export default function Contacts() {
                         <span className="text-sm text-muted-foreground">-</span>
                       )}
                     </td>
+                    <td className="px-4 py-3">
+                      {hasPortalAccess ? (
+                        <Badge variant="secondary" className="gap-1" data-testid={`badge-portal-access-${contact.id}`}>
+                          <CheckCircle className="w-3 h-3" />
+                          Active
+                        </Badge>
+                      ) : contact.email ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => inviteMutation.mutate(contact.id)}
+                              disabled={inviteMutation.isPending}
+                              className="gap-1"
+                              data-testid={`button-invite-portal-${contact.id}`}
+                            >
+                              <UserPlus className="w-3 h-3" />
+                              Invite
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Send portal invite to {contact.email}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No email</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button
@@ -328,7 +417,7 @@ export default function Contacts() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </CardContent>

@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -14,9 +14,16 @@ import JobDetail from "@/pages/job-detail";
 import Contacts from "@/pages/contacts";
 import Partners from "@/pages/partners";
 import Tasks from "@/pages/tasks";
+import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
+import PortalLogin from "@/pages/portal/login";
+import PortalInvite from "@/pages/portal/invite";
+import PortalJobs from "@/pages/portal/jobs";
+import PortalJobDetail from "@/pages/portal/job-detail";
+import PortalProfile from "@/pages/portal/profile";
+import PortalReviews from "@/pages/portal/reviews";
 
-function Router() {
+function AdminRouter() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
@@ -27,35 +34,59 @@ function Router() {
       <Route path="/contacts" component={Contacts} />
       <Route path="/partners" component={Partners} />
       <Route path="/tasks" component={Tasks} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-function App() {
+function PortalRouter() {
+  return (
+    <Switch>
+      <Route path="/portal/login" component={PortalLogin} />
+      <Route path="/portal/invite/:token" component={PortalInvite} />
+      <Route path="/portal/jobs/:jobId" component={PortalJobDetail} />
+      <Route path="/portal/jobs" component={PortalJobs} />
+      <Route path="/portal/profile" component={PortalProfile} />
+      <Route path="/portal/reviews" component={PortalReviews} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function AdminLayout() {
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
   return (
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <header className="flex items-center justify-between gap-4 px-4 h-14 border-b border-border shrink-0">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <ThemeToggle />
+          </header>
+          <main className="flex-1 overflow-auto bg-background">
+            <AdminRouter />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function App() {
+  const [location] = useLocation();
+  const isPortalRoute = location.startsWith("/portal");
+
+  return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <header className="flex items-center justify-between gap-4 px-4 h-14 border-b border-border shrink-0">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                  <ThemeToggle />
-                </header>
-                <main className="flex-1 overflow-auto bg-background">
-                  <Router />
-                </main>
-              </div>
-            </div>
-          </SidebarProvider>
+          {isPortalRoute ? <PortalRouter /> : <AdminLayout />}
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>

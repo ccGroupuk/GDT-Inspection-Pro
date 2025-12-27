@@ -1,13 +1,18 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema } from "@shared/schema";
+import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  
+  // Setup authentication (BEFORE other routes)
+  await setupAuth(app);
+  registerAuthRoutes(app);
   
   // Dashboard
   app.get("/api/dashboard", async (req, res) => {
@@ -300,6 +305,296 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Delete task error:", error);
       res.status(500).json({ message: "Failed to delete task" });
+    }
+  });
+
+  // ==================== CLIENT PORTAL ADMIN ENDPOINTS ====================
+
+  // Client Invites
+  app.post("/api/contacts/:contactId/invite", async (req, res) => {
+    try {
+      const { contactId } = req.params;
+      const contact = await storage.getContact(contactId);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      if (!contact.email) {
+        return res.status(400).json({ message: "Contact must have an email address" });
+      }
+      
+      const invite = await storage.createClientInvite({
+        contactId,
+        email: contact.email,
+        inviteToken: crypto.randomUUID(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      });
+      
+      res.status(201).json(invite);
+    } catch (error) {
+      console.error("Create invite error:", error);
+      res.status(500).json({ message: "Failed to create invite" });
+    }
+  });
+
+  app.get("/api/contacts/:contactId/portal-access", async (req, res) => {
+    try {
+      const access = await storage.getClientPortalAccess(req.params.contactId);
+      res.json(access);
+    } catch (error) {
+      console.error("Get portal access error:", error);
+      res.status(500).json({ message: "Failed to get portal access" });
+    }
+  });
+
+  // Payment Requests
+  app.get("/api/jobs/:jobId/payment-requests", async (req, res) => {
+    try {
+      const requests = await storage.getPaymentRequestsByJob(req.params.jobId);
+      res.json(requests);
+    } catch (error) {
+      console.error("Get payment requests error:", error);
+      res.status(500).json({ message: "Failed to load payment requests" });
+    }
+  });
+
+  app.post("/api/jobs/:jobId/payment-requests", async (req, res) => {
+    try {
+      const data = insertPaymentRequestSchema.parse({
+        ...req.body,
+        jobId: req.params.jobId,
+      });
+      const request = await storage.createPaymentRequest(data);
+      res.status(201).json(request);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create payment request error:", error);
+      res.status(500).json({ message: "Failed to create payment request" });
+    }
+  });
+
+  app.patch("/api/payment-requests/:id", async (req, res) => {
+    try {
+      const data = insertPaymentRequestSchema.partial().parse(req.body);
+      const request = await storage.updatePaymentRequest(req.params.id, data);
+      if (!request) {
+        return res.status(404).json({ message: "Payment request not found" });
+      }
+      res.json(request);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update payment request error:", error);
+      res.status(500).json({ message: "Failed to update payment request" });
+    }
+  });
+
+  app.delete("/api/payment-requests/:id", async (req, res) => {
+    try {
+      await storage.deletePaymentRequest(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete payment request error:", error);
+      res.status(500).json({ message: "Failed to delete payment request" });
+    }
+  });
+
+  // Company Settings
+  app.get("/api/settings", async (req, res) => {
+    try {
+      const settings = await storage.getCompanySettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Get settings error:", error);
+      res.status(500).json({ message: "Failed to load settings" });
+    }
+  });
+
+  app.post("/api/settings", async (req, res) => {
+    try {
+      const data = insertCompanySettingSchema.parse(req.body);
+      const setting = await storage.upsertCompanySetting(data);
+      res.status(201).json(setting);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Save setting error:", error);
+      res.status(500).json({ message: "Failed to save setting" });
+    }
+  });
+
+  // Review Requests
+  app.post("/api/jobs/:jobId/review-request", async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      const request = await storage.createReviewRequest({
+        jobId: req.params.jobId,
+        contactId: job.contactId,
+      });
+      res.status(201).json(request);
+    } catch (error) {
+      console.error("Create review request error:", error);
+      res.status(500).json({ message: "Failed to create review request" });
+    }
+  });
+
+  // ==================== CLIENT PORTAL PUBLIC ENDPOINTS ====================
+
+  // Accept invite and create portal access
+  app.get("/api/portal/invite/:token", async (req, res) => {
+    try {
+      const invite = await storage.getClientInviteByToken(req.params.token);
+      if (!invite) {
+        return res.status(404).json({ message: "Invite not found or expired" });
+      }
+      if (invite.expiresAt < new Date()) {
+        return res.status(410).json({ message: "Invite has expired" });
+      }
+      if (invite.acceptedAt) {
+        return res.status(410).json({ message: "Invite already used" });
+      }
+      
+      const contact = await storage.getContact(invite.contactId);
+      res.json({ invite, contact });
+    } catch (error) {
+      console.error("Get invite error:", error);
+      res.status(500).json({ message: "Failed to load invite" });
+    }
+  });
+
+  app.post("/api/portal/invite/:token/accept", async (req, res) => {
+    try {
+      const invite = await storage.getClientInviteByToken(req.params.token);
+      if (!invite || invite.expiresAt < new Date() || invite.acceptedAt) {
+        return res.status(400).json({ message: "Invalid or expired invite" });
+      }
+      
+      // Mark invite as accepted
+      await storage.acceptClientInvite(req.params.token);
+      
+      // Create portal access
+      const accessToken = crypto.randomUUID();
+      const access = await storage.createClientPortalAccess({
+        contactId: invite.contactId,
+        accessToken,
+        tokenExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        isActive: true,
+      });
+      
+      res.json({ access, token: accessToken });
+    } catch (error) {
+      console.error("Accept invite error:", error);
+      res.status(500).json({ message: "Failed to accept invite" });
+    }
+  });
+
+  // Portal data endpoints (requires portal token)
+  app.get("/api/portal/jobs", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const jobs = await storage.getJobsByContact(access.contactId);
+      res.json(jobs);
+    } catch (error) {
+      console.error("Portal jobs error:", error);
+      res.status(500).json({ message: "Failed to load jobs" });
+    }
+  });
+
+  app.get("/api/portal/jobs/:jobId", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.contactId !== access.contactId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const paymentRequests = await storage.getPaymentRequestsByJob(req.params.jobId);
+      res.json({ job, paymentRequests });
+    } catch (error) {
+      console.error("Portal job detail error:", error);
+      res.status(500).json({ message: "Failed to load job" });
+    }
+  });
+
+  app.get("/api/portal/profile", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const contact = await storage.getContact(access.contactId);
+      res.json(contact);
+    } catch (error) {
+      console.error("Portal profile error:", error);
+      res.status(500).json({ message: "Failed to load profile" });
+    }
+  });
+
+  app.patch("/api/portal/profile", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { name, email, phone, address, postcode } = req.body;
+      const contact = await storage.updateContact(access.contactId, {
+        name, email, phone, address, postcode
+      });
+      res.json(contact);
+    } catch (error) {
+      console.error("Portal profile update error:", error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  app.get("/api/portal/review-links", async (req, res) => {
+    try {
+      const settings = await storage.getCompanySettings();
+      const reviewLinks = {
+        facebook: settings.find(s => s.settingKey === "facebook_review_url")?.settingValue || "",
+        google: settings.find(s => s.settingKey === "google_review_url")?.settingValue || "",
+        trustpilot: settings.find(s => s.settingKey === "trustpilot_review_url")?.settingValue || "",
+      };
+      res.json(reviewLinks);
+    } catch (error) {
+      console.error("Get review links error:", error);
+      res.status(500).json({ message: "Failed to load review links" });
     }
   });
 
