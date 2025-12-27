@@ -37,7 +37,8 @@ import {
   Share2,
   Upload,
 } from "lucide-react";
-import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment } from "@shared/schema";
+import { Input } from "@/components/ui/input";
+import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal } from "@shared/schema";
 import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES, NOTE_VISIBILITY } from "@shared/schema";
 
 interface JobNoteWithAttachments extends JobNote {
@@ -93,6 +94,23 @@ export default function JobDetail() {
     },
     enabled: Boolean(id),
   });
+
+  // Fetch active schedule proposal
+  const { data: scheduleProposal, refetch: refetchProposal } = useQuery<JobScheduleProposal | null>({
+    queryKey: ["/api/jobs", id, "schedule-proposals", "active"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/schedule-proposals/active`);
+      if (!response.ok) throw new Error("Failed to fetch schedule proposal");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
+  // Schedule proposal dialog state
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [proposedStartDate, setProposedStartDate] = useState("");
+  const [proposedEndDate, setProposedEndDate] = useState("");
+  const [proposalNotes, setProposalNotes] = useState("");
 
   // Note dialog state
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
@@ -186,6 +204,43 @@ export default function JobDetail() {
     },
     onError: () => {
       toast({ title: "Error deleting job", variant: "destructive" });
+    },
+  });
+
+  // Schedule proposal mutations
+  const createScheduleProposalMutation = useMutation({
+    mutationFn: async (data: { proposedStartDate: string; proposedEndDate?: string; notes?: string }) => {
+      return apiRequest("POST", `/api/jobs/${id}/schedule-proposals`, {
+        proposedStartDate: new Date(data.proposedStartDate).toISOString(),
+        proposedEndDate: data.proposedEndDate ? new Date(data.proposedEndDate).toISOString() : null,
+        notes: data.notes || null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "schedule-proposals", "active"] });
+      toast({ title: "Schedule proposal sent to client" });
+      setScheduleDialogOpen(false);
+      setProposedStartDate("");
+      setProposedEndDate("");
+      setProposalNotes("");
+    },
+    onError: () => {
+      toast({ title: "Failed to create schedule proposal", variant: "destructive" });
+    },
+  });
+
+  const confirmCounterProposalMutation = useMutation({
+    mutationFn: async (proposalId: string) => {
+      return apiRequest("POST", `/api/schedule-proposals/${proposalId}/confirm`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "schedule-proposals", "active"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar-events"] });
+      toast({ title: "Start date confirmed and added to calendar" });
+    },
+    onError: () => {
+      toast({ title: "Failed to confirm schedule", variant: "destructive" });
     },
   });
 
@@ -687,6 +742,126 @@ export default function JobDetail() {
             </CardContent>
           </Card>
 
+          {/* Schedule Proposal Section - Show when job is in appropriate stage */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Start Date Scheduling
+                </div>
+                {!scheduleProposal && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setScheduleDialogOpen(true)}
+                    data-testid="button-propose-start-date"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Propose Start Date
+                  </Button>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {scheduleProposal ? (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-muted/50">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <span className="text-sm font-medium">Proposed Start Date</span>
+                      <Badge variant={
+                        scheduleProposal.status === "scheduled" ? "default" :
+                        scheduleProposal.status === "client_countered" ? "secondary" :
+                        scheduleProposal.status === "client_declined" ? "destructive" :
+                        "outline"
+                      }>
+                        {scheduleProposal.status === "pending_client" && "Awaiting Client Response"}
+                        {scheduleProposal.status === "client_accepted" && "Client Accepted"}
+                        {scheduleProposal.status === "client_countered" && "Client Counter-Proposed"}
+                        {scheduleProposal.status === "client_declined" && "Client Declined"}
+                        {scheduleProposal.status === "scheduled" && "Scheduled"}
+                      </Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Your Proposed Date</p>
+                        <p className="font-medium">{new Date(scheduleProposal.proposedStartDate).toLocaleDateString()}</p>
+                        {scheduleProposal.proposedEndDate && (
+                          <p className="text-xs text-muted-foreground">
+                            to {new Date(scheduleProposal.proposedEndDate).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {scheduleProposal.counterProposedDate && (
+                        <div>
+                          <p className="text-muted-foreground">Client's Counter Date</p>
+                          <p className="font-medium">{new Date(scheduleProposal.counterProposedDate).toLocaleDateString()}</p>
+                          {scheduleProposal.counterReason && (
+                            <p className="text-xs text-muted-foreground mt-1">{scheduleProposal.counterReason}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {scheduleProposal.notes && (
+                      <div className="mt-3 pt-3 border-t">
+                        <p className="text-xs text-muted-foreground">Notes: {scheduleProposal.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Actions based on status */}
+                  <div className="flex gap-2 flex-wrap">
+                    {scheduleProposal.status === "client_countered" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => confirmCounterProposalMutation.mutate(scheduleProposal.id)}
+                          disabled={confirmCounterProposalMutation.isPending}
+                          data-testid="button-confirm-counter"
+                        >
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Accept Client's Date
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setScheduleDialogOpen(true)}
+                          data-testid="button-new-proposal"
+                        >
+                          Propose Different Date
+                        </Button>
+                      </>
+                    )}
+                    {scheduleProposal.status === "client_declined" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setScheduleDialogOpen(true)}
+                        data-testid="button-new-proposal-after-decline"
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        Propose New Date
+                      </Button>
+                    )}
+                    {scheduleProposal.status === "scheduled" && (
+                      <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Job scheduled and added to calendar</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No start date proposed yet. After the quote is accepted, propose a start date to the client.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center justify-between gap-2">
@@ -896,6 +1071,70 @@ export default function JobDetail() {
           )}
         </div>
       </div>
+
+      {/* Schedule Proposal Dialog */}
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Propose Start Date to Client</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Date</Label>
+                <Input
+                  type="date"
+                  value={proposedStartDate}
+                  onChange={(e) => setProposedStartDate(e.target.value)}
+                  data-testid="input-proposed-start-date"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>End Date (Optional)</Label>
+                <Input
+                  type="date"
+                  value={proposedEndDate}
+                  onChange={(e) => setProposedEndDate(e.target.value)}
+                  data-testid="input-proposed-end-date"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Notes for Client (Optional)</Label>
+              <Textarea
+                value={proposalNotes}
+                onChange={(e) => setProposalNotes(e.target.value)}
+                placeholder="e.g., 'We can start early morning if that works better'"
+                className="min-h-[80px]"
+                data-testid="textarea-proposal-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!proposedStartDate) {
+                  toast({ title: "Please select a start date", variant: "destructive" });
+                  return;
+                }
+                createScheduleProposalMutation.mutate({
+                  proposedStartDate,
+                  proposedEndDate: proposedEndDate || undefined,
+                  notes: proposalNotes || undefined,
+                });
+              }}
+              disabled={createScheduleProposalMutation.isPending}
+              data-testid="button-send-proposal"
+            >
+              <Send className="w-3 h-3 mr-1" />
+              Send to Client
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={noteDialogOpen} onOpenChange={(open) => !open && resetNoteDialog()}>
         <DialogContent>
