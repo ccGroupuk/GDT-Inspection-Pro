@@ -84,9 +84,10 @@ export default function Finance() {
     },
   });
 
-  const { data: allJobs = [] } = useQuery<Job[]>({
+  const { data: jobsData } = useQuery<{ jobs: Job[] }>({
     queryKey: ["/api/jobs"],
   });
+  const allJobs = jobsData?.jobs || [];
 
   const { data: forecast } = useQuery<FinancialForecast>({
     queryKey: ["/api/financial-forecast"],
