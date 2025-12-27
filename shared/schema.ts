@@ -99,6 +99,10 @@ export const jobs = pgTable("jobs", {
   discountType: text("discount_type"), // percentage or fixed
   discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
   
+  // Client quote response
+  quoteResponse: text("quote_response"), // pending, accepted, declined
+  quoteRespondedAt: timestamp("quote_responded_at"),
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
