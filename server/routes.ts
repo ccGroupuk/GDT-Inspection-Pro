@@ -2038,15 +2038,19 @@ export async function registerRoutes(
   // Client Portal: Get active schedule proposal for a job
   app.get("/api/portal/jobs/:jobId/schedule-proposal", async (req, res) => {
     try {
-      // @ts-ignore
-      const clientAccess = req.clientAccess;
-      if (!clientAccess) {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
       // Verify job belongs to this client
       const job = await storage.getJob(req.params.jobId);
-      if (!job || job.contactId !== clientAccess.contactId) {
+      if (!job || job.contactId !== access.contactId) {
         return res.status(404).json({ message: "Job not found" });
       }
 
@@ -2061,15 +2065,19 @@ export async function registerRoutes(
   // Client Portal: Respond to schedule proposal (accept/decline/counter)
   app.post("/api/portal/jobs/:jobId/schedule-proposal/respond", async (req, res) => {
     try {
-      // @ts-ignore
-      const clientAccess = req.clientAccess;
-      if (!clientAccess) {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
       // Verify job belongs to this client
       const job = await storage.getJob(req.params.jobId);
-      if (!job || job.contactId !== clientAccess.contactId) {
+      if (!job || job.contactId !== access.contactId) {
         return res.status(404).json({ message: "Job not found" });
       }
 
