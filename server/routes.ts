@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema } from "@shared/schema";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(
@@ -1571,6 +1571,320 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get financial forecast error:", error);
       res.status(500).json({ message: "Failed to load financial forecast" });
+    }
+  });
+
+  // Calendar Events
+  app.get("/api/calendar-events", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      let events;
+      
+      if (startDate && endDate) {
+        events = await storage.getCalendarEventsByDateRange(
+          new Date(startDate as string),
+          new Date(endDate as string)
+        );
+      } else {
+        events = await storage.getCalendarEvents();
+      }
+      
+      // Enrich with job and partner data
+      const [jobs, partners] = await Promise.all([
+        storage.getJobs(),
+        storage.getTradePartners()
+      ]);
+      
+      const enrichedEvents = events.map(event => ({
+        ...event,
+        job: event.jobId ? jobs.find(j => j.id === event.jobId) : null,
+        partner: event.partnerId ? partners.find(p => p.id === event.partnerId) : null
+      }));
+      
+      res.json(enrichedEvents);
+    } catch (error) {
+      console.error("Get calendar events error:", error);
+      res.status(500).json({ message: "Failed to load calendar events" });
+    }
+  });
+
+  app.get("/api/calendar-events/:id", async (req, res) => {
+    try {
+      const event = await storage.getCalendarEvent(req.params.id);
+      if (!event) {
+        return res.status(404).json({ message: "Calendar event not found" });
+      }
+      res.json(event);
+    } catch (error) {
+      console.error("Get calendar event error:", error);
+      res.status(500).json({ message: "Failed to load calendar event" });
+    }
+  });
+
+  app.post("/api/calendar-events", async (req, res) => {
+    try {
+      const data = insertCalendarEventSchema.parse(req.body);
+      const event = await storage.createCalendarEvent(data);
+      res.status(201).json(event);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create calendar event error:", error);
+      res.status(500).json({ message: "Failed to create calendar event" });
+    }
+  });
+
+  app.patch("/api/calendar-events/:id", async (req, res) => {
+    try {
+      const data = insertCalendarEventSchema.partial().parse(req.body);
+      const event = await storage.updateCalendarEvent(req.params.id, data);
+      if (!event) {
+        return res.status(404).json({ message: "Calendar event not found" });
+      }
+      res.json(event);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update calendar event error:", error);
+      res.status(500).json({ message: "Failed to update calendar event" });
+    }
+  });
+
+  app.delete("/api/calendar-events/:id", async (req, res) => {
+    try {
+      await storage.deleteCalendarEvent(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete calendar event error:", error);
+      res.status(500).json({ message: "Failed to delete calendar event" });
+    }
+  });
+
+  // Confirm calendar event by admin
+  app.patch("/api/calendar-events/:id/confirm-admin", async (req, res) => {
+    try {
+      const event = await storage.getCalendarEvent(req.params.id);
+      if (!event) {
+        return res.status(404).json({ message: "Calendar event not found" });
+      }
+      
+      const confirmed = event.confirmedByPartner || event.teamType === "in_house";
+      const updated = await storage.updateCalendarEvent(req.params.id, {
+        confirmedByAdmin: true,
+        status: confirmed ? "confirmed" : "pending",
+        confirmedAt: confirmed ? new Date() : undefined
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Confirm calendar event error:", error);
+      res.status(500).json({ message: "Failed to confirm calendar event" });
+    }
+  });
+
+  // Partner Availability
+  app.get("/api/partner-availability", async (req, res) => {
+    try {
+      const { partnerId, startDate, endDate } = req.query;
+      
+      if (startDate && endDate) {
+        if (partnerId) {
+          const availability = await storage.getPartnerAvailabilityByDateRange(
+            partnerId as string,
+            new Date(startDate as string),
+            new Date(endDate as string)
+          );
+          res.json(availability);
+        } else {
+          const availability = await storage.getAllPartnerAvailability(
+            new Date(startDate as string),
+            new Date(endDate as string)
+          );
+          res.json(availability);
+        }
+      } else if (partnerId) {
+        const availability = await storage.getPartnerAvailability(partnerId as string);
+        res.json(availability);
+      } else {
+        res.status(400).json({ message: "partnerId or date range required" });
+      }
+    } catch (error) {
+      console.error("Get partner availability error:", error);
+      res.status(500).json({ message: "Failed to load partner availability" });
+    }
+  });
+
+  app.post("/api/partner-availability", async (req, res) => {
+    try {
+      const data = insertPartnerAvailabilitySchema.parse(req.body);
+      const availability = await storage.createPartnerAvailability(data);
+      res.status(201).json(availability);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create partner availability error:", error);
+      res.status(500).json({ message: "Failed to create partner availability" });
+    }
+  });
+
+  app.patch("/api/partner-availability/:id", async (req, res) => {
+    try {
+      const data = insertPartnerAvailabilitySchema.partial().parse(req.body);
+      const availability = await storage.updatePartnerAvailability(req.params.id, data);
+      if (!availability) {
+        return res.status(404).json({ message: "Partner availability not found" });
+      }
+      res.json(availability);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update partner availability error:", error);
+      res.status(500).json({ message: "Failed to update partner availability" });
+    }
+  });
+
+  app.delete("/api/partner-availability/:id", async (req, res) => {
+    try {
+      await storage.deletePartnerAvailability(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete partner availability error:", error);
+      res.status(500).json({ message: "Failed to delete partner availability" });
+    }
+  });
+
+  // Partner Portal Calendar Events
+  app.get("/api/partner-portal/calendar-events", async (req, res) => {
+    try {
+      // @ts-ignore
+      const partnerAccess = req.partnerAccess;
+      if (!partnerAccess) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "startDate and endDate required" });
+      }
+      
+      const events = await storage.getCalendarEventsForPartnerPortal(
+        partnerAccess.partnerId,
+        new Date(startDate as string),
+        new Date(endDate as string)
+      );
+      
+      // Enrich with job data
+      const jobs = await storage.getJobs();
+      const enrichedEvents = events.map(event => ({
+        ...event,
+        job: event.jobId ? jobs.find(j => j.id === event.jobId) : null
+      }));
+      
+      res.json(enrichedEvents);
+    } catch (error) {
+      console.error("Get partner portal calendar events error:", error);
+      res.status(500).json({ message: "Failed to load calendar events" });
+    }
+  });
+
+  // Partner confirms calendar event
+  app.patch("/api/partner-portal/calendar-events/:id/confirm", async (req, res) => {
+    try {
+      // @ts-ignore
+      const partnerAccess = req.partnerAccess;
+      if (!partnerAccess) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const event = await storage.getCalendarEvent(req.params.id);
+      if (!event) {
+        return res.status(404).json({ message: "Calendar event not found" });
+      }
+      
+      // Verify this event belongs to this partner
+      if (event.partnerId !== partnerAccess.partnerId) {
+        return res.status(403).json({ message: "Not authorized to confirm this event" });
+      }
+      
+      const confirmed = event.confirmedByAdmin;
+      const updated = await storage.updateCalendarEvent(req.params.id, {
+        confirmedByPartner: true,
+        status: confirmed ? "confirmed" : "pending",
+        confirmedAt: confirmed ? new Date() : undefined
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner confirm calendar event error:", error);
+      res.status(500).json({ message: "Failed to confirm calendar event" });
+    }
+  });
+
+  // Partner Availability - for partner portal
+  app.get("/api/partner-portal/availability", async (req, res) => {
+    try {
+      // @ts-ignore
+      const partnerAccess = req.partnerAccess;
+      if (!partnerAccess) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { startDate, endDate } = req.query;
+      if (startDate && endDate) {
+        const availability = await storage.getPartnerAvailabilityByDateRange(
+          partnerAccess.partnerId,
+          new Date(startDate as string),
+          new Date(endDate as string)
+        );
+        res.json(availability);
+      } else {
+        const availability = await storage.getPartnerAvailability(partnerAccess.partnerId);
+        res.json(availability);
+      }
+    } catch (error) {
+      console.error("Get partner availability error:", error);
+      res.status(500).json({ message: "Failed to load availability" });
+    }
+  });
+
+  app.post("/api/partner-portal/availability", async (req, res) => {
+    try {
+      // @ts-ignore
+      const partnerAccess = req.partnerAccess;
+      if (!partnerAccess) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const data = insertPartnerAvailabilitySchema.parse({
+        ...req.body,
+        partnerId: partnerAccess.partnerId
+      });
+      const availability = await storage.createPartnerAvailability(data);
+      res.status(201).json(availability);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create partner availability error:", error);
+      res.status(500).json({ message: "Failed to create availability" });
+    }
+  });
+
+  app.delete("/api/partner-portal/availability/:id", async (req, res) => {
+    try {
+      // @ts-ignore
+      const partnerAccess = req.partnerAccess;
+      if (!partnerAccess) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      await storage.deletePartnerAvailability(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete partner availability error:", error);
+      res.status(500).json({ message: "Failed to delete availability" });
     }
   });
 
