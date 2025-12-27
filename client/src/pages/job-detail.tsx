@@ -1,14 +1,19 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { FormSkeleton } from "@/components/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useUpload } from "@/hooks/use-upload";
 import { 
   ArrowLeft, 
   Edit, 
@@ -26,9 +31,18 @@ import {
   Plus,
   Eye,
   Receipt,
+  MessageSquare,
+  Image,
+  X,
+  Share2,
+  Upload,
 } from "lucide-react";
-import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice } from "@shared/schema";
-import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment } from "@shared/schema";
+import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES, NOTE_VISIBILITY } from "@shared/schema";
+
+interface JobNoteWithAttachments extends JobNote {
+  attachments: JobNoteAttachment[];
+}
 
 interface JobDetailData {
   job: Job;
@@ -67,6 +81,41 @@ export default function JobDetail() {
       return response.json();
     },
     enabled: Boolean(id),
+  });
+
+  // Fetch job notes
+  const { data: jobNotes } = useQuery<JobNoteWithAttachments[]>({
+    queryKey: ["/api/jobs", id, "notes"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/notes`);
+      if (!response.ok) throw new Error("Failed to fetch notes");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
+  // Note dialog state
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState<JobNoteWithAttachments | null>(null);
+  const [noteContent, setNoteContent] = useState("");
+  const [noteVisibility, setNoteVisibility] = useState<string>("internal");
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{ fileName: string; fileUrl: string; mimeType?: string; fileSize?: number }>>([]);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const { uploadFile } = useUpload({
+    onSuccess: (response) => {
+      setPendingAttachments(prev => [...prev, {
+        fileName: response.metadata.name,
+        fileUrl: response.objectPath,
+        mimeType: response.metadata.contentType,
+        fileSize: response.metadata.size,
+      }]);
+      setIsUploadingPhoto(false);
+    },
+    onError: () => {
+      toast({ title: "Failed to upload photo", variant: "destructive" });
+      setIsUploadingPhoto(false);
+    },
   });
 
   // Calculate quote totals from items - must be before any conditional returns
@@ -167,6 +216,124 @@ export default function JobDetail() {
       toast({ title: "Error sending document", variant: "destructive" });
     },
   });
+
+  const createNoteMutation = useMutation({
+    mutationFn: async (data: { content: string; visibility: string }): Promise<JobNote> => {
+      const response = await apiRequest("POST", `/api/jobs/${id}/notes`, data);
+      return response.json();
+    },
+    onSuccess: async (note: JobNote) => {
+      for (const attachment of pendingAttachments) {
+        await apiRequest("POST", `/api/jobs/${id}/notes/${note.id}/attachments`, attachment);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "notes"] });
+      toast({ title: "Note added" });
+      resetNoteDialog();
+    },
+    onError: () => {
+      toast({ title: "Error creating note", variant: "destructive" });
+    },
+  });
+
+  const updateNoteMutation = useMutation({
+    mutationFn: async (data: { noteId: string; content: string; visibility: string }): Promise<JobNote> => {
+      const response = await apiRequest("PATCH", `/api/jobs/${id}/notes/${data.noteId}`, { content: data.content, visibility: data.visibility });
+      return response.json();
+    },
+    onSuccess: async (note: JobNote) => {
+      for (const attachment of pendingAttachments) {
+        await apiRequest("POST", `/api/jobs/${id}/notes/${note.id}/attachments`, attachment);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "notes"] });
+      toast({ title: "Note updated" });
+      resetNoteDialog();
+    },
+    onError: () => {
+      toast({ title: "Error updating note", variant: "destructive" });
+    },
+  });
+
+  const deleteNoteMutation = useMutation({
+    mutationFn: async (noteId: string) => {
+      return apiRequest("DELETE", `/api/jobs/${id}/notes/${noteId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "notes"] });
+      toast({ title: "Note deleted" });
+    },
+    onError: () => {
+      toast({ title: "Error deleting note", variant: "destructive" });
+    },
+  });
+
+  const toggleShareQuoteMutation = useMutation({
+    mutationFn: async (shareQuoteWithPartner: boolean) => {
+      return apiRequest("PATCH", `/api/jobs/${id}/share-quote`, { shareQuoteWithPartner });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      toast({ title: "Quote sharing updated" });
+    },
+    onError: () => {
+      toast({ title: "Error updating share settings", variant: "destructive" });
+    },
+  });
+
+  const toggleShareNotesMutation = useMutation({
+    mutationFn: async (shareNotesWithPartner: boolean) => {
+      return apiRequest("PATCH", `/api/jobs/${id}/share-notes`, { shareNotesWithPartner });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      toast({ title: "Notes sharing updated" });
+    },
+    onError: () => {
+      toast({ title: "Error updating share settings", variant: "destructive" });
+    },
+  });
+
+  const resetNoteDialog = () => {
+    setNoteDialogOpen(false);
+    setEditingNote(null);
+    setNoteContent("");
+    setNoteVisibility("internal");
+    setPendingAttachments([]);
+  };
+
+  const openNoteDialog = (note?: JobNoteWithAttachments) => {
+    if (note) {
+      setEditingNote(note);
+      setNoteContent(note.content);
+      setNoteVisibility(note.visibility);
+      setPendingAttachments([]);
+    } else {
+      setEditingNote(null);
+      setNoteContent("");
+      setNoteVisibility("internal");
+      setPendingAttachments([]);
+    }
+    setNoteDialogOpen(true);
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsUploadingPhoto(true);
+      await uploadFile(file);
+    }
+  };
+
+  const handleSaveNote = () => {
+    if (!noteContent.trim()) {
+      toast({ title: "Note content is required", variant: "destructive" });
+      return;
+    }
+    if (editingNote) {
+      updateNoteMutation.mutate({ noteId: editingNote.id, content: noteContent, visibility: noteVisibility });
+    } else {
+      createNoteMutation.mutate({ content: noteContent, visibility: noteVisibility });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -519,6 +686,93 @@ export default function JobDetail() {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Job Notes
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openNoteDialog()}
+                  data-testid="button-add-note"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Note
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {jobNotes && jobNotes.length > 0 ? (
+                <div className="space-y-4">
+                  {jobNotes.map((note) => {
+                    const visibilityInfo = NOTE_VISIBILITY.find(v => v.value === note.visibility);
+                    return (
+                      <div 
+                        key={note.id} 
+                        className="p-3 rounded-lg bg-muted/50"
+                        data-testid={`note-row-${note.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <Badge variant="outline" className="text-xs">
+                            {visibilityInfo?.label || note.visibility}
+                          </Badge>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => openNoteDialog(note)}
+                              data-testid={`button-edit-note-${note.id}`}
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                if (confirm("Delete this note?")) {
+                                  deleteNoteMutation.mutate(note.id);
+                                }
+                              }}
+                              data-testid={`button-delete-note-${note.id}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                        {note.attachments && note.attachments.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {note.attachments.map((att) => (
+                              <a 
+                                key={att.id}
+                                href={att.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-primary hover:underline p-1 rounded bg-background"
+                                data-testid={`attachment-${att.id}`}
+                              >
+                                <Image className="w-3 h-3" />
+                                {att.fileName}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          {note.createdAt && new Date(note.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No notes yet. Add notes to track progress, communications, or issues.</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="space-y-6">
@@ -602,8 +856,143 @@ export default function JobDetail() {
               )}
             </CardContent>
           </Card>
+
+          {isPartnerJob && partner && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Share2 className="w-4 h-4" />
+                  Partner Sharing
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="share-quote" className="text-sm">
+                    Share Quote/Estimate
+                  </Label>
+                  <Switch
+                    id="share-quote"
+                    checked={job.shareQuoteWithPartner ?? false}
+                    onCheckedChange={(checked) => toggleShareQuoteMutation.mutate(checked)}
+                    data-testid="switch-share-quote"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="share-notes" className="text-sm">
+                    Share Job Notes
+                  </Label>
+                  <Switch
+                    id="share-notes"
+                    checked={job.shareNotesWithPartner ?? false}
+                    onCheckedChange={(checked) => toggleShareNotesMutation.mutate(checked)}
+                    data-testid="switch-share-notes"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Only notes marked as "Partner" or "All" visibility will be visible when sharing is enabled.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
+
+      <Dialog open={noteDialogOpen} onOpenChange={(open) => !open && resetNoteDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingNote ? "Edit Note" : "Add Note"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Visibility</Label>
+              <Select value={noteVisibility} onValueChange={setNoteVisibility}>
+                <SelectTrigger data-testid="select-note-visibility">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {NOTE_VISIBILITY.map((v) => (
+                    <SelectItem key={v.value} value={v.value}>
+                      {v.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Note Content</Label>
+              <Textarea
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                placeholder="Enter note content..."
+                className="min-h-[120px]"
+                data-testid="textarea-note-content"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Attachments</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById("photo-upload")?.click()}
+                  disabled={isUploadingPhoto}
+                  data-testid="button-upload-photo"
+                >
+                  <Upload className="w-3 h-3 mr-1" />
+                  {isUploadingPhoto ? "Uploading..." : "Upload Photo"}
+                </Button>
+                <input
+                  id="photo-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+              </div>
+              {(editingNote?.attachments?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {editingNote?.attachments.map((att) => (
+                    <div key={att.id} className="flex items-center gap-1 text-xs p-1 rounded bg-muted">
+                      <Image className="w-3 h-3" />
+                      {att.fileName}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {pendingAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {pendingAttachments.map((att, idx) => (
+                    <div key={idx} className="flex items-center gap-1 text-xs p-1 rounded bg-green-100 dark:bg-green-900">
+                      <Image className="w-3 h-3" />
+                      {att.fileName}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-4 w-4"
+                        onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
+                      >
+                        <X className="w-2 h-2" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetNoteDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveNote}
+              disabled={createNoteMutation.isPending || updateNoteMutation.isPending}
+              data-testid="button-save-note"
+            >
+              {editingNote ? "Update" : "Add"} Note
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

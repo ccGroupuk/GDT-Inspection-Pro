@@ -7,9 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
 import { 
   Briefcase, MapPin, User, Phone, Mail, LogOut, Loader2, 
-  ArrowLeft, CheckCircle2, Circle
+  ArrowLeft, CheckCircle2, Circle, FileText, MessageSquare, Image
 } from "lucide-react";
-import type { Job, Contact, Task } from "@shared/schema";
+import type { Job, Contact, Task, QuoteItem, JobNote, JobNoteAttachment } from "@shared/schema";
+import { NOTE_VISIBILITY } from "@shared/schema";
+
+interface JobNoteWithAttachments extends JobNote {
+  attachments: JobNoteAttachment[];
+}
 
 type JobWithDetails = Job & { contact?: Contact; tasks?: Task[] };
 
@@ -69,6 +74,30 @@ export default function PartnerPortalJobDetail() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to load job");
+      return res.json();
+    },
+  });
+
+  const { data: quoteItems } = useQuery<QuoteItem[]>({
+    queryKey: ["/api/partner-portal/jobs", jobId, "quote-items"],
+    enabled: isAuthenticated && !!jobId,
+    queryFn: async () => {
+      const res = await fetch(`/api/partner-portal/jobs/${jobId}/quote-items`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load quote items");
+      return res.json();
+    },
+  });
+
+  const { data: jobNotes } = useQuery<JobNoteWithAttachments[]>({
+    queryKey: ["/api/partner-portal/jobs", jobId, "notes"],
+    enabled: isAuthenticated && !!jobId,
+    queryFn: async () => {
+      const res = await fetch(`/api/partner-portal/jobs/${jobId}/notes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load notes");
       return res.json();
     },
   });
@@ -215,10 +244,94 @@ export default function PartnerPortalJobDetail() {
             {job.description && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Job Notes</CardTitle>
+                  <CardTitle className="text-lg">Job Description</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="whitespace-pre-wrap">{job.description}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {quoteItems && quoteItems.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Quote / Estimate
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left p-3 font-medium">Description</th>
+                          <th className="text-right p-3 font-medium w-16">Qty</th>
+                          <th className="text-right p-3 font-medium w-24">Price</th>
+                          <th className="text-right p-3 font-medium w-24">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {quoteItems.map((item) => (
+                          <tr key={item.id}>
+                            <td className="p-3">{item.description}</td>
+                            <td className="p-3 text-right font-mono text-muted-foreground">{item.quantity}</td>
+                            <td className="p-3 text-right font-mono text-muted-foreground">£{parseFloat(item.unitPrice).toFixed(2)}</td>
+                            <td className="p-3 text-right font-mono font-medium">£{parseFloat(item.lineTotal).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4 text-right">
+                    <span className="font-semibold text-lg">
+                      Total: £{quoteItems.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0).toFixed(2)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {jobNotes && jobNotes.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Notes from Admin
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {jobNotes.map((note) => (
+                        <div 
+                          key={note.id} 
+                          className="p-3 rounded-lg bg-muted/50"
+                          data-testid={`partner-note-${note.id}`}
+                        >
+                          <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                          {note.attachments && note.attachments.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {note.attachments.map((att) => (
+                                <a 
+                                  key={att.id}
+                                  href={att.fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-xs text-primary hover:underline p-1 rounded bg-background"
+                                  data-testid={`partner-attachment-${att.id}`}
+                                >
+                                  <Image className="w-3 h-3" />
+                                  {att.fileName}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            {note.createdAt && new Date(note.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             )}
