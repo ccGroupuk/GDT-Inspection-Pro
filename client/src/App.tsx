@@ -23,6 +23,7 @@ import PortalJobDetail from "@/pages/portal/job-detail";
 import PortalProfile from "@/pages/portal/profile";
 import PortalReviews from "@/pages/portal/reviews";
 import PartnerPortalLogin from "@/pages/partner-portal/login";
+import PartnerPortalInvite from "@/pages/partner-portal/invite";
 import PartnerPortalJobs from "@/pages/partner-portal/jobs";
 import PartnerPortalJobDetail from "@/pages/partner-portal/job-detail";
 
@@ -61,6 +62,7 @@ function PartnerPortalRouter() {
   return (
     <Switch>
       <Route path="/partner-portal/login" component={PartnerPortalLogin} />
+      <Route path="/partner-portal/invite/:token" component={PartnerPortalInvite} />
       <Route path="/partner-portal/jobs/:jobId" component={PartnerPortalJobDetail} />
       <Route path="/partner-portal/jobs" component={PartnerPortalJobs} />
       <Route component={NotFound} />
