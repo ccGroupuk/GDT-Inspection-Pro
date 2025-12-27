@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema } from "@shared/schema";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(
@@ -1329,6 +1329,180 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Partner portal quote items error:", error);
       res.status(500).json({ message: "Failed to load quote items" });
+    }
+  });
+
+  // Financial Categories
+  app.get("/api/financial-categories", async (req, res) => {
+    try {
+      const categories = await storage.getFinancialCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Get financial categories error:", error);
+      res.status(500).json({ message: "Failed to load financial categories" });
+    }
+  });
+
+  app.post("/api/financial-categories", async (req, res) => {
+    try {
+      const data = insertFinancialCategorySchema.parse(req.body);
+      const category = await storage.createFinancialCategory(data);
+      res.status(201).json(category);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create financial category error:", error);
+      res.status(500).json({ message: "Failed to create financial category" });
+    }
+  });
+
+  app.patch("/api/financial-categories/:id", async (req, res) => {
+    try {
+      const data = insertFinancialCategorySchema.partial().parse(req.body);
+      const category = await storage.updateFinancialCategory(req.params.id, data);
+      if (!category) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+      res.json(category);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update financial category error:", error);
+      res.status(500).json({ message: "Failed to update financial category" });
+    }
+  });
+
+  app.delete("/api/financial-categories/:id", async (req, res) => {
+    try {
+      // Check if system category
+      const category = await storage.getFinancialCategory(req.params.id);
+      if (category?.isSystem) {
+        return res.status(400).json({ message: "Cannot delete system category" });
+      }
+      await storage.deleteFinancialCategory(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete financial category error:", error);
+      res.status(500).json({ message: "Failed to delete financial category" });
+    }
+  });
+
+  // Financial Transactions
+  app.get("/api/financial-transactions", async (req, res) => {
+    try {
+      const { year, month, jobId } = req.query;
+      let transactions;
+      
+      if (jobId && typeof jobId === "string") {
+        transactions = await storage.getFinancialTransactionsByJob(jobId);
+      } else if (year && month) {
+        transactions = await storage.getFinancialTransactionsByMonth(
+          parseInt(year as string),
+          parseInt(month as string)
+        );
+      } else {
+        transactions = await storage.getFinancialTransactions();
+      }
+      
+      res.json(transactions);
+    } catch (error) {
+      console.error("Get financial transactions error:", error);
+      res.status(500).json({ message: "Failed to load financial transactions" });
+    }
+  });
+
+  app.get("/api/financial-transactions/:id", async (req, res) => {
+    try {
+      const transaction = await storage.getFinancialTransaction(req.params.id);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+      res.json(transaction);
+    } catch (error) {
+      console.error("Get financial transaction error:", error);
+      res.status(500).json({ message: "Failed to load financial transaction" });
+    }
+  });
+
+  app.post("/api/financial-transactions", async (req, res) => {
+    try {
+      const data = insertFinancialTransactionSchema.parse(req.body);
+      const transaction = await storage.createFinancialTransaction(data);
+      res.status(201).json(transaction);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create financial transaction error:", error);
+      res.status(500).json({ message: "Failed to create financial transaction" });
+    }
+  });
+
+  app.patch("/api/financial-transactions/:id", async (req, res) => {
+    try {
+      const data = insertFinancialTransactionSchema.partial().parse(req.body);
+      const transaction = await storage.updateFinancialTransaction(req.params.id, data);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+      res.json(transaction);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update financial transaction error:", error);
+      res.status(500).json({ message: "Failed to update financial transaction" });
+    }
+  });
+
+  app.delete("/api/financial-transactions/:id", async (req, res) => {
+    try {
+      await storage.deleteFinancialTransaction(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete financial transaction error:", error);
+      res.status(500).json({ message: "Failed to delete financial transaction" });
+    }
+  });
+
+  // Financial Summary
+  app.get("/api/financial-summary", async (req, res) => {
+    try {
+      const { year, month } = req.query;
+      let transactions;
+      
+      if (year && month) {
+        transactions = await storage.getFinancialTransactionsByMonth(
+          parseInt(year as string),
+          parseInt(month as string)
+        );
+      } else {
+        transactions = await storage.getFinancialTransactions();
+      }
+      
+      const income = transactions
+        .filter(t => t.type === "income")
+        .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      
+      const expenses = transactions
+        .filter(t => t.type === "expense")
+        .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      
+      const profit = income - expenses;
+      const margin = income > 0 ? (profit / income) * 100 : 0;
+      
+      res.json({
+        income,
+        expenses,
+        profit,
+        margin: Math.round(margin * 100) / 100,
+        transactionCount: transactions.length
+      });
+    } catch (error) {
+      console.error("Get financial summary error:", error);
+      res.status(500).json({ message: "Failed to load financial summary" });
     }
   });
 
