@@ -438,9 +438,10 @@ export default function CalendarPage() {
     },
   });
 
-  const { data: jobs = [] } = useQuery<Job[]>({
+  const { data: jobsData } = useQuery<{ jobs: Job[]; contacts: unknown[]; partners: TradePartner[] }>({
     queryKey: ["/api/jobs"],
   });
+  const jobs = jobsData?.jobs || [];
 
   const { data: partners = [] } = useQuery<TradePartner[]>({
     queryKey: ["/api/partners"],
