@@ -842,6 +842,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid response. Must be 'accepted' or 'declined'" });
       }
       
+      // Prevent re-submission if already responded
+      if (job.quoteResponse) {
+        return res.status(400).json({ 
+          message: "Quote has already been responded to",
+          currentResponse: job.quoteResponse 
+        });
+      }
+      
+      // Only allow response when quote has been sent
+      if (job.status !== 'quote_sent') {
+        return res.status(400).json({ message: "Quote is not available for response" });
+      }
+      
       // Update job with quote response and optionally update status
       const updateData: any = {
         quoteResponse: response,

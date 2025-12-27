@@ -1,5 +1,5 @@
-import { useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useEffect, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,9 @@ import { PortalLayout } from "@/components/portal-layout";
 import { usePortalAuth, portalApiRequest } from "@/hooks/use-portal-auth";
 import { StatusBadge } from "@/components/status-badge";
 import { PIPELINE_STAGES, PAYMENT_STATUSES } from "@shared/schema";
-import { ArrowLeft, MapPin, Calendar, CheckCircle, Circle, PoundSterling, FileText, Receipt } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, CheckCircle, Circle, PoundSterling, FileText, Receipt, Check, X } from "lucide-react";
+import { queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface PaymentRequest {
   id: string;
@@ -63,6 +65,8 @@ interface PortalJobDetail {
   taxRate: string | null;
   discountType: string | null;
   discountValue: string | null;
+  quoteResponse: string | null;
+  quoteRespondedAt: string | null;
   createdAt: string;
   paymentRequests: PaymentRequest[];
   quoteItems: QuoteItem[];
@@ -98,9 +102,42 @@ export default function PortalJobDetail() {
     enabled: !!token && !!jobId,
   });
 
+  const { toast } = useToast();
+
+  const quoteResponseMutation = useMutation({
+    mutationFn: async (response: 'accepted' | 'declined') => {
+      if (!token) throw new Error("No token");
+      const res = await portalApiRequest("POST", `/api/portal/jobs/${jobId}/quote-response`, token, { response });
+      if (!res.ok) {
+        throw new Error("Failed to submit response");
+      }
+      return res.json();
+    },
+    onSuccess: (data, response) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs"] });
+      toast({
+        title: response === 'accepted' ? "Quote Accepted" : "Quote Declined",
+        description: response === 'accepted' 
+          ? "Thank you! We'll be in touch shortly to arrange the next steps." 
+          : "Your response has been recorded. Please contact us if you have any questions.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to submit your response. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!isAuthenticated) {
     return null;
   }
+
+  // Show accept/decline buttons when status is quote_sent and no response yet
+  const showQuoteResponse = job?.status === 'quote_sent' && !job?.quoteResponse;
 
   const currentStageIndex = job ? PIPELINE_STAGES.findIndex(s => s.value === job.status) : -1;
 
@@ -335,6 +372,52 @@ export default function PortalJobDetail() {
                           <span className="font-mono font-semibold text-lg">
                             £{quoteTotals.grandTotal.toFixed(2)}
                           </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {showQuoteResponse && (
+                      <div className="pt-4 border-t border-border space-y-3" data-testid="quote-response-section">
+                        <p className="text-sm text-center text-muted-foreground">
+                          Please review this quote and let us know your decision
+                        </p>
+                        <div className="flex gap-3 justify-center">
+                          <Button
+                            variant="outline"
+                            onClick={() => quoteResponseMutation.mutate('declined')}
+                            disabled={quoteResponseMutation.isPending}
+                            data-testid="button-decline-quote"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Decline
+                          </Button>
+                          <Button
+                            onClick={() => quoteResponseMutation.mutate('accepted')}
+                            disabled={quoteResponseMutation.isPending}
+                            data-testid="button-accept-quote"
+                          >
+                            <Check className="w-4 h-4 mr-2" />
+                            Accept Quote
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {job.quoteResponse && (
+                      <div className="pt-4 border-t border-border" data-testid="quote-response-status">
+                        <div className={`text-center p-3 rounded-lg ${
+                          job.quoteResponse === 'accepted' 
+                            ? 'bg-green-500/10 text-green-700 dark:text-green-400' 
+                            : 'bg-red-500/10 text-red-700 dark:text-red-400'
+                        }`}>
+                          <p className="font-medium">
+                            Quote {job.quoteResponse === 'accepted' ? 'Accepted' : 'Declined'}
+                          </p>
+                          {job.quoteRespondedAt && (
+                            <p className="text-xs mt-1 opacity-75">
+                              on {new Date(job.quoteRespondedAt).toLocaleDateString()}
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
