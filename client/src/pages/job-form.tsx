@@ -125,6 +125,7 @@ export default function JobForm() {
       quoteType: "fixed",
       quotedValue: null,
       depositRequired: false,
+      depositType: "fixed",
       depositAmount: null,
       depositReceived: false,
       partnerCharge: null,
@@ -147,6 +148,7 @@ export default function JobForm() {
       quoteType: data.job.quoteType || "fixed",
       quotedValue: data.job.quotedValue,
       depositRequired: data.job.depositRequired || false,
+      depositType: data.job.depositType || "fixed",
       depositAmount: data.job.depositAmount,
       depositReceived: data.job.depositReceived || false,
       partnerCharge: data.job.partnerCharge,
@@ -697,16 +699,35 @@ export default function JobForm() {
               </div>
 
               {form.watch("depositRequired") && (
-                <div className="space-y-2">
-                  <Label htmlFor="depositAmount">Deposit Amount (£)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    {...form.register("depositAmount")}
-                    placeholder="0.00"
-                    data-testid="input-deposit-amount"
-                  />
-                </div>
+                <>
+                  <div className="space-y-2">
+                    <Label>Deposit Type</Label>
+                    <Select
+                      value={form.watch("depositType") || "fixed"}
+                      onValueChange={(value) => form.setValue("depositType", value)}
+                    >
+                      <SelectTrigger data-testid="select-deposit-type">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fixed">Fixed Amount (£)</SelectItem>
+                        <SelectItem value="percentage">Percentage (%)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="depositAmount">
+                      {form.watch("depositType") === "percentage" ? "Deposit (%)" : "Deposit Amount (£)"}
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      {...form.register("depositAmount")}
+                      placeholder={form.watch("depositType") === "percentage" ? "e.g. 25" : "0.00"}
+                      data-testid="input-deposit-amount"
+                    />
+                  </div>
+                </>
               )}
             </div>
 

@@ -75,6 +75,7 @@ export const jobs = pgTable("jobs", {
   quoteType: text("quote_type").default("fixed"), // fixed or estimate
   quotedValue: decimal("quoted_value", { precision: 10, scale: 2 }),
   depositRequired: boolean("deposit_required").default(false),
+  depositType: text("deposit_type").default("fixed"), // percentage or fixed
   depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }),
   depositReceived: boolean("deposit_received").default(false),
   
