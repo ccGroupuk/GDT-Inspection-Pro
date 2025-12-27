@@ -637,3 +637,90 @@ export const TRANSACTION_SOURCE_TYPES = [
   { value: "manual", label: "Manual Entry", description: "Manually entered transaction" },
   { value: "adjustment", label: "Adjustment", description: "Adjustment or correction" },
 ] as const;
+
+// Calendar Events - for scheduling jobs with partners/in-house team
+export const calendarEvents = pgTable("calendar_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").references(() => jobs.id),
+  partnerId: varchar("partner_id").references(() => tradePartners.id),
+  
+  // Event details
+  title: text("title").notNull(),
+  description: text("description"),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  allDay: boolean("all_day").default(true),
+  
+  // Team type determines visibility
+  teamType: text("team_type").notNull().default("in_house"), // in_house, partner, hybrid
+  
+  // Confirmation status
+  status: text("status").notNull().default("pending"), // pending, confirmed, cancelled
+  confirmedByAdmin: boolean("confirmed_by_admin").default(false),
+  confirmedByPartner: boolean("confirmed_by_partner").default(false),
+  confirmedAt: timestamp("confirmed_at"),
+  
+  // Metadata
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const calendarEventsRelations = relations(calendarEvents, ({ one }) => ({
+  job: one(jobs, {
+    fields: [calendarEvents.jobId],
+    references: [jobs.id],
+  }),
+  partner: one(tradePartners, {
+    fields: [calendarEvents.partnerId],
+    references: [tradePartners.id],
+  }),
+}));
+
+export const insertCalendarEventSchema = createInsertSchema(calendarEvents).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCalendarEvent = z.infer<typeof insertCalendarEventSchema>;
+export type CalendarEvent = typeof calendarEvents.$inferSelect;
+
+// Partner Availability - track when partners are available/unavailable
+export const partnerAvailability = pgTable("partner_availability", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
+  
+  // Date range
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  
+  // Status - available means they're free, unavailable means they're blocked
+  status: text("status").notNull().default("unavailable"), // available, unavailable
+  
+  // Reason for unavailability (holiday, sick, other job, etc.)
+  reason: text("reason"),
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const partnerAvailabilityRelations = relations(partnerAvailability, ({ one }) => ({
+  partner: one(tradePartners, {
+    fields: [partnerAvailability.partnerId],
+    references: [tradePartners.id],
+  }),
+}));
+
+export const insertPartnerAvailabilitySchema = createInsertSchema(partnerAvailability).omit({ id: true, createdAt: true });
+export type InsertPartnerAvailability = z.infer<typeof insertPartnerAvailabilitySchema>;
+export type PartnerAvailability = typeof partnerAvailability.$inferSelect;
+
+// Calendar event team types
+export const CALENDAR_TEAM_TYPES = [
+  { value: "in_house", label: "In-House", description: "CCC team work" },
+  { value: "partner", label: "Partner", description: "Trade partner work" },
+  { value: "hybrid", label: "Hybrid", description: "Combined CCC + Partner work" },
+] as const;
+
+// Calendar event statuses
+export const CALENDAR_EVENT_STATUSES = [
+  { value: "pending", label: "Pending", description: "Awaiting confirmation" },
+  { value: "confirmed", label: "Confirmed", description: "Confirmed by all parties" },
+  { value: "cancelled", label: "Cancelled", description: "Cancelled" },
+] as const;
