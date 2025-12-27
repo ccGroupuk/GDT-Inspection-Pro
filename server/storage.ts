@@ -15,6 +15,8 @@ import {
   partnerInvites, type PartnerInvite, type InsertPartnerInvite,
   jobNotes, type JobNote, type InsertJobNote,
   jobNoteAttachments, type JobNoteAttachment, type InsertJobNoteAttachment,
+  financialCategories, type FinancialCategory, type InsertFinancialCategory,
+  financialTransactions, type FinancialTransaction, type InsertFinancialTransaction,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, isNull } from "drizzle-orm";
@@ -113,6 +115,22 @@ export interface IStorage {
   getJobNoteAttachments(noteId: string): Promise<JobNoteAttachment[]>;
   createJobNoteAttachment(attachment: InsertJobNoteAttachment): Promise<JobNoteAttachment>;
   deleteJobNoteAttachment(id: string): Promise<boolean>;
+
+  // Financial Categories
+  getFinancialCategories(): Promise<FinancialCategory[]>;
+  getFinancialCategory(id: string): Promise<FinancialCategory | undefined>;
+  createFinancialCategory(category: InsertFinancialCategory): Promise<FinancialCategory>;
+  updateFinancialCategory(id: string, category: Partial<InsertFinancialCategory>): Promise<FinancialCategory | undefined>;
+  deleteFinancialCategory(id: string): Promise<boolean>;
+
+  // Financial Transactions
+  getFinancialTransactions(): Promise<FinancialTransaction[]>;
+  getFinancialTransaction(id: string): Promise<FinancialTransaction | undefined>;
+  getFinancialTransactionsByMonth(year: number, month: number): Promise<FinancialTransaction[]>;
+  getFinancialTransactionsByJob(jobId: string): Promise<FinancialTransaction[]>;
+  createFinancialTransaction(transaction: InsertFinancialTransaction): Promise<FinancialTransaction>;
+  updateFinancialTransaction(id: string, transaction: Partial<InsertFinancialTransaction>): Promise<FinancialTransaction | undefined>;
+  deleteFinancialTransaction(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -479,6 +497,70 @@ export class DatabaseStorage implements IStorage {
 
   async deleteJobNoteAttachment(id: string): Promise<boolean> {
     await db.delete(jobNoteAttachments).where(eq(jobNoteAttachments.id, id));
+    return true;
+  }
+
+  // Financial Categories Methods
+  async getFinancialCategories(): Promise<FinancialCategory[]> {
+    return db.select().from(financialCategories).orderBy(asc(financialCategories.sortOrder));
+  }
+
+  async getFinancialCategory(id: string): Promise<FinancialCategory | undefined> {
+    const [category] = await db.select().from(financialCategories).where(eq(financialCategories.id, id));
+    return category || undefined;
+  }
+
+  async createFinancialCategory(category: InsertFinancialCategory): Promise<FinancialCategory> {
+    const [created] = await db.insert(financialCategories).values(category).returning();
+    return created;
+  }
+
+  async updateFinancialCategory(id: string, category: Partial<InsertFinancialCategory>): Promise<FinancialCategory | undefined> {
+    const [updated] = await db.update(financialCategories).set(category).where(eq(financialCategories.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteFinancialCategory(id: string): Promise<boolean> {
+    await db.delete(financialCategories).where(eq(financialCategories.id, id));
+    return true;
+  }
+
+  // Financial Transactions Methods
+  async getFinancialTransactions(): Promise<FinancialTransaction[]> {
+    return db.select().from(financialTransactions).orderBy(desc(financialTransactions.date));
+  }
+
+  async getFinancialTransaction(id: string): Promise<FinancialTransaction | undefined> {
+    const [transaction] = await db.select().from(financialTransactions).where(eq(financialTransactions.id, id));
+    return transaction || undefined;
+  }
+
+  async getFinancialTransactionsByMonth(year: number, month: number): Promise<FinancialTransaction[]> {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    const allTransactions = await db.select().from(financialTransactions).orderBy(desc(financialTransactions.date));
+    return allTransactions.filter(t => {
+      const date = new Date(t.date);
+      return date >= startDate && date <= endDate;
+    });
+  }
+
+  async getFinancialTransactionsByJob(jobId: string): Promise<FinancialTransaction[]> {
+    return db.select().from(financialTransactions).where(eq(financialTransactions.jobId, jobId)).orderBy(desc(financialTransactions.date));
+  }
+
+  async createFinancialTransaction(transaction: InsertFinancialTransaction): Promise<FinancialTransaction> {
+    const [created] = await db.insert(financialTransactions).values(transaction).returning();
+    return created;
+  }
+
+  async updateFinancialTransaction(id: string, transaction: Partial<InsertFinancialTransaction>): Promise<FinancialTransaction | undefined> {
+    const [updated] = await db.update(financialTransactions).set({ ...transaction, updatedAt: new Date() }).where(eq(financialTransactions.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteFinancialTransaction(id: string): Promise<boolean> {
+    await db.delete(financialTransactions).where(eq(financialTransactions.id, id));
     return true;
   }
 }
