@@ -819,6 +819,48 @@ export async function registerRoutes(
     }
   });
 
+  // Client portal: Respond to quote (accept/decline)
+  app.post("/api/portal/jobs/:jobId/quote-response", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.contactId !== access.contactId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const { response } = req.body;
+      if (!['accepted', 'declined'].includes(response)) {
+        return res.status(400).json({ message: "Invalid response. Must be 'accepted' or 'declined'" });
+      }
+      
+      // Update job with quote response and optionally update status
+      const updateData: any = {
+        quoteResponse: response,
+        quoteRespondedAt: new Date(),
+      };
+      
+      // If accepted, move to "Quote Accepted" stage
+      if (response === 'accepted') {
+        updateData.status = 'quote_accepted';
+      }
+      
+      const updatedJob = await storage.updateJob(req.params.jobId, updateData);
+      res.json(updatedJob);
+    } catch (error) {
+      console.error("Portal quote response error:", error);
+      res.status(500).json({ message: "Failed to submit quote response" });
+    }
+  });
+
   app.get("/api/portal/profile", async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
