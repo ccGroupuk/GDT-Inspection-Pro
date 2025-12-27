@@ -3,6 +3,7 @@ import {
   tradePartners, type TradePartner, type InsertTradePartner,
   jobs, type Job, type InsertJob,
   tasks, type Task, type InsertTask,
+  quoteItems, type QuoteItem, type InsertQuoteItem,
   clientPortalAccess, type ClientPortalAccess, type InsertClientPortalAccess,
   clientInvites, type ClientInvite, type InsertClientInvite,
   paymentRequests, type PaymentRequest, type InsertPaymentRequest,
@@ -10,7 +11,7 @@ import {
   reviewRequests, type ReviewRequest, type InsertReviewRequest,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 
 export interface IStorage {
   getContacts(): Promise<Contact[]>;
@@ -38,6 +39,13 @@ export interface IStorage {
   createTask(task: InsertTask): Promise<Task>;
   updateTask(id: string, task: Partial<InsertTask>): Promise<Task | undefined>;
   deleteTask(id: string): Promise<boolean>;
+
+  // Quote Items
+  getQuoteItemsByJob(jobId: string): Promise<QuoteItem[]>;
+  createQuoteItem(item: InsertQuoteItem): Promise<QuoteItem>;
+  updateQuoteItem(id: string, item: Partial<InsertQuoteItem>): Promise<QuoteItem | undefined>;
+  deleteQuoteItem(id: string): Promise<boolean>;
+  deleteQuoteItemsByJob(jobId: string): Promise<boolean>;
 
   // Client Portal
   getClientPortalAccess(contactId: string): Promise<ClientPortalAccess | undefined>;
@@ -234,6 +242,31 @@ export class DatabaseStorage implements IStorage {
   async createReviewRequest(request: InsertReviewRequest): Promise<ReviewRequest> {
     const [created] = await db.insert(reviewRequests).values(request).returning();
     return created;
+  }
+
+  // Quote Items
+  async getQuoteItemsByJob(jobId: string): Promise<QuoteItem[]> {
+    return db.select().from(quoteItems).where(eq(quoteItems.jobId, jobId)).orderBy(asc(quoteItems.sortOrder));
+  }
+
+  async createQuoteItem(item: InsertQuoteItem): Promise<QuoteItem> {
+    const [created] = await db.insert(quoteItems).values(item).returning();
+    return created;
+  }
+
+  async updateQuoteItem(id: string, item: Partial<InsertQuoteItem>): Promise<QuoteItem | undefined> {
+    const [updated] = await db.update(quoteItems).set(item).where(eq(quoteItems.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteQuoteItem(id: string): Promise<boolean> {
+    await db.delete(quoteItems).where(eq(quoteItems.id, id));
+    return true;
+  }
+
+  async deleteQuoteItemsByJob(jobId: string): Promise<boolean> {
+    await db.delete(quoteItems).where(eq(quoteItems.jobId, jobId));
+    return true;
   }
 }
 

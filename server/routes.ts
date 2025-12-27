@@ -308,6 +308,77 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== QUOTE ITEMS ====================
+
+  app.get("/api/jobs/:jobId/quote-items", async (req, res) => {
+    try {
+      const items = await storage.getQuoteItemsByJob(req.params.jobId);
+      res.json(items);
+    } catch (error) {
+      console.error("Get quote items error:", error);
+      res.status(500).json({ message: "Failed to fetch quote items" });
+    }
+  });
+
+  app.post("/api/jobs/:jobId/quote-items", async (req, res) => {
+    try {
+      const item = await storage.createQuoteItem({
+        ...req.body,
+        jobId: req.params.jobId,
+      });
+      res.status(201).json(item);
+    } catch (error) {
+      console.error("Create quote item error:", error);
+      res.status(500).json({ message: "Failed to create quote item" });
+    }
+  });
+
+  app.patch("/api/quote-items/:id", async (req, res) => {
+    try {
+      const item = await storage.updateQuoteItem(req.params.id, req.body);
+      if (!item) {
+        return res.status(404).json({ message: "Quote item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Update quote item error:", error);
+      res.status(500).json({ message: "Failed to update quote item" });
+    }
+  });
+
+  app.delete("/api/quote-items/:id", async (req, res) => {
+    try {
+      await storage.deleteQuoteItem(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete quote item error:", error);
+      res.status(500).json({ message: "Failed to delete quote item" });
+    }
+  });
+
+  // Bulk update quote items (replace all items for a job)
+  app.put("/api/jobs/:jobId/quote-items", async (req, res) => {
+    try {
+      const { items } = req.body;
+      // Delete existing items
+      await storage.deleteQuoteItemsByJob(req.params.jobId);
+      // Create new items
+      const createdItems = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = await storage.createQuoteItem({
+          ...items[i],
+          jobId: req.params.jobId,
+          sortOrder: i,
+        });
+        createdItems.push(item);
+      }
+      res.json(createdItems);
+    } catch (error) {
+      console.error("Bulk update quote items error:", error);
+      res.status(500).json({ message: "Failed to update quote items" });
+    }
+  });
+
   // ==================== CLIENT PORTAL ADMIN ENDPOINTS ====================
 
   // Client Invites
@@ -533,7 +604,8 @@ export async function registerRoutes(
       }
       
       const paymentRequests = await storage.getPaymentRequestsByJob(req.params.jobId);
-      res.json({ ...job, paymentRequests });
+      const quoteItems = await storage.getQuoteItemsByJob(req.params.jobId);
+      res.json({ ...job, paymentRequests, quoteItems });
     } catch (error) {
       console.error("Portal job detail error:", error);
       res.status(500).json({ message: "Failed to load job" });

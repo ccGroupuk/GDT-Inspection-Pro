@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,14 +16,14 @@ import {
   Mail, 
   MapPin, 
   User, 
-  PoundSterling,
   Handshake,
   Calendar,
   CheckCircle,
   AlertCircle,
   Trash2,
+  FileText,
 } from "lucide-react";
-import type { Job, Contact, TradePartner, Task } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, QuoteItem } from "@shared/schema";
 import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES } from "@shared/schema";
 
 interface JobDetailData {
@@ -39,6 +40,17 @@ export default function JobDetail() {
 
   const { data, isLoading } = useQuery<JobDetailData>({
     queryKey: ["/api/jobs", id],
+    enabled: Boolean(id),
+  });
+
+  // Fetch quote items
+  const { data: quoteItems } = useQuery<QuoteItem[]>({
+    queryKey: ["/api/jobs", id, "quote-items"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/quote-items`);
+      if (!response.ok) throw new Error("Failed to fetch quote items");
+      return response.json();
+    },
     enabled: Boolean(id),
   });
 
@@ -107,7 +119,7 @@ export default function JobDetail() {
         <div className="text-center py-12">
           <p className="text-muted-foreground">Job not found</p>
           <Link href="/jobs">
-            <Button variant="link">Back to Jobs</Button>
+            <Button variant="ghost">Back to Jobs</Button>
           </Link>
         </div>
       </div>
@@ -125,6 +137,33 @@ export default function JobDetail() {
   const marginPercentage = margin && job.quotedValue
     ? ((margin / Number(job.quotedValue)) * 100).toFixed(1)
     : null;
+
+  // Calculate quote totals from items
+  const quoteTotals = useMemo(() => {
+    if (!quoteItems || quoteItems.length === 0) return null;
+    
+    const subtotal = quoteItems.reduce((sum, item) => sum + (parseFloat(item.lineTotal) || 0), 0);
+    
+    let discountAmount = 0;
+    if (job.discountType && job.discountValue) {
+      if (job.discountType === "percentage") {
+        discountAmount = subtotal * (parseFloat(job.discountValue) / 100);
+      } else if (job.discountType === "fixed") {
+        discountAmount = parseFloat(job.discountValue) || 0;
+      }
+    }
+    
+    const afterDiscount = subtotal - discountAmount;
+    
+    let taxAmount = 0;
+    if (job.taxEnabled && job.taxRate) {
+      taxAmount = afterDiscount * (parseFloat(job.taxRate) / 100);
+    }
+    
+    const grandTotal = afterDiscount + taxAmount;
+    
+    return { subtotal, discountAmount, taxAmount, grandTotal };
+  }, [quoteItems, job.discountType, job.discountValue, job.taxEnabled, job.taxRate]);
 
   return (
     <div className="p-6">
@@ -225,21 +264,82 @@ export default function JobDetail() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Pricing</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Quote Details
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-muted/50">
                   <span className="text-sm font-medium">Quote Type</span>
                   <Badge variant="outline">{job.quoteType === "fixed" ? "Fixed Quote" : "Estimate"}</Badge>
                 </div>
-                
-                <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-muted/50">
-                  <span className="text-sm font-medium">Quoted Value</span>
-                  <span className="font-mono text-lg font-semibold">
-                    {job.quotedValue ? `£${Number(job.quotedValue).toLocaleString()}` : "-"}
-                  </span>
-                </div>
+
+                {quoteItems && quoteItems.length > 0 ? (
+                  <>
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="text-left p-3 font-medium">Description</th>
+                            <th className="text-right p-3 font-medium w-16">Qty</th>
+                            <th className="text-right p-3 font-medium w-24">Price</th>
+                            <th className="text-right p-3 font-medium w-24">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {quoteItems.map((item) => (
+                            <tr key={item.id} data-testid={`quote-row-${item.id}`}>
+                              <td className="p-3">{item.description}</td>
+                              <td className="p-3 text-right font-mono text-muted-foreground">{item.quantity}</td>
+                              <td className="p-3 text-right font-mono text-muted-foreground">£{parseFloat(item.unitPrice).toFixed(2)}</td>
+                              <td className="p-3 text-right font-mono font-medium">£{parseFloat(item.lineTotal).toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {quoteTotals && (
+                      <div className="space-y-2 pt-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span className="font-mono">£{quoteTotals.subtotal.toFixed(2)}</span>
+                        </div>
+                        {job.discountType && quoteTotals.discountAmount > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              Discount {job.discountType === "percentage" ? `(${job.discountValue}%)` : ""}
+                            </span>
+                            <span className="font-mono text-green-600 dark:text-green-400">
+                              -£{quoteTotals.discountAmount.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        {job.taxEnabled && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">VAT ({job.taxRate}%)</span>
+                            <span className="font-mono">£{quoteTotals.taxAmount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-2 border-t border-border">
+                          <span className="font-semibold">Grand Total</span>
+                          <span className="font-mono font-semibold text-lg">
+                            £{quoteTotals.grandTotal.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm font-medium">Quoted Value</span>
+                    <span className="font-mono text-lg font-semibold">
+                      {job.quotedValue ? `£${Number(job.quotedValue).toLocaleString()}` : "-"}
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-muted/50">
                   <div className="flex items-center gap-2">

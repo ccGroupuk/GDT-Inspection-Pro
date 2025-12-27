@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -13,9 +14,9 @@ import { Switch } from "@/components/ui/switch";
 import { FormSkeleton } from "@/components/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Save, CheckCircle, Handshake, RefreshCw } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle, Handshake, RefreshCw, Plus, Trash2 } from "lucide-react";
 import { Link } from "wouter";
-import type { Job, Contact, TradePartner, InsertJob } from "@shared/schema";
+import type { Job, Contact, TradePartner, InsertJob, QuoteItem } from "@shared/schema";
 import { 
   insertJobSchema, 
   SERVICE_TYPES, 
@@ -24,6 +25,14 @@ import {
   TRADE_CATEGORIES,
   PIPELINE_STAGES,
 } from "@shared/schema";
+
+interface QuoteLineItem {
+  id?: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  lineTotal: string;
+}
 
 const formSchema = insertJobSchema.extend({
   contactId: z.string().min(1, "Please select a contact"),
@@ -38,6 +47,7 @@ interface JobFormData {
   job?: Job;
   contacts: Contact[];
   partners: TradePartner[];
+  quoteItems?: QuoteItem[];
 }
 
 export default function JobForm() {
@@ -46,10 +56,50 @@ export default function JobForm() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  // Quote items state
+  const [quoteItems, setQuoteItems] = useState<QuoteLineItem[]>([]);
+  const [taxEnabled, setTaxEnabled] = useState(false);
+  const [taxRate, setTaxRate] = useState("20");
+  const [discountType, setDiscountType] = useState<string | null>(null);
+  const [discountValue, setDiscountValue] = useState("");
+
   const { data: editData, isLoading: editLoading } = useQuery<JobFormData>({
     queryKey: ["/api/jobs", id],
     enabled: isEdit,
   });
+
+  // Fetch quote items for edit mode
+  const { data: existingQuoteItems } = useQuery<QuoteItem[]>({
+    queryKey: ["/api/jobs", id, "quote-items"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/quote-items`);
+      if (!response.ok) throw new Error("Failed to fetch quote items");
+      return response.json();
+    },
+    enabled: isEdit && !!id,
+  });
+
+  // Load existing quote items and job settings when editing
+  useEffect(() => {
+    if (existingQuoteItems && existingQuoteItems.length > 0) {
+      setQuoteItems(existingQuoteItems.map(item => ({
+        id: item.id,
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+      })));
+    }
+  }, [existingQuoteItems]);
+
+  useEffect(() => {
+    if (editData?.job) {
+      setTaxEnabled(editData.job.taxEnabled || false);
+      setTaxRate(editData.job.taxRate || "20");
+      setDiscountType(editData.job.discountType || null);
+      setDiscountValue(editData.job.discountValue || "");
+    }
+  }, [editData?.job]);
 
   const { data: formData, isLoading: formDataLoading } = useQuery<{ contacts: Contact[]; partners: TradePartner[] }>({
     queryKey: ["/api/jobs"],
@@ -110,13 +160,86 @@ export default function JobForm() {
   const deliveryType = form.watch("deliveryType");
   const isPartnerJob = deliveryType === "partner" || deliveryType === "hybrid";
 
+  // Quote item helpers
+  const addQuoteItem = () => {
+    setQuoteItems([...quoteItems, { description: "", quantity: "1", unitPrice: "", lineTotal: "0" }]);
+  };
+
+  const removeQuoteItem = (index: number) => {
+    setQuoteItems(quoteItems.filter((_, i) => i !== index));
+  };
+
+  const updateQuoteItem = (index: number, field: keyof QuoteLineItem, value: string) => {
+    const updated = [...quoteItems];
+    updated[index] = { ...updated[index], [field]: value };
+    
+    // Recalculate line total when quantity or unit price changes
+    if (field === "quantity" || field === "unitPrice") {
+      const qty = parseFloat(updated[index].quantity) || 0;
+      const price = parseFloat(updated[index].unitPrice) || 0;
+      updated[index].lineTotal = (qty * price).toFixed(2);
+    }
+    
+    setQuoteItems(updated);
+  };
+
+  // Calculate quote totals
+  const quoteTotals = useMemo(() => {
+    const subtotal = quoteItems.reduce((sum, item) => sum + (parseFloat(item.lineTotal) || 0), 0);
+    
+    let discountAmount = 0;
+    if (discountType && discountValue) {
+      if (discountType === "percentage") {
+        discountAmount = subtotal * (parseFloat(discountValue) / 100);
+      } else if (discountType === "fixed") {
+        discountAmount = parseFloat(discountValue) || 0;
+      }
+    }
+    
+    const afterDiscount = subtotal - discountAmount;
+    
+    let taxAmount = 0;
+    if (taxEnabled && taxRate) {
+      taxAmount = afterDiscount * (parseFloat(taxRate) / 100);
+    }
+    
+    const grandTotal = afterDiscount + taxAmount;
+    
+    return { subtotal, discountAmount, taxAmount, grandTotal };
+  }, [quoteItems, discountType, discountValue, taxEnabled, taxRate]);
+
   const mutation = useMutation({
     mutationFn: async (values: FormData) => {
+      // Include quote settings in the job data
+      const jobData = {
+        ...values,
+        taxEnabled,
+        taxRate,
+        discountType: discountType || null,
+        discountValue: discountValue || null,
+        quotedValue: quoteTotals.grandTotal.toFixed(2),
+      };
+
+      let jobResponse;
       if (isEdit) {
-        return apiRequest("PATCH", `/api/jobs/${id}`, values);
+        jobResponse = await apiRequest("PATCH", `/api/jobs/${id}`, jobData);
       } else {
-        return apiRequest("POST", "/api/jobs", values);
+        jobResponse = await apiRequest("POST", "/api/jobs", jobData);
       }
+
+      // Save quote items
+      const jobId = isEdit ? id : (await jobResponse.json()).id;
+      if (quoteItems.length > 0) {
+        const itemsToSave = quoteItems.map(item => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+        }));
+        await apiRequest("PUT", `/api/jobs/${jobId}/quote-items`, { items: itemsToSave });
+      }
+
+      return jobResponse;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
@@ -367,7 +490,184 @@ export default function JobForm() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Pricing & Deposit</CardTitle>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle className="text-base">Quote Builder</CardTitle>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addQuoteItem}
+                data-testid="button-add-quote-item"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Item
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {quoteItems.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No items added yet. Click "Add Item" to build your quote.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {quoteItems.map((item, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-3 items-start" data-testid={`quote-item-${index}`}>
+                    <div className="col-span-12 md:col-span-5 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground">Description</Label>}
+                      <Input
+                        value={item.description}
+                        onChange={(e) => updateQuoteItem(index, "description", e.target.value)}
+                        placeholder="Item description"
+                        data-testid={`input-item-description-${index}`}
+                      />
+                    </div>
+                    <div className="col-span-4 md:col-span-2 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground">Qty</Label>}
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={item.quantity}
+                        onChange={(e) => updateQuoteItem(index, "quantity", e.target.value)}
+                        placeholder="1"
+                        data-testid={`input-item-quantity-${index}`}
+                      />
+                    </div>
+                    <div className="col-span-4 md:col-span-2 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground">Unit Price</Label>}
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={item.unitPrice}
+                        onChange={(e) => updateQuoteItem(index, "unitPrice", e.target.value)}
+                        placeholder="0.00"
+                        data-testid={`input-item-price-${index}`}
+                      />
+                    </div>
+                    <div className="col-span-3 md:col-span-2 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground">Total</Label>}
+                      <div className="h-9 flex items-center font-mono text-sm">
+                        £{parseFloat(item.lineTotal || "0").toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="col-span-1 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground invisible">Del</Label>}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeQuoteItem(index)}
+                        data-testid={`button-remove-item-${index}`}
+                      >
+                        <Trash2 className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {quoteItems.length > 0 && (
+              <>
+                <div className="border-t border-border pt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={taxEnabled}
+                          onCheckedChange={setTaxEnabled}
+                          data-testid="switch-tax-enabled"
+                        />
+                        <Label>Include Tax (VAT)</Label>
+                        {taxEnabled && (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={taxRate}
+                              onChange={(e) => setTaxRate(e.target.value)}
+                              className="w-20"
+                              data-testid="input-tax-rate"
+                            />
+                            <span className="text-sm text-muted-foreground">%</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Discount</Label>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={discountType || "none"}
+                            onValueChange={(value) => setDiscountType(value === "none" ? null : value)}
+                          >
+                            <SelectTrigger className="w-36" data-testid="select-discount-type">
+                              <SelectValue placeholder="No discount" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No discount</SelectItem>
+                              <SelectItem value="percentage">Percentage</SelectItem>
+                              <SelectItem value="fixed">Fixed amount</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {discountType && (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={discountValue}
+                                onChange={(e) => setDiscountValue(e.target.value)}
+                                className="w-24"
+                                placeholder="0"
+                                data-testid="input-discount-value"
+                              />
+                              <span className="text-sm text-muted-foreground">
+                                {discountType === "percentage" ? "%" : "£"}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 bg-muted/50 rounded-lg p-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Subtotal</span>
+                        <span className="font-mono">£{quoteTotals.subtotal.toFixed(2)}</span>
+                      </div>
+                      {discountType && quoteTotals.discountAmount > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Discount {discountType === "percentage" ? `(${discountValue}%)` : ""}
+                          </span>
+                          <span className="font-mono text-green-600 dark:text-green-400">
+                            -£{quoteTotals.discountAmount.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                      {taxEnabled && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">VAT ({taxRate}%)</span>
+                          <span className="font-mono">£{quoteTotals.taxAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between pt-2 border-t border-border">
+                        <span className="font-semibold">Grand Total</span>
+                        <span className="font-mono font-semibold text-lg">
+                          £{quoteTotals.grandTotal.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Deposit & Payment</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -385,17 +685,6 @@ export default function JobForm() {
                     <SelectItem value="estimate">Estimate</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="quotedValue">Quoted Value (£)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  {...form.register("quotedValue")}
-                  placeholder="0.00"
-                  data-testid="input-quoted-value"
-                />
               </div>
 
               <div className="flex items-center gap-3">

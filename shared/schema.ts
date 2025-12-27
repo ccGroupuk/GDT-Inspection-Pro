@@ -87,6 +87,12 @@ export const jobs = pgTable("jobs", {
   // Partner status
   partnerStatus: text("partner_status"), // offered, accepted, declined, in_progress, completed, invoiced, paid
   
+  // Quote details
+  taxEnabled: boolean("tax_enabled").default(false),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("20"), // Default 20% VAT
+  discountType: text("discount_type"), // percentage or fixed
+  discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -101,6 +107,7 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
     references: [tradePartners.id],
   }),
   tasks: many(tasks),
+  quoteItems: many(quoteItems),
 }));
 
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, createdAt: true, updatedAt: true, jobNumber: true });
@@ -130,6 +137,29 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true });
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
+
+// Quote Line Items
+export const quoteItems = pgTable("quote_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const quoteItemsRelations = relations(quoteItems, ({ one }) => ({
+  job: one(jobs, {
+    fields: [quoteItems.jobId],
+    references: [jobs.id],
+  }),
+}));
+
+export const insertQuoteItemSchema = createInsertSchema(quoteItems).omit({ id: true, createdAt: true });
+export type InsertQuoteItem = z.infer<typeof insertQuoteItemSchema>;
+export type QuoteItem = typeof quoteItems.$inferSelect;
 
 // Pipeline Stages (for reference)
 export const PIPELINE_STAGES = [
