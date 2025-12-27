@@ -19,7 +19,7 @@ import {
   financialTransactions, type FinancialTransaction, type InsertFinancialTransaction,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, isNull } from "drizzle-orm";
+import { eq, desc, asc, and, isNull, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   getContacts(): Promise<Contact[]>;
@@ -538,11 +538,13 @@ export class DatabaseStorage implements IStorage {
   async getFinancialTransactionsByMonth(year: number, month: number): Promise<FinancialTransaction[]> {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);
-    const allTransactions = await db.select().from(financialTransactions).orderBy(desc(financialTransactions.date));
-    return allTransactions.filter(t => {
-      const date = new Date(t.date);
-      return date >= startDate && date <= endDate;
-    });
+    return db.select()
+      .from(financialTransactions)
+      .where(and(
+        gte(financialTransactions.date, startDate),
+        lte(financialTransactions.date, endDate)
+      ))
+      .orderBy(desc(financialTransactions.date));
   }
 
   async getFinancialTransactionsByJob(jobId: string): Promise<FinancialTransaction[]> {

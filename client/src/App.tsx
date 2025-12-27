@@ -14,6 +14,7 @@ import JobDetail from "@/pages/job-detail";
 import Contacts from "@/pages/contacts";
 import Partners from "@/pages/partners";
 import Tasks from "@/pages/tasks";
+import Finance from "@/pages/finance";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import PortalLogin from "@/pages/portal/login";
@@ -38,6 +39,7 @@ function AdminRouter() {
       <Route path="/contacts" component={Contacts} />
       <Route path="/partners" component={Partners} />
       <Route path="/tasks" component={Tasks} />
+      <Route path="/finance" component={Finance} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
