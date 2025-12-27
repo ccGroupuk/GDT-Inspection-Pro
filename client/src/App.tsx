@@ -22,6 +22,9 @@ import PortalJobs from "@/pages/portal/jobs";
 import PortalJobDetail from "@/pages/portal/job-detail";
 import PortalProfile from "@/pages/portal/profile";
 import PortalReviews from "@/pages/portal/reviews";
+import PartnerPortalLogin from "@/pages/partner-portal/login";
+import PartnerPortalJobs from "@/pages/partner-portal/jobs";
+import PartnerPortalJobDetail from "@/pages/partner-portal/job-detail";
 
 function AdminRouter() {
   return (
@@ -54,6 +57,17 @@ function PortalRouter() {
   );
 }
 
+function PartnerPortalRouter() {
+  return (
+    <Switch>
+      <Route path="/partner-portal/login" component={PartnerPortalLogin} />
+      <Route path="/partner-portal/jobs/:jobId" component={PartnerPortalJobDetail} />
+      <Route path="/partner-portal/jobs" component={PartnerPortalJobs} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
 function AdminLayout() {
   const style = {
     "--sidebar-width": "16rem",
@@ -81,12 +95,14 @@ function AdminLayout() {
 function App() {
   const [location] = useLocation();
   const isPortalRoute = location.startsWith("/portal");
+  const isPartnerPortalRoute = location.startsWith("/partner-portal");
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
-          {isPortalRoute ? <PortalRouter /> : <AdminLayout />}
+          {isPartnerPortalRoute ? <PartnerPortalRouter /> : 
+           isPortalRoute ? <PortalRouter /> : <AdminLayout />}
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>
