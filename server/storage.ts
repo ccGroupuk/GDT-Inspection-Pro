@@ -17,6 +17,8 @@ import {
   jobNoteAttachments, type JobNoteAttachment, type InsertJobNoteAttachment,
   financialCategories, type FinancialCategory, type InsertFinancialCategory,
   financialTransactions, type FinancialTransaction, type InsertFinancialTransaction,
+  calendarEvents, type CalendarEvent, type InsertCalendarEvent,
+  partnerAvailability, type PartnerAvailability, type InsertPartnerAvailability,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, isNull, gte, lte } from "drizzle-orm";
@@ -131,6 +133,24 @@ export interface IStorage {
   createFinancialTransaction(transaction: InsertFinancialTransaction): Promise<FinancialTransaction>;
   updateFinancialTransaction(id: string, transaction: Partial<InsertFinancialTransaction>): Promise<FinancialTransaction | undefined>;
   deleteFinancialTransaction(id: string): Promise<boolean>;
+
+  // Calendar Events
+  getCalendarEvents(): Promise<CalendarEvent[]>;
+  getCalendarEvent(id: string): Promise<CalendarEvent | undefined>;
+  getCalendarEventsByDateRange(startDate: Date, endDate: Date): Promise<CalendarEvent[]>;
+  getCalendarEventsByPartner(partnerId: string): Promise<CalendarEvent[]>;
+  getCalendarEventsForPartnerPortal(partnerId: string, startDate: Date, endDate: Date): Promise<CalendarEvent[]>;
+  createCalendarEvent(event: InsertCalendarEvent): Promise<CalendarEvent>;
+  updateCalendarEvent(id: string, event: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined>;
+  deleteCalendarEvent(id: string): Promise<boolean>;
+
+  // Partner Availability
+  getPartnerAvailability(partnerId: string): Promise<PartnerAvailability[]>;
+  getPartnerAvailabilityByDateRange(partnerId: string, startDate: Date, endDate: Date): Promise<PartnerAvailability[]>;
+  getAllPartnerAvailability(startDate: Date, endDate: Date): Promise<PartnerAvailability[]>;
+  createPartnerAvailability(availability: InsertPartnerAvailability): Promise<PartnerAvailability>;
+  updatePartnerAvailability(id: string, availability: Partial<InsertPartnerAvailability>): Promise<PartnerAvailability | undefined>;
+  deletePartnerAvailability(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -563,6 +583,114 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFinancialTransaction(id: string): Promise<boolean> {
     await db.delete(financialTransactions).where(eq(financialTransactions.id, id));
+    return true;
+  }
+
+  // Calendar Events Methods
+  async getCalendarEvents(): Promise<CalendarEvent[]> {
+    return db.select().from(calendarEvents).orderBy(asc(calendarEvents.startDate));
+  }
+
+  async getCalendarEvent(id: string): Promise<CalendarEvent | undefined> {
+    const [event] = await db.select().from(calendarEvents).where(eq(calendarEvents.id, id));
+    return event || undefined;
+  }
+
+  async getCalendarEventsByDateRange(startDate: Date, endDate: Date): Promise<CalendarEvent[]> {
+    return db.select()
+      .from(calendarEvents)
+      .where(and(
+        gte(calendarEvents.startDate, startDate),
+        lte(calendarEvents.endDate, endDate)
+      ))
+      .orderBy(asc(calendarEvents.startDate));
+  }
+
+  async getCalendarEventsByPartner(partnerId: string): Promise<CalendarEvent[]> {
+    return db.select()
+      .from(calendarEvents)
+      .where(eq(calendarEvents.partnerId, partnerId))
+      .orderBy(asc(calendarEvents.startDate));
+  }
+
+  async getCalendarEventsForPartnerPortal(partnerId: string, startDate: Date, endDate: Date): Promise<CalendarEvent[]> {
+    const allEvents = await db.select()
+      .from(calendarEvents)
+      .where(and(
+        gte(calendarEvents.startDate, startDate),
+        lte(calendarEvents.endDate, endDate)
+      ))
+      .orderBy(asc(calendarEvents.startDate));
+    
+    // Partner can only see their own partner events or hybrid events they're part of
+    return allEvents.filter(e => 
+      (e.teamType === "partner" && e.partnerId === partnerId) ||
+      (e.teamType === "hybrid" && e.partnerId === partnerId)
+    );
+  }
+
+  async createCalendarEvent(event: InsertCalendarEvent): Promise<CalendarEvent> {
+    const [created] = await db.insert(calendarEvents).values(event).returning();
+    return created;
+  }
+
+  async updateCalendarEvent(id: string, event: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined> {
+    const [updated] = await db.update(calendarEvents)
+      .set({ ...event, updatedAt: new Date() })
+      .where(eq(calendarEvents.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteCalendarEvent(id: string): Promise<boolean> {
+    await db.delete(calendarEvents).where(eq(calendarEvents.id, id));
+    return true;
+  }
+
+  // Partner Availability Methods
+  async getPartnerAvailability(partnerId: string): Promise<PartnerAvailability[]> {
+    return db.select()
+      .from(partnerAvailability)
+      .where(eq(partnerAvailability.partnerId, partnerId))
+      .orderBy(asc(partnerAvailability.startDate));
+  }
+
+  async getPartnerAvailabilityByDateRange(partnerId: string, startDate: Date, endDate: Date): Promise<PartnerAvailability[]> {
+    return db.select()
+      .from(partnerAvailability)
+      .where(and(
+        eq(partnerAvailability.partnerId, partnerId),
+        gte(partnerAvailability.startDate, startDate),
+        lte(partnerAvailability.endDate, endDate)
+      ))
+      .orderBy(asc(partnerAvailability.startDate));
+  }
+
+  async getAllPartnerAvailability(startDate: Date, endDate: Date): Promise<PartnerAvailability[]> {
+    return db.select()
+      .from(partnerAvailability)
+      .where(and(
+        gte(partnerAvailability.startDate, startDate),
+        lte(partnerAvailability.endDate, endDate)
+      ))
+      .orderBy(asc(partnerAvailability.startDate));
+  }
+
+  async createPartnerAvailability(availability: InsertPartnerAvailability): Promise<PartnerAvailability> {
+    const [created] = await db.insert(partnerAvailability).values(availability).returning();
+    return created;
+  }
+
+  async updatePartnerAvailability(id: string, availability: Partial<InsertPartnerAvailability>): Promise<PartnerAvailability | undefined> {
+    const [updated] = await db.update(partnerAvailability)
+      .set(availability)
+      .where(eq(partnerAvailability.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deletePartnerAvailability(id: string): Promise<boolean> {
+    await db.delete(partnerAvailability).where(eq(partnerAvailability.id, id));
     return true;
   }
 }
