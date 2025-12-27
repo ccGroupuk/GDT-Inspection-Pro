@@ -876,5 +876,203 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PARTNER PORTAL ADMIN ENDPOINTS ====================
+
+  // Send partner portal invite
+  app.post("/api/partners/:id/send-portal-invite", async (req, res) => {
+    try {
+      const partner = await storage.getTradePartner(req.params.id);
+      if (!partner) {
+        return res.status(404).json({ message: "Partner not found" });
+      }
+      if (!partner.email) {
+        return res.status(400).json({ message: "Partner has no email address" });
+      }
+
+      const inviteToken = crypto.randomUUID();
+      const invite = await storage.createPartnerInvite({
+        partnerId: req.params.id,
+        inviteToken,
+        email: partner.email,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      });
+
+      res.status(201).json({ invite, inviteLink: `/partner-portal/invite/${inviteToken}` });
+    } catch (error) {
+      console.error("Send partner portal invite error:", error);
+      res.status(500).json({ message: "Failed to send invite" });
+    }
+  });
+
+  // Get partner portal access status
+  app.get("/api/partners/:partnerId/portal-access", async (req, res) => {
+    try {
+      const { partnerId } = req.params;
+      const access = await storage.getPartnerPortalAccess(partnerId);
+      const invite = await storage.getPartnerInviteByPartner(partnerId);
+      
+      // Priority 1: Active portal access (partner has accepted invite)
+      if (access && access.isActive) {
+        res.json({
+          ...access,
+          inviteStatus: "accepted",
+          portalToken: access.accessToken,
+        });
+      // Priority 2: Pending invite (not yet accepted)
+      } else if (invite) {
+        res.json({
+          id: null,
+          partnerId,
+          isActive: false,
+          inviteStatus: "pending",
+          portalToken: invite.inviteToken,
+          accessToken: null,
+          createdAt: invite.createdAt,
+          inviteSentAt: invite.createdAt,
+          inviteExpiresAt: invite.expiresAt,
+        });
+      // Priority 3: No active access or pending invite
+      } else {
+        res.json(access || null);
+      }
+    } catch (error) {
+      console.error("Get partner portal access error:", error);
+      res.status(500).json({ message: "Failed to get portal access" });
+    }
+  });
+
+  // ==================== PARTNER PORTAL PUBLIC ENDPOINTS ====================
+
+  // Get invite details
+  app.get("/api/partner-portal/invite/:token", async (req, res) => {
+    try {
+      const invite = await storage.getPartnerInviteByToken(req.params.token);
+      if (!invite) {
+        return res.status(404).json({ message: "Invite not found or expired" });
+      }
+      if (invite.expiresAt < new Date()) {
+        return res.status(410).json({ message: "Invite has expired" });
+      }
+      if (invite.acceptedAt) {
+        return res.status(410).json({ message: "Invite already used" });
+      }
+      
+      const partner = await storage.getTradePartner(invite.partnerId);
+      res.json({ invite, partner });
+    } catch (error) {
+      console.error("Get partner invite error:", error);
+      res.status(500).json({ message: "Failed to load invite" });
+    }
+  });
+
+  // Accept invite and create portal access
+  app.post("/api/partner-portal/invite/:token/accept", async (req, res) => {
+    try {
+      const invite = await storage.getPartnerInviteByToken(req.params.token);
+      if (!invite || invite.expiresAt < new Date() || invite.acceptedAt) {
+        return res.status(400).json({ message: "Invalid or expired invite" });
+      }
+      
+      // Mark invite as accepted
+      await storage.acceptPartnerInvite(req.params.token);
+      
+      // Create portal access
+      const accessToken = crypto.randomUUID();
+      const access = await storage.createPartnerPortalAccess({
+        partnerId: invite.partnerId,
+        accessToken,
+        tokenExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        isActive: true,
+      });
+      
+      res.json({ access, token: accessToken });
+    } catch (error) {
+      console.error("Accept partner invite error:", error);
+      res.status(500).json({ message: "Failed to accept invite" });
+    }
+  });
+
+  // Get partner's jobs
+  app.get("/api/partner-portal/jobs", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Update last login
+      await storage.updatePartnerPortalAccessLastLogin(access.partnerId);
+      
+      const jobs = await storage.getJobsByPartner(access.partnerId);
+      
+      // Include contact info for each job
+      const jobsWithContacts = await Promise.all(
+        jobs.map(async (job) => {
+          const contact = await storage.getContact(job.contactId);
+          return { ...job, contact };
+        })
+      );
+      
+      res.json(jobsWithContacts);
+    } catch (error) {
+      console.error("Partner portal jobs error:", error);
+      res.status(500).json({ message: "Failed to load jobs" });
+    }
+  });
+
+  // Get partner job details
+  app.get("/api/partner-portal/jobs/:jobId", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const contact = await storage.getContact(job.contactId);
+      const tasks = (await storage.getTasks()).filter(t => t.jobId === job.id);
+      
+      res.json({ ...job, contact, tasks });
+    } catch (error) {
+      console.error("Partner portal job detail error:", error);
+      res.status(500).json({ message: "Failed to load job" });
+    }
+  });
+
+  // Get partner profile
+  app.get("/api/partner-portal/profile", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const partner = await storage.getTradePartner(access.partnerId);
+      res.json(partner);
+    } catch (error) {
+      console.error("Partner portal profile error:", error);
+      res.status(500).json({ message: "Failed to load profile" });
+    }
+  });
+
   return httpServer;
 }
