@@ -549,3 +549,91 @@ export const NOTE_VISIBILITY = [
   { value: "client", label: "Client", description: "Visible to client" },
   { value: "all", label: "All", description: "Visible to everyone" },
 ] as const;
+
+// ==================== FINANCIAL TRACKING ====================
+
+// Financial Categories
+export const financialCategories = pgTable("financial_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").notNull(), // income, expense
+  isSystem: boolean("is_system").default(false), // System categories can't be deleted
+  description: text("description"),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFinancialCategorySchema = createInsertSchema(financialCategories).omit({ id: true, createdAt: true });
+export type InsertFinancialCategory = z.infer<typeof insertFinancialCategorySchema>;
+export type FinancialCategory = typeof financialCategories.$inferSelect;
+
+// Financial Transactions
+export const financialTransactions = pgTable("financial_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: timestamp("date").notNull().defaultNow(),
+  type: text("type").notNull(), // income, expense
+  categoryId: varchar("category_id").references(() => financialCategories.id),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  description: text("description").notNull(),
+  
+  // Links to other entities (optional)
+  jobId: varchar("job_id").references(() => jobs.id),
+  partnerId: varchar("partner_id").references(() => tradePartners.id),
+  invoiceId: varchar("invoice_id").references(() => invoices.id),
+  
+  // Source tracking
+  sourceType: text("source_type").notNull(), // job_payment, partner_payment, manual, adjustment
+  
+  // For partner jobs - track the profit/margin
+  grossAmount: decimal("gross_amount", { precision: 10, scale: 2 }), // What client paid
+  partnerCost: decimal("partner_cost", { precision: 10, scale: 2 }), // What we paid partner
+  profitAmount: decimal("profit_amount", { precision: 10, scale: 2 }), // Our margin
+  
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const financialTransactionsRelations = relations(financialTransactions, ({ one }) => ({
+  category: one(financialCategories, {
+    fields: [financialTransactions.categoryId],
+    references: [financialCategories.id],
+  }),
+  job: one(jobs, {
+    fields: [financialTransactions.jobId],
+    references: [jobs.id],
+  }),
+  partner: one(tradePartners, {
+    fields: [financialTransactions.partnerId],
+    references: [tradePartners.id],
+  }),
+  invoice: one(invoices, {
+    fields: [financialTransactions.invoiceId],
+    references: [invoices.id],
+  }),
+}));
+
+export const insertFinancialTransactionSchema = createInsertSchema(financialTransactions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertFinancialTransaction = z.infer<typeof insertFinancialTransactionSchema>;
+export type FinancialTransaction = typeof financialTransactions.$inferSelect;
+
+// Default financial categories
+export const DEFAULT_FINANCIAL_CATEGORIES = [
+  { name: "Client Payments", type: "income", isSystem: true, description: "Income from client job payments" },
+  { name: "Partner Payments", type: "expense", isSystem: true, description: "Payments to trade partners" },
+  { name: "Materials & Supplies", type: "expense", isSystem: false, description: "Materials purchased for jobs" },
+  { name: "Overheads", type: "expense", isSystem: false, description: "Rent, utilities, insurance, etc." },
+  { name: "Vehicle & Fuel", type: "expense", isSystem: false, description: "Vehicle costs and fuel" },
+  { name: "Tools & Equipment", type: "expense", isSystem: false, description: "Tools and equipment purchases" },
+  { name: "Marketing", type: "expense", isSystem: false, description: "Advertising and marketing costs" },
+  { name: "Other Income", type: "income", isSystem: false, description: "Miscellaneous income" },
+  { name: "Other Expenses", type: "expense", isSystem: false, description: "Miscellaneous expenses" },
+] as const;
+
+// Transaction source types
+export const TRANSACTION_SOURCE_TYPES = [
+  { value: "job_payment", label: "Job Payment", description: "Payment received from client" },
+  { value: "partner_payment", label: "Partner Payment", description: "Payment made to trade partner" },
+  { value: "manual", label: "Manual Entry", description: "Manually entered transaction" },
+  { value: "adjustment", label: "Adjustment", description: "Adjustment or correction" },
+] as const;
