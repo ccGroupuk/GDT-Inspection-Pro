@@ -14,16 +14,20 @@ import {
   CheckCircle,
   ThumbsUp,
   Sparkles,
+  Bell,
+  CalendarCheck,
+  CalendarClock,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
-import type { Job, Contact, TradePartner, Task } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, JobScheduleProposal } from "@shared/schema";
 
 interface DashboardData {
   jobs: Job[];
   contacts: Contact[];
   partners: TradePartner[];
   tasks: Task[];
+  scheduleResponses: JobScheduleProposal[];
 }
 
 export default function Dashboard() {
@@ -44,6 +48,7 @@ export default function Dashboard() {
   const contacts = data?.contacts || [];
   const partners = data?.partners || [];
   const tasks = data?.tasks || [];
+  const scheduleResponses = data?.scheduleResponses || [];
 
   const activeJobs = jobs.filter(j => !["closed", "lost", "paid"].includes(j.status));
   const newEnquiries = jobs.filter(j => j.status === "new_enquiry");
@@ -100,6 +105,63 @@ export default function Dashboard() {
           description="Total quoted value"
         />
       </div>
+
+      {scheduleResponses.length > 0 && (
+        <Card className="border-orange-500/30 bg-orange-500/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Bell className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              <CardTitle className="text-base font-semibold">Schedule Responses</CardTitle>
+              <Badge variant="secondary" className="ml-auto">{scheduleResponses.length}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {scheduleResponses.map(proposal => {
+                const job = jobs.find(j => j.id === proposal.jobId);
+                const isAccepted = proposal.status === "scheduled";
+                const isCountered = proposal.status === "client_countered";
+                
+                return (
+                  <Link key={proposal.id} href={`/jobs/${proposal.jobId}`}>
+                    <div 
+                      className="flex items-center justify-between gap-4 p-3 rounded-lg bg-background hover-elevate active-elevate-2 cursor-pointer"
+                      data-testid={`notification-schedule-${proposal.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {isAccepted ? (
+                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400">
+                            <CalendarCheck className="w-4 h-4" />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                            <CalendarClock className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">
+                            {job?.jobNumber || "Unknown Job"} - {job?.serviceType || "Service"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {isAccepted ? (
+                              <>Client accepted: {new Date(proposal.proposedStartDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</>
+                            ) : (
+                              <>Client proposed: {proposal.counterProposedDate ? new Date(proposal.counterProposedDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : 'New date'}</>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                      <Badge variant={isAccepted ? "default" : "secondary"} className={isAccepted ? "bg-green-600" : ""}>
+                        {isAccepted ? "Accepted" : "Counter Proposal"}
+                      </Badge>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>

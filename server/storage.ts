@@ -22,7 +22,7 @@ import {
   jobScheduleProposals, type JobScheduleProposal, type InsertJobScheduleProposal,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, isNull, gte, lte } from "drizzle-orm";
+import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   getContacts(): Promise<Contact[]>;
@@ -157,6 +157,7 @@ export interface IStorage {
   getScheduleProposalsByJob(jobId: string): Promise<JobScheduleProposal[]>;
   getActiveScheduleProposal(jobId: string): Promise<JobScheduleProposal | undefined>;
   getScheduleProposal(id: string): Promise<JobScheduleProposal | undefined>;
+  getPendingScheduleResponses(): Promise<JobScheduleProposal[]>;
   createScheduleProposal(proposal: InsertJobScheduleProposal): Promise<JobScheduleProposal>;
   updateScheduleProposal(id: string, proposal: Partial<InsertJobScheduleProposal>): Promise<JobScheduleProposal | undefined>;
   archiveScheduleProposals(jobId: string): Promise<void>;
@@ -728,6 +729,21 @@ export class DatabaseStorage implements IStorage {
       .from(jobScheduleProposals)
       .where(eq(jobScheduleProposals.id, id));
     return proposal || undefined;
+  }
+
+  async getPendingScheduleResponses(): Promise<JobScheduleProposal[]> {
+    return db.select()
+      .from(jobScheduleProposals)
+      .where(
+        and(
+          eq(jobScheduleProposals.isArchived, false),
+          or(
+            eq(jobScheduleProposals.status, "scheduled"),
+            eq(jobScheduleProposals.status, "client_countered")
+          )
+        )
+      )
+      .orderBy(desc(jobScheduleProposals.respondedAt));
   }
 
   async createScheduleProposal(proposal: InsertJobScheduleProposal): Promise<JobScheduleProposal> {

@@ -18,13 +18,14 @@ export async function registerRoutes(
   // Dashboard
   app.get("/api/dashboard", async (req, res) => {
     try {
-      const [jobs, contacts, partners, tasks] = await Promise.all([
+      const [jobs, contacts, partners, tasks, scheduleResponses] = await Promise.all([
         storage.getJobs(),
         storage.getContacts(),
         storage.getTradePartners(),
         storage.getTasks(),
+        storage.getPendingScheduleResponses(),
       ]);
-      res.json({ jobs, contacts, partners, tasks });
+      res.json({ jobs, contacts, partners, tasks, scheduleResponses });
     } catch (error) {
       console.error("Dashboard error:", error);
       res.status(500).json({ message: "Failed to load dashboard data" });
