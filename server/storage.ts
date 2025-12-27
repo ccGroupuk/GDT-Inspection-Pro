@@ -13,6 +13,8 @@ import {
   invoiceLineItems, type InvoiceLineItem, type InsertInvoiceLineItem,
   partnerPortalAccess, type PartnerPortalAccess, type InsertPartnerPortalAccess,
   partnerInvites, type PartnerInvite, type InsertPartnerInvite,
+  jobNotes, type JobNote, type InsertJobNote,
+  jobNoteAttachments, type JobNoteAttachment, type InsertJobNoteAttachment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, isNull } from "drizzle-orm";
@@ -98,6 +100,19 @@ export interface IStorage {
   acceptPartnerInvite(token: string): Promise<void>;
   
   getJobsByPartner(partnerId: string): Promise<Job[]>;
+
+  // Job Notes
+  getJobNotes(jobId: string): Promise<JobNote[]>;
+  getJobNote(id: string): Promise<JobNote | undefined>;
+  createJobNote(note: InsertJobNote): Promise<JobNote>;
+  updateJobNote(id: string, note: Partial<InsertJobNote>): Promise<JobNote | undefined>;
+  deleteJobNote(id: string): Promise<boolean>;
+  getJobNotesForPartner(jobId: string): Promise<JobNote[]>;
+  
+  // Job Note Attachments
+  getJobNoteAttachments(noteId: string): Promise<JobNoteAttachment[]>;
+  createJobNoteAttachment(attachment: InsertJobNoteAttachment): Promise<JobNoteAttachment>;
+  deleteJobNoteAttachment(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -419,6 +434,52 @@ export class DatabaseStorage implements IStorage {
 
   async getJobsByPartner(partnerId: string): Promise<Job[]> {
     return db.select().from(jobs).where(eq(jobs.partnerId, partnerId)).orderBy(desc(jobs.createdAt));
+  }
+
+  // Job Notes Methods
+  async getJobNotes(jobId: string): Promise<JobNote[]> {
+    return db.select().from(jobNotes).where(eq(jobNotes.jobId, jobId)).orderBy(desc(jobNotes.createdAt));
+  }
+
+  async getJobNote(id: string): Promise<JobNote | undefined> {
+    const [note] = await db.select().from(jobNotes).where(eq(jobNotes.id, id));
+    return note || undefined;
+  }
+
+  async createJobNote(note: InsertJobNote): Promise<JobNote> {
+    const [created] = await db.insert(jobNotes).values(note).returning();
+    return created;
+  }
+
+  async updateJobNote(id: string, note: Partial<InsertJobNote>): Promise<JobNote | undefined> {
+    const [updated] = await db.update(jobNotes).set({ ...note, updatedAt: new Date() }).where(eq(jobNotes.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteJobNote(id: string): Promise<boolean> {
+    await db.delete(jobNotes).where(eq(jobNotes.id, id));
+    return true;
+  }
+
+  async getJobNotesForPartner(jobId: string): Promise<JobNote[]> {
+    // Only return notes visible to partners (visibility: 'partner' or 'all')
+    const notes = await db.select().from(jobNotes).where(eq(jobNotes.jobId, jobId)).orderBy(desc(jobNotes.createdAt));
+    return notes.filter(n => n.visibility === 'partner' || n.visibility === 'all');
+  }
+
+  // Job Note Attachments Methods
+  async getJobNoteAttachments(noteId: string): Promise<JobNoteAttachment[]> {
+    return db.select().from(jobNoteAttachments).where(eq(jobNoteAttachments.noteId, noteId)).orderBy(desc(jobNoteAttachments.createdAt));
+  }
+
+  async createJobNoteAttachment(attachment: InsertJobNoteAttachment): Promise<JobNoteAttachment> {
+    const [created] = await db.insert(jobNoteAttachments).values(attachment).returning();
+    return created;
+  }
+
+  async deleteJobNoteAttachment(id: string): Promise<boolean> {
+    await db.delete(jobNoteAttachments).where(eq(jobNoteAttachments.id, id));
+    return true;
   }
 }
 
