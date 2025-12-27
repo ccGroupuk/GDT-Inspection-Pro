@@ -2,7 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema } from "@shared/schema";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(
@@ -1077,6 +1078,207 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to load profile" });
     }
   });
+
+  // ==================== JOB NOTES API ====================
+
+  // Get job notes (admin)
+  app.get("/api/jobs/:jobId/notes", async (req, res) => {
+    try {
+      const notes = await storage.getJobNotes(req.params.jobId);
+      // Get attachments for each note
+      const notesWithAttachments = await Promise.all(
+        notes.map(async (note) => {
+          const attachments = await storage.getJobNoteAttachments(note.id);
+          return { ...note, attachments };
+        })
+      );
+      res.json(notesWithAttachments);
+    } catch (error) {
+      console.error("Get job notes error:", error);
+      res.status(500).json({ message: "Failed to load notes" });
+    }
+  });
+
+  // Create job note
+  app.post("/api/jobs/:jobId/notes", async (req, res) => {
+    try {
+      const data = insertJobNoteSchema.parse({
+        ...req.body,
+        jobId: req.params.jobId,
+      });
+      const note = await storage.createJobNote(data);
+      res.status(201).json(note);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create job note error:", error);
+      res.status(500).json({ message: "Failed to create note" });
+    }
+  });
+
+  // Update job note
+  app.patch("/api/jobs/:jobId/notes/:noteId", async (req, res) => {
+    try {
+      const data = insertJobNoteSchema.partial().parse(req.body);
+      const note = await storage.updateJobNote(req.params.noteId, data);
+      if (!note) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+      res.json(note);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update job note error:", error);
+      res.status(500).json({ message: "Failed to update note" });
+    }
+  });
+
+  // Delete job note
+  app.delete("/api/jobs/:jobId/notes/:noteId", async (req, res) => {
+    try {
+      await storage.deleteJobNote(req.params.noteId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete job note error:", error);
+      res.status(500).json({ message: "Failed to delete note" });
+    }
+  });
+
+  // Add attachment to note
+  app.post("/api/jobs/:jobId/notes/:noteId/attachments", async (req, res) => {
+    try {
+      const { fileName, fileUrl, mimeType, fileSize } = req.body;
+      if (!fileName || !fileUrl) {
+        return res.status(400).json({ message: "fileName and fileUrl are required" });
+      }
+      const attachment = await storage.createJobNoteAttachment({
+        noteId: req.params.noteId,
+        fileName,
+        fileUrl,
+        mimeType,
+        fileSize,
+      });
+      res.status(201).json(attachment);
+    } catch (error) {
+      console.error("Create attachment error:", error);
+      res.status(500).json({ message: "Failed to create attachment" });
+    }
+  });
+
+  // Delete attachment
+  app.delete("/api/jobs/:jobId/notes/:noteId/attachments/:attachmentId", async (req, res) => {
+    try {
+      await storage.deleteJobNoteAttachment(req.params.attachmentId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete attachment error:", error);
+      res.status(500).json({ message: "Failed to delete attachment" });
+    }
+  });
+
+  // Toggle share quote with partner
+  app.patch("/api/jobs/:jobId/share-quote", async (req, res) => {
+    try {
+      const { shareQuoteWithPartner } = req.body;
+      const job = await storage.updateJob(req.params.jobId, { shareQuoteWithPartner });
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      res.json(job);
+    } catch (error) {
+      console.error("Toggle share quote error:", error);
+      res.status(500).json({ message: "Failed to update share settings" });
+    }
+  });
+
+  // Toggle share notes with partner
+  app.patch("/api/jobs/:jobId/share-notes", async (req, res) => {
+    try {
+      const { shareNotesWithPartner } = req.body;
+      const job = await storage.updateJob(req.params.jobId, { shareNotesWithPartner });
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      res.json(job);
+    } catch (error) {
+      console.error("Toggle share notes error:", error);
+      res.status(500).json({ message: "Failed to update share settings" });
+    }
+  });
+
+  // Partner portal: Get job notes (only visible ones)
+  app.get("/api/partner-portal/jobs/:jobId/notes", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Check if notes sharing is enabled
+      if (!job.shareNotesWithPartner) {
+        return res.json([]);
+      }
+      
+      const notes = await storage.getJobNotesForPartner(req.params.jobId);
+      // Get attachments for each note
+      const notesWithAttachments = await Promise.all(
+        notes.map(async (note) => {
+          const attachments = await storage.getJobNoteAttachments(note.id);
+          return { ...note, attachments };
+        })
+      );
+      res.json(notesWithAttachments);
+    } catch (error) {
+      console.error("Partner portal job notes error:", error);
+      res.status(500).json({ message: "Failed to load notes" });
+    }
+  });
+
+  // Partner portal: Get quote items (if sharing is enabled)
+  app.get("/api/partner-portal/jobs/:jobId/quote-items", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Check if quote sharing is enabled
+      if (!job.shareQuoteWithPartner) {
+        return res.json([]);
+      }
+      
+      const quoteItems = await storage.getQuoteItemsByJob(req.params.jobId);
+      res.json(quoteItems);
+    } catch (error) {
+      console.error("Partner portal quote items error:", error);
+      res.status(500).json({ message: "Failed to load quote items" });
+    }
+  });
+
+  // Register object storage routes
+  registerObjectStorageRoutes(app);
 
   return httpServer;
 }
