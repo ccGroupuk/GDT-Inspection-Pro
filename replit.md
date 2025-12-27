@@ -4,9 +4,9 @@
 A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The system manages clients, jobs, trade partners, and tasks with a visual pipeline for tracking job progress.
 
 ## Current State
-- **Version**: MVP Complete + Quote Builder + Job Notes + Financial Tracking
+- **Version**: MVP Complete + Quote Builder + Job Notes + Financial Tracking + Calendar
 - **Last Updated**: December 2024
-- **Status**: Fully functional CRM with persistent data storage, detailed quoting, job notes with photo attachments, and financial tracking
+- **Status**: Fully functional CRM with persistent data storage, detailed quoting, job notes with photo attachments, financial tracking, and work calendar
 
 ## Core Features
 
@@ -93,6 +93,20 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Cash flow forecast: Shows expected income from confirmed jobs (quote_accepted and beyond)
 - Forecast displays: total confirmed value, deposits pending, balance due
 - List of confirmed jobs with their quoted values and deposit status
+
+### Work Calendar
+- Week-based calendar view for scheduling work
+- Three team types with color-coded visibility:
+  - In-House (blue): CCC team only work
+  - Partner (orange): Trade partner assigned work
+  - Hybrid (purple): Combined CCC + Partner work
+- Event creation with job and partner linking
+- Confirmation workflow:
+  - Admin confirms scheduling from admin calendar
+  - Partners confirm availability from partner portal calendar
+  - Status changes to "confirmed" when both parties confirm
+- Partner portal calendar shows only partner/hybrid events assigned to that partner
+- Statistics dashboard: counts by team type and pending confirmations
 
 ### Settings (Admin)
 - Company settings management

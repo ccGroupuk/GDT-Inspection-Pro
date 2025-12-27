@@ -1624,6 +1624,14 @@ export async function registerRoutes(
   app.post("/api/calendar-events", async (req, res) => {
     try {
       const data = insertCalendarEventSchema.parse(req.body);
+      
+      // Validate partnerId is required for partner/hybrid events
+      if ((data.teamType === "partner" || data.teamType === "hybrid") && !data.partnerId) {
+        return res.status(400).json({ 
+          message: "Partner is required for partner or hybrid events" 
+        });
+      }
+      
       const event = await storage.createCalendarEvent(data);
       res.status(201).json(event);
     } catch (error) {
@@ -1670,12 +1678,23 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Calendar event not found" });
       }
       
-      const confirmed = event.confirmedByPartner || event.teamType === "in_house";
-      const updated = await storage.updateCalendarEvent(req.params.id, {
+      // For in-house events, admin confirmation is sufficient
+      // For partner/hybrid events, both admin and partner must confirm
+      const isInHouse = event.teamType === "in_house";
+      const partnerConfirmed = event.confirmedByPartner;
+      const fullyConfirmed = isInHouse || partnerConfirmed;
+      
+      // Only set confirmedAt when fully confirmed, leave it untouched otherwise
+      const updateData: Record<string, unknown> = {
         confirmedByAdmin: true,
-        status: confirmed ? "confirmed" : "pending",
-        confirmedAt: confirmed ? new Date() : undefined
-      });
+        status: fullyConfirmed ? "confirmed" : "pending",
+      };
+      
+      if (fullyConfirmed) {
+        updateData.confirmedAt = new Date();
+      }
+      
+      const updated = await storage.updateCalendarEvent(req.params.id, updateData);
       res.json(updated);
     } catch (error) {
       console.error("Confirm calendar event error:", error);
@@ -1809,12 +1828,21 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Not authorized to confirm this event" });
       }
       
-      const confirmed = event.confirmedByAdmin;
-      const updated = await storage.updateCalendarEvent(req.params.id, {
+      // Both admin and partner must confirm for partner/hybrid events
+      const adminConfirmed = event.confirmedByAdmin;
+      const fullyConfirmed = adminConfirmed;
+      
+      // Only set confirmedAt when both parties have confirmed, leave it untouched otherwise
+      const updateData: Record<string, unknown> = {
         confirmedByPartner: true,
-        status: confirmed ? "confirmed" : "pending",
-        confirmedAt: confirmed ? new Date() : undefined
-      });
+        status: fullyConfirmed ? "confirmed" : "pending",
+      };
+      
+      if (fullyConfirmed) {
+        updateData.confirmedAt = new Date();
+      }
+      
+      const updated = await storage.updateCalendarEvent(req.params.id, updateData);
       res.json(updated);
     } catch (error) {
       console.error("Partner confirm calendar event error:", error);

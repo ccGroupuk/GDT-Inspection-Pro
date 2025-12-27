@@ -15,6 +15,7 @@ import Contacts from "@/pages/contacts";
 import Partners from "@/pages/partners";
 import Tasks from "@/pages/tasks";
 import Finance from "@/pages/finance";
+import CalendarPage from "@/pages/calendar";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import PortalLogin from "@/pages/portal/login";
@@ -27,6 +28,7 @@ import PartnerPortalLogin from "@/pages/partner-portal/login";
 import PartnerPortalInvite from "@/pages/partner-portal/invite";
 import PartnerPortalJobs from "@/pages/partner-portal/jobs";
 import PartnerPortalJobDetail from "@/pages/partner-portal/job-detail";
+import PartnerPortalCalendar from "@/pages/partner-portal/calendar";
 
 function AdminRouter() {
   return (
@@ -39,6 +41,7 @@ function AdminRouter() {
       <Route path="/contacts" component={Contacts} />
       <Route path="/partners" component={Partners} />
       <Route path="/tasks" component={Tasks} />
+      <Route path="/calendar" component={CalendarPage} />
       <Route path="/finance" component={Finance} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
@@ -67,6 +70,7 @@ function PartnerPortalRouter() {
       <Route path="/partner-portal/invite/:token" component={PartnerPortalInvite} />
       <Route path="/partner-portal/jobs/:jobId" component={PartnerPortalJobDetail} />
       <Route path="/partner-portal/jobs" component={PartnerPortalJobs} />
+      <Route path="/partner-portal/calendar" component={PartnerPortalCalendar} />
       <Route component={NotFound} />
     </Switch>
   );

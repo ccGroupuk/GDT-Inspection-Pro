@@ -9,6 +9,7 @@ import {
   Building2,
   Settings,
   PoundSterling,
+  Calendar,
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,6 +50,11 @@ const menuItems = [
     title: "Tasks",
     url: "/tasks",
     icon: CheckSquare,
+  },
+  {
+    title: "Calendar",
+    url: "/calendar",
+    icon: Calendar,
   },
   {
     title: "Finance",
