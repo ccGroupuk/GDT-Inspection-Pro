@@ -218,10 +218,50 @@ export async function registerRoutes(
   app.patch("/api/jobs/:id", async (req, res) => {
     try {
       const data = insertJobSchema.partial().parse(req.body);
+      
+      // Get current job to check if status is changing to "paid"
+      const currentJob = await storage.getJob(req.params.id);
+      if (!currentJob) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
       const job = await storage.updateJob(req.params.id, data);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
+      
+      // Auto-create finance transaction when job moves to "paid" status
+      if (data.status === "paid" && currentJob.status !== "paid" && job.quotedValue != null) {
+        try {
+          // Find the "Client Payments" category
+          const category = await storage.getFinancialCategoryByName("Client Payments");
+          
+          // Get contact info for description
+          const contact = currentJob.contactId 
+            ? await storage.getContact(currentJob.contactId) 
+            : null;
+          
+          await storage.createFinancialTransaction({
+            date: new Date(),
+            type: "income",
+            categoryId: category?.id,
+            amount: job.quotedValue,
+            description: `Payment received for ${job.jobNumber}${contact ? ` - ${contact.name}` : ""}`,
+            jobId: job.id,
+            partnerId: undefined,
+            invoiceId: undefined,
+            sourceType: "job_payment",
+            grossAmount: job.quotedValue,
+            partnerCost: undefined,
+            profitAmount: undefined,
+          });
+          console.log(`Auto-created finance transaction for job ${job.jobNumber} - £${job.quotedValue}`);
+        } catch (financeError) {
+          // Log but don't fail the job update if finance transaction fails
+          console.error("Failed to auto-create finance transaction:", financeError);
+        }
+      }
+      
       res.json(job);
     } catch (error) {
       if (error instanceof z.ZodError) {

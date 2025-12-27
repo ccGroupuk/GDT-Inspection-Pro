@@ -122,6 +122,7 @@ export interface IStorage {
   // Financial Categories
   getFinancialCategories(): Promise<FinancialCategory[]>;
   getFinancialCategory(id: string): Promise<FinancialCategory | undefined>;
+  getFinancialCategoryByName(name: string): Promise<FinancialCategory | undefined>;
   createFinancialCategory(category: InsertFinancialCategory): Promise<FinancialCategory>;
   updateFinancialCategory(id: string, category: Partial<InsertFinancialCategory>): Promise<FinancialCategory | undefined>;
   deleteFinancialCategory(id: string): Promise<boolean>;
@@ -537,6 +538,11 @@ export class DatabaseStorage implements IStorage {
 
   async getFinancialCategory(id: string): Promise<FinancialCategory | undefined> {
     const [category] = await db.select().from(financialCategories).where(eq(financialCategories.id, id));
+    return category || undefined;
+  }
+
+  async getFinancialCategoryByName(name: string): Promise<FinancialCategory | undefined> {
+    const [category] = await db.select().from(financialCategories).where(eq(financialCategories.name, name));
     return category || undefined;
   }
 
