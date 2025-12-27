@@ -4,9 +4,9 @@
 A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The system manages clients, jobs, trade partners, and tasks with a visual pipeline for tracking job progress.
 
 ## Current State
-- **Version**: MVP Complete
+- **Version**: MVP Complete + Quote Builder
 - **Last Updated**: December 2024
-- **Status**: Fully functional CRM with persistent data storage
+- **Status**: Fully functional CRM with persistent data storage and detailed quoting
 
 ## Core Features
 
@@ -39,6 +39,15 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Priority levels (Low, Medium, High)
 - Status tracking (Pending, Completed)
 - Due date tracking with overdue indicators
+
+### Quote Builder
+- Detailed itemized quoting with line items
+- Each line item: description, quantity, unit price, auto-calculated line total
+- Tax toggle with configurable VAT rate (default 20%)
+- Discount options: percentage or fixed amount
+- Live calculation of subtotal, discount, tax, and grand total
+- Quote items displayed on admin job detail and client portal
+- Bulk save endpoint for atomic quote item updates
 
 ### Client Portal
 - Separate portal for clients to view their job progress
@@ -115,6 +124,10 @@ shared/
 - `POST /api/jobs` - Create job
 - `PATCH /api/jobs/:id` - Update job
 - `DELETE /api/jobs/:id` - Delete job
+
+### Quote Items
+- `GET /api/jobs/:jobId/quote-items` - List quote items for a job
+- `PUT /api/jobs/:jobId/quote-items` - Bulk update quote items (replaces all items)
 
 ### Trade Partners
 - `GET /api/partners` - List all partners
