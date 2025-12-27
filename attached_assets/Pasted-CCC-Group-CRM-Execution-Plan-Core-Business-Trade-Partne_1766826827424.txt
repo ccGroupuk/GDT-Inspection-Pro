@@ -1,0 +1,310 @@
+CCC Group CRM – Execution Plan
+
+(Core Business + Trade Partner Jobs)
+
+⸻
+
+1️⃣ Core CRM Philosophy (Important)
+
+One CRM. One pipeline. Multiple delivery paths.
+
+Every enquiry comes into CCC first.
+Then it is either:
+	•	✅ Delivered in-house, or
+	•	🤝 Assigned to a trade partner
+
+The client always feels like they’re dealing with Cardiff & Caerphilly Carpentry.
+
+⸻
+
+2️⃣ High-Level CRM Structure (for App Designer)
+
+Core Objects / Tables
+
+Your CRM should be built around these core objects:
+	1.	Contacts (clients)
+	2.	Jobs (projects / enquiries)
+	3.	Quotes
+	4.	Invoices / Payments
+	5.	Trade Partners
+	6.	Tasks & Follow-Ups
+	7.	Files (images, drawings, contracts)
+	8.	Users / Roles
+
+🔑 Rule:
+One contact → many jobs
+One job → one delivery route (CCC or Partner)
+
+⸻
+
+3️⃣ Job Intake (Universal Entry Point)
+
+Job Intake Form (used by phone, web, admin)
+
+Required Fields (minimum):
+	•	Client name
+	•	Mobile number
+	•	Email
+	•	Job postcode
+	•	Job address
+	•	Lead source
+	•	Service type (dropdown)
+	•	Short job description
+
+Service Type Dropdown (CCC-wide)
+	•	Bespoke Carpentry
+	•	Under-Stairs Storage
+	•	Media Walls
+	•	Fitted Wardrobes
+	•	Kitchens / Joinery
+	•	Bathrooms
+	•	Plumbing
+	•	Electrical
+	•	Heating
+	•	Drains
+	•	Full Home Project
+	•	Other
+
+⸻
+
+4️⃣ Job Classification (CRITICAL STEP)
+
+Every job must be classified early.
+
+Job Delivery Type (Mandatory Field)
+	•	✅ CCC In-House
+	•	🤝 Trade Partner
+	•	🔄 Hybrid (CCC + Partner)
+
+Trade Category (if Partner / Hybrid)
+	•	Plumbing
+	•	Electrical
+	•	Heating
+	•	Plastering
+	•	Tiling
+	•	Fire installs
+	•	Decorating
+	•	Other
+
+This single field controls:
+	•	Routing
+	•	Visibility
+	•	Profit tracking
+	•	Accountability
+
+⸻
+
+5️⃣ Trade Partner Module (Key Build Area)
+
+Trade Partner Profile Fields
+	•	Partner name / business name
+	•	Trade category
+	•	Coverage areas (postcode or town)
+	•	Contact name
+	•	Phone / email
+	•	Payment terms
+	•	Commission structure
+	•	% of job
+	•	Fixed referral fee
+	•	Approved services
+	•	Insurance status (tick box)
+	•	Notes / rating
+
+⸻
+
+6️⃣ Partner Job Assignment Flow
+
+When a job is marked Trade Partner:
+
+CRM Actions:
+	•	Assign partner from dropdown
+	•	Auto-notify partner (email/app)
+	•	Lock client-facing pricing fields (optional)
+	•	Create Partner Job Card with:
+	•	Job summary
+	•	Address
+	•	Access notes
+	•	Client contact
+	•	Scope of works
+	•	Expected price range
+	•	CCC margin / commission
+
+Partner Status Options:
+	•	Offered
+	•	Accepted
+	•	Declined
+	•	In Progress
+	•	Completed
+	•	Invoiced CCC
+	•	Paid
+
+⸻
+
+7️⃣ CCC Pipeline (Single View for You & Cindy)
+
+Main Job Pipeline Stages
+	1.	New Enquiry
+	2.	Contacted
+	3.	Survey Booked
+	4.	Quoting
+	5.	Quote Sent
+	6.	Follow-Up Due
+	7.	Quote Accepted
+	8.	Deposit Requested
+	9.	Deposit Paid
+	10.	Scheduled
+	11.	In Progress
+	12.	Completed
+	13.	Invoice Sent
+	14.	Paid
+	15.	Review Requested
+	16.	Closed
+	17.	Lost (reason required)
+
+🔥 Filters allow you to view:
+
+	•	In-house only
+	•	Partner only
+	•	By trade
+	•	By branch (Cardiff / Caerphilly)
+	•	By value
+
+⸻
+
+8️⃣ Pricing, Deposits & Money Control
+
+Pricing Section (Per Job)
+	•	Quote type (fixed / estimate)
+	•	Quoted value
+	•	Deposit required (yes/no)
+	•	Deposit amount
+	•	Deposit received (yes/no)
+	•	Balance due
+
+Partner Jobs – Additional Fields
+	•	Partner charge (£)
+	•	CCC margin (£ auto)
+	•	CCC margin (% auto)
+	•	Partner invoice received (yes/no)
+	•	Partner paid (yes/no)
+
+📊 This gives you instant profit clarity per job.
+
+⸻
+
+9️⃣ Tasks & Follow-Ups (Stops Lost Jobs)
+
+Auto-Tasks Triggered by Status
+	•	New lead → call task (10 mins)
+	•	Quote sent → follow-up in 24 hrs
+	•	No response → follow-up day 3 & day 7
+	•	Deposit requested → chase after 24 hrs
+	•	Job completed → invoice + review request
+
+All tasks visible to:
+	•	Cindy (admin control)
+	•	You (overview)
+	•	Assigned owner
+
+⸻
+
+🔟 Permissions & Roles
+
+Roles
+
+Admin (Cindy):
+	•	Full CRM access
+	•	Payments
+	•	Partner assignment
+	•	Reporting
+
+Director (You):
+	•	Full access
+	•	Dashboards
+	•	Partner performance
+	•	Profit tracking
+
+Engineer / Installer:
+	•	Job details
+	•	Photos
+	•	Completion notes
+	•	No pricing edits (optional)
+
+Trade Partner (Optional App Access):
+	•	Only their jobs
+	•	Status updates
+	•	Upload photos
+	•	No client financials
+
+⸻
+
+1️⃣1️⃣ Dashboards (Non-Negotiable)
+
+Director Dashboard
+	•	Leads today / week
+	•	Jobs by trade
+	•	Partner vs in-house split
+	•	Deposits received today
+	•	Revenue booked
+	•	Profit by partner
+
+Admin Dashboard (Cindy)
+	•	Follow-ups due
+	•	Deposits outstanding
+	•	Jobs booked this week
+	•	Invoices unpaid
+	•	Emergency flags
+
+⸻
+
+1️⃣2️⃣ Build Order for App Designer (Execution)
+
+Phase 1 – Core
+	•	Contacts
+	•	Jobs
+	•	Pipeline
+	•	Intake form
+
+Phase 2 – Money
+	•	Quotes
+	•	Deposits
+	•	Invoices
+	•	Margin tracking
+
+Phase 3 – Partners
+	•	Partner profiles
+	•	Partner job flow
+	•	Partner payments
+
+Phase 4 – Automation
+	•	Tasks
+	•	Notifications
+	•	Review requests
+
+Phase 5 – Dashboards
+	•	Director
+	•	Admin
+
+⸻
+
+1️⃣3️⃣ Golden Rules (Write These in the Spec)
+	1.	No job exists outside the CRM
+	2.	No deposit = no confirmed booking
+	3.	Every job has a delivery type
+	4.	Every partner job shows CCC margin
+	5.	Every quote gets a follow-up
+
+⸻
+
+Next Step (I Recommend This)
+
+Tell me:
+	1.	What app builder / CRM platform are you using?
+	2.	Do you want trade partners to log in, or just receive jobs by email?
+	3.	Do you want multi-brand separation later (Plumbers / Electricians / Carpentry)?
+
+I’ll then convert this into:
+	•	🧩 Exact screen layouts
+	•	🧠 Field-by-field build map
+	•	📄 A developer handover document
+	•	✅ Cindy’s daily SOP tied directly to the CRM
