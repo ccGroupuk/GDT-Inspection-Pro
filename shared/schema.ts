@@ -80,6 +80,7 @@ export const jobs = pgTable("jobs", {
   depositReceived: boolean("deposit_received").default(false),
   
   // Partner financials
+  partnerChargeType: text("partner_charge_type").default("fixed"), // percentage or fixed
   partnerCharge: decimal("partner_charge", { precision: 10, scale: 2 }),
   cccMargin: decimal("ccc_margin", { precision: 10, scale: 2 }),
   partnerInvoiceReceived: boolean("partner_invoice_received").default(false),

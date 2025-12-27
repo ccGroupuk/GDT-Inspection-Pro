@@ -128,6 +128,7 @@ export default function JobForm() {
       depositType: "fixed",
       depositAmount: null,
       depositReceived: false,
+      partnerChargeType: "fixed",
       partnerCharge: null,
       cccMargin: null,
       partnerInvoiceReceived: false,
@@ -151,6 +152,7 @@ export default function JobForm() {
       depositType: data.job.depositType || "fixed",
       depositAmount: data.job.depositAmount,
       depositReceived: data.job.depositReceived || false,
+      partnerChargeType: data.job.partnerChargeType || "fixed",
       partnerCharge: data.job.partnerCharge,
       cccMargin: data.job.cccMargin,
       partnerInvoiceReceived: data.job.partnerInvoiceReceived || false,
@@ -732,14 +734,32 @@ export default function JobForm() {
             </div>
 
             {isPartnerJob && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-border">
                 <div className="space-y-2">
-                  <Label htmlFor="partnerCharge">Partner Charge (£)</Label>
+                  <Label>Partner Charge Type</Label>
+                  <Select
+                    value={form.watch("partnerChargeType") || "fixed"}
+                    onValueChange={(value) => form.setValue("partnerChargeType", value)}
+                  >
+                    <SelectTrigger data-testid="select-partner-charge-type">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">Fixed Amount (£)</SelectItem>
+                      <SelectItem value="percentage">Percentage (%)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="partnerCharge">
+                    {form.watch("partnerChargeType") === "percentage" ? "Partner Charge (%)" : "Partner Charge (£)"}
+                  </Label>
                   <Input
                     type="number"
                     step="0.01"
                     {...form.register("partnerCharge")}
-                    placeholder="0.00"
+                    placeholder={form.watch("partnerChargeType") === "percentage" ? "e.g. 15" : "0.00"}
                     data-testid="input-partner-charge"
                   />
                 </div>
