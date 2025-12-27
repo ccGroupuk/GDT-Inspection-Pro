@@ -5,11 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { PortalLayout } from "@/components/portal-layout";
 import { usePortalAuth, portalApiRequest } from "@/hooks/use-portal-auth";
 import { StatusBadge } from "@/components/status-badge";
 import { PIPELINE_STAGES, PAYMENT_STATUSES } from "@shared/schema";
-import { ArrowLeft, MapPin, Calendar, CheckCircle, Circle, PoundSterling, FileText, Receipt, Check, X } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, CheckCircle, Circle, PoundSterling, FileText, Receipt, Check, X, Clock, MessageSquare } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -49,6 +53,18 @@ interface PortalInvoice {
   depositCalculated: string | null;
   notes: string | null;
   sentAt: string | null;
+  createdAt: string;
+}
+
+interface ScheduleProposal {
+  id: string;
+  jobId: string;
+  proposedStartDate: string;
+  proposedEndDate: string | null;
+  status: string;
+  notes: string | null;
+  counterProposedDate: string | null;
+  counterReason: string | null;
   createdAt: string;
 }
 
@@ -127,6 +143,110 @@ export default function PortalJobDetail() {
       toast({
         title: "Error",
         description: "Failed to submit your response. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Schedule proposal state
+  const [counterDialogOpen, setCounterDialogOpen] = useState(false);
+  const [counterDate, setCounterDate] = useState("");
+  const [counterReason, setCounterReason] = useState("");
+
+  // Fetch active schedule proposal
+  const { data: scheduleProposal } = useQuery<ScheduleProposal | null>({
+    queryKey: ["/api/portal/jobs", jobId, "schedule-proposal"],
+    queryFn: async () => {
+      if (!token) throw new Error("No token");
+      const response = await portalApiRequest("GET", `/api/portal/jobs/${jobId}/schedule-proposal`, token);
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error("Failed to fetch schedule proposal");
+      }
+      return response.json();
+    },
+    enabled: !!token && !!jobId,
+  });
+
+  // Accept schedule proposal
+  const acceptScheduleMutation = useMutation({
+    mutationFn: async () => {
+      if (!token) throw new Error("No token");
+      const res = await portalApiRequest("POST", `/api/portal/jobs/${jobId}/schedule-proposal/respond`, token, { 
+        response: 'accepted' 
+      });
+      if (!res.ok) throw new Error("Failed to accept");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs", jobId, "schedule-proposal"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs", jobId] });
+      toast({
+        title: "Start Date Accepted",
+        description: "Thank you! We'll see you on the scheduled date.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to accept the start date. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Decline schedule proposal
+  const declineScheduleMutation = useMutation({
+    mutationFn: async () => {
+      if (!token) throw new Error("No token");
+      const res = await portalApiRequest("POST", `/api/portal/jobs/${jobId}/schedule-proposal/respond`, token, { 
+        response: 'declined' 
+      });
+      if (!res.ok) throw new Error("Failed to decline");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs", jobId, "schedule-proposal"] });
+      toast({
+        title: "Start Date Declined",
+        description: "We'll be in touch to discuss alternative dates.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to decline the start date. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Counter-propose schedule
+  const counterScheduleMutation = useMutation({
+    mutationFn: async (data: { counterDate: string; reason: string }) => {
+      if (!token) throw new Error("No token");
+      const res = await portalApiRequest("POST", `/api/portal/jobs/${jobId}/schedule-proposal/respond`, token, { 
+        response: 'countered',
+        counterDate: new Date(data.counterDate).toISOString(),
+        reason: data.reason || null,
+      });
+      if (!res.ok) throw new Error("Failed to counter");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs", jobId, "schedule-proposal"] });
+      setCounterDialogOpen(false);
+      setCounterDate("");
+      setCounterReason("");
+      toast({
+        title: "Alternative Date Suggested",
+        description: "We'll review your suggested date and get back to you.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to submit alternative date. Please try again.",
         variant: "destructive",
       });
     },
@@ -511,6 +631,146 @@ export default function PortalJobDetail() {
               </Card>
             )}
 
+            {/* Schedule Proposal Section */}
+            {scheduleProposal && scheduleProposal.status === 'pending_client' && (
+              <Card className="border-primary/50">
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Proposed Start Date
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-lg bg-primary/5">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        CCC Group has proposed the following start date for your project:
+                      </p>
+                      <div className="flex items-center gap-2 text-lg font-semibold">
+                        <Calendar className="w-5 h-5 text-primary" />
+                        <span data-testid="text-proposed-date">
+                          {new Date(scheduleProposal.proposedStartDate).toLocaleDateString('en-GB', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </span>
+                      </div>
+                      {scheduleProposal.proposedEndDate && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Estimated completion: {new Date(scheduleProposal.proposedEndDate).toLocaleDateString('en-GB', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </p>
+                      )}
+                      {scheduleProposal.notes && (
+                        <p className="text-sm text-muted-foreground mt-3 pt-3 border-t">
+                          {scheduleProposal.notes}
+                        </p>
+                      )}
+                    </div>
+                    
+                    <p className="text-sm text-center text-muted-foreground">
+                      Does this date work for you?
+                    </p>
+                    
+                    <div className="flex gap-3 justify-center flex-wrap">
+                      <Button
+                        variant="outline"
+                        onClick={() => declineScheduleMutation.mutate()}
+                        disabled={declineScheduleMutation.isPending || acceptScheduleMutation.isPending || counterScheduleMutation.isPending}
+                        data-testid="button-decline-schedule"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Decline
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setCounterDialogOpen(true)}
+                        disabled={declineScheduleMutation.isPending || acceptScheduleMutation.isPending || counterScheduleMutation.isPending}
+                        data-testid="button-counter-schedule"
+                      >
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        Suggest Different Date
+                      </Button>
+                      <Button
+                        onClick={() => acceptScheduleMutation.mutate()}
+                        disabled={declineScheduleMutation.isPending || acceptScheduleMutation.isPending || counterScheduleMutation.isPending}
+                        data-testid="button-accept-schedule"
+                      >
+                        <Check className="w-4 h-4 mr-2" />
+                        Accept Date
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Show scheduled confirmation */}
+            {scheduleProposal && scheduleProposal.status === 'scheduled' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Scheduled Start Date
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2 text-lg font-semibold text-green-600 dark:text-green-400">
+                    <Calendar className="w-5 h-5" />
+                    <span>
+                      {new Date(scheduleProposal.counterProposedDate || scheduleProposal.proposedStartDate).toLocaleDateString('en-GB', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Show counter-proposal pending status */}
+            {scheduleProposal && scheduleProposal.status === 'client_countered' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Alternative Date Pending
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-4 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      You suggested an alternative date. We're reviewing your request.
+                    </p>
+                    <div className="flex items-center gap-2 font-medium">
+                      <Calendar className="w-4 h-4" />
+                      <span>
+                        {new Date(scheduleProposal.counterProposedDate!).toLocaleDateString('en-GB', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                    {scheduleProposal.counterReason && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Your reason: {scheduleProposal.counterReason}
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {job.paymentRequests && job.paymentRequests.length > 0 && (
               <Card>
                 <CardHeader>
@@ -558,6 +818,57 @@ export default function PortalJobDetail() {
           </>
         )}
       </div>
+
+      {/* Counter Proposal Dialog */}
+      <Dialog open={counterDialogOpen} onOpenChange={setCounterDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suggest Alternative Date</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              If the proposed date doesn't work for you, please suggest an alternative date that suits you better.
+            </p>
+            <div className="space-y-2">
+              <Label>Your Preferred Date</Label>
+              <Input
+                type="date"
+                value={counterDate}
+                onChange={(e) => setCounterDate(e.target.value)}
+                data-testid="input-counter-date"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason (Optional)</Label>
+              <Textarea
+                value={counterReason}
+                onChange={(e) => setCounterReason(e.target.value)}
+                placeholder="e.g., 'I have a prior commitment that week' or 'Earlier would be better if possible'"
+                className="min-h-[80px]"
+                data-testid="textarea-counter-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCounterDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!counterDate) {
+                  toast({ title: "Please select a date", variant: "destructive" });
+                  return;
+                }
+                counterScheduleMutation.mutate({ counterDate, reason: counterReason });
+              }}
+              disabled={counterScheduleMutation.isPending}
+              data-testid="button-submit-counter"
+            >
+              Submit Suggestion
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PortalLayout>
   );
 }
