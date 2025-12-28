@@ -485,7 +485,7 @@ function ArticleDialog({
   const [title, setTitle] = useState(article?.title || "");
   const [summary, setSummary] = useState(article?.summary || "");
   const [content, setContent] = useState(article?.content || "");
-  const [categoryId, setCategoryId] = useState(article?.categoryId || "");
+  const [categoryId, setCategoryId] = useState(article?.categoryId || "none");
   const [audience, setAudience] = useState(article?.audience || "all");
   const [videoUrl, setVideoUrl] = useState(article?.videoUrl || "");
   const [sortOrder, setSortOrder] = useState(article?.sortOrder?.toString() || "0");
@@ -497,7 +497,7 @@ function ArticleDialog({
       title,
       summary: summary || null,
       content,
-      categoryId: categoryId || null,
+      categoryId: categoryId === "none" ? null : (categoryId || null),
       audience,
       videoUrl: videoUrl || null,
       sortOrder: parseInt(sortOrder) || 0,
@@ -543,7 +543,7 @@ function ArticleDialog({
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Uncategorized</SelectItem>
+                  <SelectItem value="none">Uncategorized</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
                       {cat.name}
