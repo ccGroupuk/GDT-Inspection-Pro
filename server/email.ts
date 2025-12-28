@@ -60,8 +60,11 @@ async function sendEmail(
   try {
     const { client, fromEmail } = await getUncachableResendClient();
     
+    // Use delivered@resend.dev for testing until a custom domain is verified
+    const senderEmail = 'CCC Group <delivered@resend.dev>';
+    
     const result = await client.emails.send({
-      from: fromEmail || 'CCC Group <noreply@cccgroup.co.uk>',
+      from: senderEmail,
       to,
       subject,
       html,
