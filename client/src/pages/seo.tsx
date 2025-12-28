@@ -37,6 +37,8 @@ import {
   Pause,
   Check,
   CalendarDays,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { SiGoogle, SiInstagram, SiFacebook } from "react-icons/si";
 import type { SeoBusinessProfile, SeoContentPost, SeoWeeklyFocus, SeoAutopilotSettings, SeoAutopilotSlot } from "@shared/schema";
@@ -1091,6 +1093,7 @@ function ContentCreatorSection() {
 }
 
 function PostsSection() {
+  const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const { data: posts = [], isLoading } = useQuery<SeoContentPost[]>({
@@ -1204,6 +1207,19 @@ function PostsSection() {
                           Scheduled: {new Date(post.scheduledFor).toLocaleDateString()}
                         </p>
                       )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          navigator.clipboard.writeText(post.content);
+                          toast({ title: "Copied!", description: "Content copied to clipboard" });
+                        }}
+                        data-testid={`button-copy-post-${post.id}`}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -1704,6 +1720,19 @@ function AutopilotSection() {
                           )}
                         </div>
                         <div className="flex items-center gap-2">
+                          {post && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                navigator.clipboard.writeText(post.content);
+                                toast({ title: "Copied!", description: "Content copied to clipboard" });
+                              }}
+                              data-testid={`button-copy-slot-${slot.id}`}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          )}
                           {(slot.status === "pending" || slot.status === "generated") && (
                             <Button
                               size="sm"
