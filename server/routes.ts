@@ -2590,8 +2590,11 @@ export async function registerRoutes(
       });
 
       // Use OpenAI via Replit AI Integrations
-      const openai = await import("openai");
-      const client = new openai.default();
+      const OpenAI = (await import("openai")).default;
+      const client = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
       
       const completion = await client.chat.completions.create({
         model: "gpt-4o-mini",
@@ -2599,7 +2602,7 @@ export async function registerRoutes(
           { role: "system", content: "You are a social media content creator for a local trade business. Write engaging, professional posts that highlight quality work and build local community trust." },
           { role: "user", content: prompt }
         ],
-        max_tokens: 500,
+        max_completion_tokens: 500,
       });
 
       const generatedContent = completion.choices[0]?.message?.content || "";
