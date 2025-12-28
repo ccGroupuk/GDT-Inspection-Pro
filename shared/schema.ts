@@ -856,7 +856,10 @@ export const seoWeeklyFocus = pgTable("seo_weekly_focus", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertSeoWeeklyFocusSchema = createInsertSchema(seoWeeklyFocus).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSeoWeeklyFocusSchema = createInsertSchema(seoWeeklyFocus).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  weekStartDate: z.coerce.date(),
+  weekEndDate: z.coerce.date(),
+});
 export type InsertSeoWeeklyFocus = z.infer<typeof insertSeoWeeklyFocusSchema>;
 export type SeoWeeklyFocus = typeof seoWeeklyFocus.$inferSelect;
 
