@@ -31,17 +31,19 @@ export default function EmployeePortalLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Verify CAPTCHA first
-    if (parseInt(captchaAnswer) !== mathChallenge.answer) {
+    // Verify CAPTCHA first - with better validation
+    const userAnswer = parseInt(captchaAnswer, 10);
+    if (isNaN(userAnswer) || userAnswer !== mathChallenge.answer) {
       toast({
         title: "Verification Failed",
-        description: "Please solve the math problem correctly.",
+        description: `Please solve the math problem: ${mathChallenge.num1} + ${mathChallenge.num2} = ?`,
         variant: "destructive"
       });
       refreshCaptcha();
       return;
     }
     
+    console.log("Login attempt for:", email);
     setIsLoading(true);
 
     try {
