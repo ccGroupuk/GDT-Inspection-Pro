@@ -849,6 +849,8 @@ export const seoWeeklyFocus = pgTable("seo_weekly_focus", {
   primaryLocation: text("primary_location").notNull(), // e.g. "Cardiff"
   supportingKeywords: text("supporting_keywords").array(),
   seasonalTheme: text("seasonal_theme"), // e.g. "Spring home improvements"
+  focusImageUrl: text("focus_image_url"), // uploaded image for multimodal AI content
+  focusImageCaption: text("focus_image_caption"), // description of the image
   recommendedPostCount: integer("recommended_post_count").default(6),
   status: text("status").notNull().default("active"), // active, completed, skipped
   notes: text("notes"),
