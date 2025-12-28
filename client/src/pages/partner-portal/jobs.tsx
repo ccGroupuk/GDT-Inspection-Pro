@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
 import { PortalMessagesDisplay } from "@/components/portal-messages-display";
+import { useTabNotification } from "@/hooks/use-tab-notification";
 import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight } from "lucide-react";
 import type { Job, Contact } from "@shared/schema";
 
@@ -35,6 +36,8 @@ function getStageColor(status: string) {
 export default function PartnerPortalJobs() {
   const { token, isAuthenticated, logout } = usePartnerPortalAuth();
   const [, setLocation] = useLocation();
+  
+  useTabNotification({ portalType: "partner", accessToken: token });
 
   useEffect(() => {
     if (!isAuthenticated) {

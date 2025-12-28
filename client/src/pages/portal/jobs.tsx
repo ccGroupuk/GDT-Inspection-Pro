@@ -7,6 +7,7 @@ import { PortalLayout } from "@/components/portal-layout";
 import { usePortalAuth, portalApiRequest } from "@/hooks/use-portal-auth";
 import { StatusBadge } from "@/components/status-badge";
 import { PortalMessagesDisplay } from "@/components/portal-messages-display";
+import { useTabNotification } from "@/hooks/use-tab-notification";
 import { ChevronRight, Briefcase, MapPin } from "lucide-react";
 import { useEffect } from "react";
 
@@ -23,6 +24,8 @@ interface PortalJob {
 export default function PortalJobs() {
   const { token, isAuthenticated } = usePortalAuth();
   const [, setLocation] = useLocation();
+  
+  useTabNotification({ portalType: "client", accessToken: token });
 
   useEffect(() => {
     if (!isAuthenticated) {
