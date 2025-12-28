@@ -25,7 +25,7 @@ import {
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { FinancialCategory, FinancialTransaction, Job } from "@shared/schema";
+import type { FinancialCategory, FinancialTransaction, Job, TradePartner } from "@shared/schema";
 
 interface FinancialSummary {
   income: number;
@@ -84,10 +84,26 @@ export default function Finance() {
     },
   });
 
-  const { data: jobsData } = useQuery<{ jobs: Job[] }>({
+  const { data: jobsData } = useQuery<{ jobs: Job[], partners: TradePartner[] }>({
     queryKey: ["/api/jobs"],
   });
   const allJobs = jobsData?.jobs || [];
+  const allPartners = jobsData?.partners || [];
+
+  // Calculate partner earnings from transactions
+  const partnerEarnings = transactions
+    .filter(tx => tx.sourceType === "partner_payment_due" && tx.partnerId)
+    .reduce((acc, tx) => {
+      const partnerId = tx.partnerId!;
+      if (!acc[partnerId]) {
+        acc[partnerId] = { total: 0, count: 0 };
+      }
+      acc[partnerId].total += parseFloat(tx.amount);
+      acc[partnerId].count += 1;
+      return acc;
+    }, {} as Record<string, { total: number; count: number }>);
+
+  const totalPartnerOwed = Object.values(partnerEarnings).reduce((sum, p) => sum + p.total, 0);
 
   const { data: forecast } = useQuery<FinancialForecast>({
     queryKey: ["/api/financial-forecast"],
@@ -265,6 +281,40 @@ export default function Finance() {
           )}
         </CardContent>
       </Card>
+
+      {Object.keys(partnerEarnings).length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Partner Earnings (Owed)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="p-4 rounded-md bg-muted/50">
+                <p className="text-sm text-muted-foreground">Total Owed to Partners</p>
+                <p className="text-2xl font-semibold text-orange-600" data-testid="text-partner-owed-total">
+                  £{totalPartnerOwed.toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">This month</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">By Partner</p>
+              {Object.entries(partnerEarnings).map(([partnerId, data]) => {
+                const partner = allPartners.find(p => p.id === partnerId);
+                return (
+                  <div key={partnerId} className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/30" data-testid={`partner-earnings-${partnerId}`}>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="font-medium">{partner?.businessName || "Unknown Partner"}</span>
+                      <Badge variant="secondary" className="text-xs">{data.count} job{data.count !== 1 ? "s" : ""}</Badge>
+                    </div>
+                    <span className="font-semibold text-orange-600">£{data.total.toLocaleString()}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">
