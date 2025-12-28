@@ -1055,6 +1055,73 @@ export const insertSeoAutopilotRunSchema = createInsertSchema(seoAutopilotRuns).
 export type InsertSeoAutopilotRun = z.infer<typeof insertSeoAutopilotRunSchema>;
 export type SeoAutopilotRun = typeof seoAutopilotRuns.$inferSelect;
 
+// ==================== PORTAL MESSAGES ====================
+
+// Portal Messages (admin sends to clients or partners)
+export const portalMessages = pgTable("portal_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Audience targeting
+  audienceType: text("audience_type").notNull(), // 'client' or 'partner'
+  audienceId: varchar("audience_id").notNull(), // contactId or partnerId
+  
+  // Message content
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  messageType: text("message_type").notNull().default("announcement"), // warning, announcement, birthday, sales, custom
+  urgency: text("urgency").notNull().default("normal"), // low, normal, high
+  
+  // Visibility and scheduling
+  isActive: boolean("is_active").default(true),
+  expiresAt: timestamp("expires_at"),
+  
+  // Metadata
+  createdBy: text("created_by"), // admin username
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const portalMessagesRelations = relations(portalMessages, ({ many }) => ({
+  reads: many(portalMessageReads),
+}));
+
+export const insertPortalMessageSchema = createInsertSchema(portalMessages).omit({ id: true, createdAt: true });
+export type InsertPortalMessage = z.infer<typeof insertPortalMessageSchema>;
+export type PortalMessage = typeof portalMessages.$inferSelect;
+
+// Portal Message Reads (track which messages have been dismissed)
+export const portalMessageReads = pgTable("portal_message_reads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => portalMessages.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at").defaultNow(),
+});
+
+export const portalMessageReadsRelations = relations(portalMessageReads, ({ one }) => ({
+  message: one(portalMessages, {
+    fields: [portalMessageReads.messageId],
+    references: [portalMessages.id],
+  }),
+}));
+
+export const insertPortalMessageReadSchema = createInsertSchema(portalMessageReads).omit({ id: true, readAt: true });
+export type InsertPortalMessageRead = z.infer<typeof insertPortalMessageReadSchema>;
+export type PortalMessageRead = typeof portalMessageReads.$inferSelect;
+
+// Message Types
+export const MESSAGE_TYPES = [
+  { value: "warning", label: "Warning", color: "bg-amber-500" },
+  { value: "announcement", label: "Announcement", color: "bg-blue-500" },
+  { value: "birthday", label: "Birthday", color: "bg-pink-500" },
+  { value: "sales", label: "Sales Info", color: "bg-green-500" },
+  { value: "custom", label: "Custom", color: "bg-purple-500" },
+] as const;
+
+// Message Urgency Levels
+export const MESSAGE_URGENCY = [
+  { value: "low", label: "Low", color: "text-muted-foreground" },
+  { value: "normal", label: "Normal", color: "text-foreground" },
+  { value: "high", label: "High", color: "text-destructive" },
+] as const;
+
 // SEO Brand Tones
 export const SEO_BRAND_TONES = [
   { value: "professional", label: "Professional", description: "Formal and business-like" },
