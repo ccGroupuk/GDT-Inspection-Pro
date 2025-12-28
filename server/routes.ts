@@ -2411,7 +2411,11 @@ export async function registerRoutes(
 
   app.patch("/api/seo/weekly-focus/:id", async (req, res) => {
     try {
-      const focus = await storage.updateSeoWeeklyFocus(req.params.id, req.body);
+      const parsed = insertSeoWeeklyFocusSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const focus = await storage.updateSeoWeeklyFocus(req.params.id, parsed.data);
       if (!focus) {
         return res.status(404).json({ message: "Weekly focus not found" });
       }
@@ -2459,7 +2463,11 @@ export async function registerRoutes(
 
   app.patch("/api/seo/job-media/:id", async (req, res) => {
     try {
-      const media = await storage.updateSeoJobMedia(req.params.id, req.body);
+      const parsed = insertSeoJobMediaSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const media = await storage.updateSeoJobMedia(req.params.id, parsed.data);
       if (!media) {
         return res.status(404).json({ message: "Job media not found" });
       }
@@ -2530,7 +2538,11 @@ export async function registerRoutes(
 
   app.patch("/api/seo/content-posts/:id", async (req, res) => {
     try {
-      const post = await storage.updateSeoContentPost(req.params.id, req.body);
+      const parsed = insertSeoContentPostSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const post = await storage.updateSeoContentPost(req.params.id, parsed.data);
       if (!post) {
         return res.status(404).json({ message: "Content post not found" });
       }
