@@ -3599,6 +3599,7 @@ export async function registerRoutes(
           lastName: employee.lastName,
           email: employee.email,
           role: employee.role,
+          accessLevel: employee.accessLevel,
           accessAreas: employee.accessAreas
         },
         mustChangePassword: credential.mustChangePassword
