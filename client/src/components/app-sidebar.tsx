@@ -11,6 +11,7 @@ import {
   PoundSterling,
   Calendar,
   Megaphone,
+  HelpCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -66,6 +67,11 @@ const menuItems = [
     title: "SEO Power House",
     url: "/seo",
     icon: Megaphone,
+  },
+  {
+    title: "Help Center",
+    url: "/help-center",
+    icon: HelpCircle,
   },
   {
     title: "Settings",

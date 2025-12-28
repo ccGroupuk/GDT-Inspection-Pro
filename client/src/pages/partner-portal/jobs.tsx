@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
 import { PortalMessagesDisplay } from "@/components/portal-messages-display";
 import { useTabNotification } from "@/hooks/use-tab-notification";
-import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight } from "lucide-react";
+import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight, Calendar, HelpCircle } from "lucide-react";
 import type { Job, Contact } from "@shared/schema";
 
 type JobWithContact = Job & { contact?: Contact };
@@ -94,6 +94,44 @@ export default function PartnerPortalJobs() {
           </Button>
         </div>
       </header>
+
+      <nav className="border-b border-border bg-muted/30">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center gap-1 overflow-x-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-none border-b-2 border-primary text-foreground"
+              data-testid="nav-jobs"
+            >
+              <Briefcase className="w-4 h-4 mr-2" />
+              Jobs
+            </Button>
+            <Link href="/partner-portal/calendar">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-calendar"
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Calendar
+              </Button>
+            </Link>
+            <Link href="/partner-portal/help">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-help"
+              >
+                <HelpCircle className="w-4 h-4 mr-2" />
+                Help
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </nav>
 
       <main className="container mx-auto px-4 py-6">
         <PortalMessagesDisplay portalType="partner" accessToken={token || ""} />

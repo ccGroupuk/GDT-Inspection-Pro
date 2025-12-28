@@ -4,9 +4,9 @@
 A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The system manages clients, jobs, trade partners, and tasks with a visual pipeline for tracking job progress.
 
 ## Current State
-- **Version**: MVP Complete + Quote Builder + Job Notes + Financial Tracking + Calendar + Payment Details + SEO Power House + Autopilot Mode + Global Search + Portal Messaging
+- **Version**: MVP Complete + Quote Builder + Job Notes + Financial Tracking + Calendar + Payment Details + SEO Power House + Autopilot Mode + Global Search + Portal Messaging + Help Center
 - **Last Updated**: December 2024
-- **Status**: Fully functional CRM with persistent data storage, detailed quoting, job notes with photo attachments, financial tracking, work calendar, payment details on invoices, AI-powered SEO content creation, automated content scheduling, global search, and portal messaging system
+- **Status**: Fully functional CRM with persistent data storage, detailed quoting, job notes with photo attachments, financial tracking, work calendar, payment details on invoices, AI-powered SEO content creation, automated content scheduling, global search, portal messaging system, and Help Center documentation
 
 ## Core Features
 
@@ -92,6 +92,20 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Users can dismiss messages to mark as read
 - Messages include title, body, type icon, and date
 - High urgency messages have distinct styling for visibility
+
+### Help Center
+- Admin management of help articles and categories at /help-center
+- Categories with audience targeting (admin, client, partner, all)
+- Articles support:
+  - Markdown content with basic formatting
+  - Optional video embed (YouTube/Loom)
+  - Published/draft status
+  - Sort ordering
+  - Audience targeting
+- Client Portal Help page at /portal/help
+- Partner Portal Help page at /partner-portal/help
+- Category-based navigation with article search
+- Tables: help_categories, help_articles
 
 ### Finance
 - Monthly financial overview with income, expenses, and profit tracking

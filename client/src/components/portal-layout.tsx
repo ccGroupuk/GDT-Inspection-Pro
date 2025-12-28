@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { usePortalAuth } from "@/hooks/use-portal-auth";
-import { LogOut, Briefcase, User, Star, Building2 } from "lucide-react";
+import { LogOut, Briefcase, User, Star, Building2, HelpCircle } from "lucide-react";
 
 interface PortalLayoutProps {
   children: React.ReactNode;
@@ -15,6 +15,7 @@ export function PortalLayout({ children }: PortalLayoutProps) {
     { href: "/portal/jobs", label: "My Jobs", icon: Briefcase },
     { href: "/portal/profile", label: "My Profile", icon: User },
     { href: "/portal/reviews", label: "Leave a Review", icon: Star },
+    { href: "/portal/help", label: "Help", icon: HelpCircle },
   ];
 
   return (

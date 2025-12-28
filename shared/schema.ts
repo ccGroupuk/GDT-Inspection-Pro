@@ -1182,6 +1182,7 @@ export const helpArticles = pgTable("help_articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   categoryId: varchar("category_id").references(() => helpCategories.id, { onDelete: "set null" }),
   title: text("title").notNull(),
+  summary: text("summary"), // brief summary for article lists
   content: text("content").notNull(), // markdown or rich text content
   audience: text("audience").notNull().default("all"), // admin, client, partner, all
   videoUrl: text("video_url"), // YouTube or Vimeo embed URL

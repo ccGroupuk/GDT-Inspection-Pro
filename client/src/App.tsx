@@ -19,6 +19,7 @@ import Finance from "@/pages/finance";
 import CalendarPage from "@/pages/calendar";
 import Settings from "@/pages/settings";
 import SEOPowerHouse from "@/pages/seo";
+import HelpCenterAdmin from "@/pages/help-center-admin";
 import NotFound from "@/pages/not-found";
 import PortalLogin from "@/pages/portal/login";
 import PortalInvite from "@/pages/portal/invite";
@@ -26,11 +27,13 @@ import PortalJobs from "@/pages/portal/jobs";
 import PortalJobDetail from "@/pages/portal/job-detail";
 import PortalProfile from "@/pages/portal/profile";
 import PortalReviews from "@/pages/portal/reviews";
+import PortalHelp from "@/pages/portal/help";
 import PartnerPortalLogin from "@/pages/partner-portal/login";
 import PartnerPortalInvite from "@/pages/partner-portal/invite";
 import PartnerPortalJobs from "@/pages/partner-portal/jobs";
 import PartnerPortalJobDetail from "@/pages/partner-portal/job-detail";
 import PartnerPortalCalendar from "@/pages/partner-portal/calendar";
+import PartnerPortalHelp from "@/pages/partner-portal/help";
 
 function AdminRouter() {
   return (
@@ -46,6 +49,7 @@ function AdminRouter() {
       <Route path="/calendar" component={CalendarPage} />
       <Route path="/finance" component={Finance} />
       <Route path="/seo" component={SEOPowerHouse} />
+      <Route path="/help-center" component={HelpCenterAdmin} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
@@ -61,6 +65,7 @@ function PortalRouter() {
       <Route path="/portal/jobs" component={PortalJobs} />
       <Route path="/portal/profile" component={PortalProfile} />
       <Route path="/portal/reviews" component={PortalReviews} />
+      <Route path="/portal/help" component={PortalHelp} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -74,6 +79,7 @@ function PartnerPortalRouter() {
       <Route path="/partner-portal/jobs/:jobId" component={PartnerPortalJobDetail} />
       <Route path="/partner-portal/jobs" component={PartnerPortalJobs} />
       <Route path="/partner-portal/calendar" component={PartnerPortalCalendar} />
+      <Route path="/partner-portal/help" component={PartnerPortalHelp} />
       <Route component={NotFound} />
     </Switch>
   );
