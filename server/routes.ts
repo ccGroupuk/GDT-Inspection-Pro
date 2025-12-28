@@ -295,7 +295,8 @@ export async function registerRoutes(
         res.clearCookie("employeeSession", {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: "strict",
+          sameSite: "lax",
+          path: "/",
         });
       }
       
@@ -3991,7 +3992,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       res.cookie("employeeSession", sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        sameSite: "lax",
         expires: expiresAt,
         path: "/",
       });
@@ -4023,7 +4024,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       res.clearCookie("employeeSession", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        sameSite: "lax",
         path: "/",
       });
       res.json({ message: "Logged out" });
