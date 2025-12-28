@@ -30,6 +30,7 @@ import PortalJobs from "@/pages/portal/jobs";
 import PortalJobDetail from "@/pages/portal/job-detail";
 import PortalProfile from "@/pages/portal/profile";
 import PortalReviews from "@/pages/portal/reviews";
+import PortalSurveys from "@/pages/portal/surveys";
 import PortalHelp from "@/pages/portal/help";
 import PartnerPortalLogin from "@/pages/partner-portal/login";
 import PartnerPortalInvite from "@/pages/partner-portal/invite";
@@ -90,6 +91,7 @@ function PortalRouter() {
       <Route path="/portal/invite/:token" component={PortalInvite} />
       <Route path="/portal/jobs/:jobId" component={PortalJobDetail} />
       <Route path="/portal/jobs" component={PortalJobs} />
+      <Route path="/portal/surveys" component={PortalSurveys} />
       <Route path="/portal/profile" component={PortalProfile} />
       <Route path="/portal/reviews" component={PortalReviews} />
       <Route path="/portal/help" component={PortalHelp} />

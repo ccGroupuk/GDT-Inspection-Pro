@@ -1178,25 +1178,83 @@ export default function JobDetail() {
                         <span className="text-sm font-medium">
                           {survey.partner?.businessName || "Unknown Partner"}
                         </span>
-                        <Badge variant={
-                          survey.status === "completed" ? "default" :
-                          survey.status === "accepted" || survey.status === "scheduled" ? "secondary" :
-                          survey.status === "declined" || survey.status === "cancelled" ? "destructive" :
-                          "outline"
-                        }>
-                          {survey.status.charAt(0).toUpperCase() + survey.status.slice(1)}
-                        </Badge>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant={
+                            survey.status === "completed" ? "default" :
+                            survey.status === "accepted" || survey.status === "scheduled" ? "secondary" :
+                            survey.status === "declined" || survey.status === "cancelled" ? "destructive" :
+                            "outline"
+                          }>
+                            {survey.status.charAt(0).toUpperCase() + survey.status.slice(1)}
+                          </Badge>
+                          {survey.bookingStatus && (
+                            <Badge className={
+                              survey.bookingStatus === "pending_client" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" :
+                              survey.bookingStatus === "client_accepted" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
+                              survey.bookingStatus === "client_declined" ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" :
+                              survey.bookingStatus === "client_counter" ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" :
+                              survey.bookingStatus === "confirmed" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200" :
+                              "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+                            }>
+                              {survey.bookingStatus === "pending_client" ? "Awaiting Client" :
+                               survey.bookingStatus === "client_accepted" ? "Client Accepted" :
+                               survey.bookingStatus === "client_declined" ? "Client Declined" :
+                               survey.bookingStatus === "client_counter" ? "Client Counter" :
+                               survey.bookingStatus === "confirmed" ? "Confirmed" :
+                               survey.bookingStatus}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       {survey.partner?.tradeCategory && (
                         <p className="text-xs text-muted-foreground">{survey.partner.tradeCategory}</p>
                       )}
-                      {survey.scheduledDate && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      
+                      {/* Booking Timeline - Always show full history */}
+                      {survey.proposedDate && (
+                        <div className="text-xs text-muted-foreground border-l-2 border-blue-300 pl-2 py-1">
+                          <span className="font-medium">Partner proposed: </span>
+                          {new Date(survey.proposedDate).toLocaleDateString()}
+                          {survey.proposedTime && ` at ${survey.proposedTime}`}
+                          {survey.partnerNotes && <p className="mt-1">{survey.partnerNotes}</p>}
+                        </div>
+                      )}
+                      
+                      {/* Show client response - display regardless of current status for audit trail */}
+                      {survey.clientProposedDate && (
+                        <div className="text-xs text-muted-foreground border-l-2 border-orange-300 pl-2 py-1">
+                          <span className="font-medium">Client counter-proposed: </span>
+                          {new Date(survey.clientProposedDate).toLocaleDateString()}
+                          {survey.clientProposedTime && ` at ${survey.clientProposedTime}`}
+                          {survey.clientNotes && <p className="mt-1">{survey.clientNotes}</p>}
+                        </div>
+                      )}
+                      
+                      {/* Show client acceptance without counter-proposal */}
+                      {!survey.clientProposedDate && survey.bookingStatus && ["client_accepted", "confirmed"].includes(survey.bookingStatus) && (
+                        <div className="text-xs text-muted-foreground border-l-2 border-green-300 pl-2 py-1">
+                          <span className="font-medium">Client accepted proposed date</span>
+                          {survey.clientNotes && <p className="mt-1">{survey.clientNotes}</p>}
+                        </div>
+                      )}
+                      
+                      {/* Show client decline */}
+                      {survey.bookingStatus === "client_declined" && (
+                        <div className="text-xs text-muted-foreground border-l-2 border-red-300 pl-2 py-1">
+                          <span className="font-medium">Client declined proposed date</span>
+                          {survey.clientNotes && <p className="mt-1">{survey.clientNotes}</p>}
+                        </div>
+                      )}
+
+                      {survey.scheduledDate && survey.status === "scheduled" && (
+                        <div className="flex items-center gap-1 text-xs text-green-700 dark:text-green-400 border-l-2 border-green-500 pl-2 py-1">
                           <Clock className="w-3 h-3" />
+                          <span className="font-medium">Confirmed: </span>
                           {new Date(survey.scheduledDate).toLocaleDateString()}
                           {survey.scheduledTime && ` at ${survey.scheduledTime}`}
                         </div>
                       )}
+                      
                       {survey.surveyDetails && (
                         <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
                           {survey.surveyDetails}
