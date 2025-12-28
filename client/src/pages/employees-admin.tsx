@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Pencil, Trash2, Users, Clock, Wallet, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Clock, Wallet, Search, ExternalLink } from "lucide-react";
+import { Link } from "wouter";
 import { format } from "date-fns";
 import type { Employee } from "@shared/schema";
 
@@ -404,6 +405,16 @@ export default function EmployeesAdmin() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Link href={`/employees/${employee.id}/portal`}>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            title="View Portal"
+                            data-testid={`button-view-portal-${employee.id}`}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </Link>
                         <Dialog open={editingEmployee?.id === employee.id} onOpenChange={(open) => !open && setEditingEmployee(null)}>
                           <DialogTrigger asChild>
                             <Button 

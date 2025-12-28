@@ -41,6 +41,7 @@ import Landing from "@/pages/landing";
 import EmployeePortalLogin from "@/pages/employee-portal-login";
 import EmployeePortalHome from "@/pages/employee-portal-home";
 import EmployeePortalChangePassword from "@/pages/employee-portal-change-password";
+import EmployeePortalAdminView from "@/pages/employee-portal-admin-view";
 import EmployeesAdmin from "@/pages/employees-admin";
 
 function AdminRouter() {
@@ -58,6 +59,7 @@ function AdminRouter() {
       <Route path="/calendar" component={CalendarPage} />
       <Route path="/finance" component={Finance} />
       <Route path="/employees" component={EmployeesAdmin} />
+      <Route path="/employees/:employeeId/portal" component={EmployeePortalAdminView} />
       <Route path="/seo" component={SEOPowerHouse} />
       <Route path="/help-center" component={HelpCenterAdmin} />
       <Route path="/settings" component={Settings} />
