@@ -1488,6 +1488,140 @@ export const insertEmployeeDocumentSchema = createInsertSchema(employeeDocuments
 export type InsertEmployeeDocument = z.infer<typeof insertEmployeeDocumentSchema>;
 export type EmployeeDocument = typeof employeeDocuments.$inferSelect;
 
+// Job Surveys (Trade Partner Survey Workflow)
+export const jobSurveys = pgTable("job_surveys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  partnerId: varchar("partner_id").references(() => tradePartners.id),
+  
+  // Survey assignment and status
+  status: text("status").notNull().default("requested"), // requested, accepted, declined, scheduled, completed, cancelled
+  assignedBy: varchar("assigned_by"), // Employee ID who assigned
+  
+  // Scheduling
+  scheduledDate: timestamp("scheduled_date"),
+  scheduledTime: text("scheduled_time"), // e.g., "10:00 AM"
+  
+  // Notes
+  adminNotes: text("admin_notes"), // Notes from admin when assigning
+  partnerNotes: text("partner_notes"), // Notes from partner during survey
+  surveyDetails: text("survey_details"), // Detailed survey findings
+  
+  // Decline reason (if declined)
+  declineReason: text("decline_reason"),
+  
+  // Timestamps
+  requestedAt: timestamp("requested_at").defaultNow(),
+  acceptedAt: timestamp("accepted_at"),
+  declinedAt: timestamp("declined_at"),
+  scheduledAt: timestamp("scheduled_at"),
+  completedAt: timestamp("completed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const jobSurveysRelations = relations(jobSurveys, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobSurveys.jobId],
+    references: [jobs.id],
+  }),
+  partner: one(tradePartners, {
+    fields: [jobSurveys.partnerId],
+    references: [tradePartners.id],
+  }),
+}));
+
+export const insertJobSurveySchema = createInsertSchema(jobSurveys).omit({ id: true, createdAt: true, updatedAt: true, requestedAt: true });
+export type InsertJobSurvey = z.infer<typeof insertJobSurveySchema>;
+export type JobSurvey = typeof jobSurveys.$inferSelect;
+
+// Partner Quotes (Quotations submitted by trade partners)
+export const partnerQuotes = pgTable("partner_quotes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
+  surveyId: varchar("survey_id").references(() => jobSurveys.id),
+  
+  // Quote status
+  status: text("status").notNull().default("draft"), // draft, submitted, accepted, declined
+  
+  // Quote totals
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
+  taxEnabled: boolean("tax_enabled").default(false),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("20"),
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).default("0"),
+  total: decimal("total", { precision: 10, scale: 2 }).notNull().default("0"),
+  
+  // Additional info
+  notes: text("notes"),
+  validUntil: timestamp("valid_until"),
+  
+  // Admin response
+  adminNotes: text("admin_notes"),
+  respondedAt: timestamp("responded_at"),
+  respondedBy: varchar("responded_by"),
+  
+  submittedAt: timestamp("submitted_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const partnerQuotesRelations = relations(partnerQuotes, ({ one, many }) => ({
+  job: one(jobs, {
+    fields: [partnerQuotes.jobId],
+    references: [jobs.id],
+  }),
+  partner: one(tradePartners, {
+    fields: [partnerQuotes.partnerId],
+    references: [tradePartners.id],
+  }),
+  survey: one(jobSurveys, {
+    fields: [partnerQuotes.surveyId],
+    references: [jobSurveys.id],
+  }),
+  items: many(partnerQuoteItems),
+}));
+
+export const insertPartnerQuoteSchema = createInsertSchema(partnerQuotes).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPartnerQuote = z.infer<typeof insertPartnerQuoteSchema>;
+export type PartnerQuote = typeof partnerQuotes.$inferSelect;
+
+// Partner Quote Line Items
+export const partnerQuoteItems = pgTable("partner_quote_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  quoteId: varchar("quote_id").notNull().references(() => partnerQuotes.id, { onDelete: "cascade" }),
+  
+  description: text("description").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const partnerQuoteItemsRelations = relations(partnerQuoteItems, ({ one }) => ({
+  quote: one(partnerQuotes, {
+    fields: [partnerQuoteItems.quoteId],
+    references: [partnerQuotes.id],
+  }),
+}));
+
+export const insertPartnerQuoteItemSchema = createInsertSchema(partnerQuoteItems).omit({ id: true, createdAt: true });
+export type InsertPartnerQuoteItem = z.infer<typeof insertPartnerQuoteItemSchema>;
+export type PartnerQuoteItem = typeof partnerQuoteItems.$inferSelect;
+
+// Survey Status Constants
+export const SURVEY_STATUSES = [
+  { value: "requested", label: "Requested", color: "bg-blue-500" },
+  { value: "accepted", label: "Accepted", color: "bg-green-500" },
+  { value: "declined", label: "Declined", color: "bg-red-500" },
+  { value: "scheduled", label: "Scheduled", color: "bg-purple-500" },
+  { value: "completed", label: "Completed", color: "bg-emerald-500" },
+  { value: "cancelled", label: "Cancelled", color: "bg-gray-500" },
+] as const;
+
 // Employee Roles
 export const EMPLOYEE_ROLES = [
   { value: "admin", label: "Admin", description: "Full system access" },
