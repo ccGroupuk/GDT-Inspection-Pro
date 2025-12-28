@@ -10,6 +10,7 @@ import {
   Settings,
   PoundSterling,
   Calendar,
+  Megaphone,
 } from "lucide-react";
 import {
   Sidebar,
@@ -60,6 +61,11 @@ const menuItems = [
     title: "Finance",
     url: "/finance",
     icon: PoundSterling,
+  },
+  {
+    title: "SEO Power House",
+    url: "/seo",
+    icon: Megaphone,
   },
   {
     title: "Settings",

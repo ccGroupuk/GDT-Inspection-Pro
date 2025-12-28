@@ -800,3 +800,172 @@ export const SCHEDULE_PROPOSAL_STATUSES = [
   { value: "admin_confirmed", label: "Admin Confirmed", description: "Admin confirmed client's counter" },
   { value: "scheduled", label: "Scheduled", description: "Date confirmed and added to calendar" },
 ] as const;
+
+// ==================== SEO POWER HOUSE ====================
+
+// SEO Business Profile - Company SEO settings (single record)
+export const seoBusinessProfile = pgTable("seo_business_profile", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  businessName: text("business_name").notNull(),
+  tradeType: text("trade_type").notNull(), // carpentry, plumbing, electrical, etc.
+  servicesOffered: text("services_offered").array(), // multi-select array
+  serviceLocations: text("service_locations").array(), // city/area based
+  brandTone: text("brand_tone").notNull().default("professional"), // professional, friendly, premium, straight-talking
+  primaryGoals: text("primary_goals").array(), // more_calls, more_quotes, more_visibility
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"),
+  websiteUrl: text("website_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSeoBusinessProfileSchema = createInsertSchema(seoBusinessProfile).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSeoBusinessProfile = z.infer<typeof insertSeoBusinessProfileSchema>;
+export type SeoBusinessProfile = typeof seoBusinessProfile.$inferSelect;
+
+// SEO Brand Voice - Tone and style control
+export const seoBrandVoice = pgTable("seo_brand_voice", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customPhrases: text("custom_phrases").array(), // preferred phrases to use
+  blacklistedPhrases: text("blacklisted_phrases").array(), // phrases to avoid
+  preferredCTAs: text("preferred_ctas").array(), // Call now, Get a quote, etc.
+  emojiStyle: text("emoji_style").default("moderate"), // none, minimal, moderate, heavy
+  hashtagPreferences: text("hashtag_preferences").array(),
+  locationKeywords: text("location_keywords").array(), // Cardiff, Caerphilly, etc.
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSeoBrandVoiceSchema = createInsertSchema(seoBrandVoice).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSeoBrandVoice = z.infer<typeof insertSeoBrandVoiceSchema>;
+export type SeoBrandVoice = typeof seoBrandVoice.$inferSelect;
+
+// SEO Weekly Focus - Auto-generated weekly content focus
+export const seoWeeklyFocus = pgTable("seo_weekly_focus", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  weekStartDate: timestamp("week_start_date").notNull(),
+  weekEndDate: timestamp("week_end_date").notNull(),
+  primaryService: text("primary_service").notNull(), // e.g. "Under-Stairs Storage"
+  primaryLocation: text("primary_location").notNull(), // e.g. "Cardiff"
+  supportingKeywords: text("supporting_keywords").array(),
+  seasonalTheme: text("seasonal_theme"), // e.g. "Spring home improvements"
+  recommendedPostCount: integer("recommended_post_count").default(6),
+  status: text("status").notNull().default("active"), // active, completed, skipped
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSeoWeeklyFocusSchema = createInsertSchema(seoWeeklyFocus).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSeoWeeklyFocus = z.infer<typeof insertSeoWeeklyFocusSchema>;
+export type SeoWeeklyFocus = typeof seoWeeklyFocus.$inferSelect;
+
+// SEO Job Media - Link jobs to media for SEO content
+export const seoJobMedia = pgTable("seo_job_media", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  mediaUrl: text("media_url").notNull(),
+  mediaType: text("media_type").notNull().default("photo"), // photo, video
+  caption: text("caption"),
+  isBefore: boolean("is_before").default(false), // before/after toggle
+  isApprovedForSeo: boolean("is_approved_for_seo").default(true),
+  tags: text("tags").array(), // service tags, location tags
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const seoJobMediaRelations = relations(seoJobMedia, ({ one }) => ({
+  job: one(jobs, {
+    fields: [seoJobMedia.jobId],
+    references: [jobs.id],
+  }),
+}));
+
+export const insertSeoJobMediaSchema = createInsertSchema(seoJobMedia).omit({ id: true, createdAt: true });
+export type InsertSeoJobMedia = z.infer<typeof insertSeoJobMediaSchema>;
+export type SeoJobMedia = typeof seoJobMedia.$inferSelect;
+
+// SEO Content Posts - Generated and scheduled social posts
+export const seoContentPosts = pgTable("seo_content_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  weeklyFocusId: varchar("weekly_focus_id").references(() => seoWeeklyFocus.id),
+  jobId: varchar("job_id").references(() => jobs.id),
+  
+  // Platform targeting
+  platform: text("platform").notNull(), // gbp, facebook, instagram
+  postType: text("post_type").notNull().default("update"), // update, offer, before_after, seasonal
+  
+  // Content
+  content: text("content").notNull(),
+  hashtags: text("hashtags"),
+  callToAction: text("call_to_action"),
+  mediaUrls: text("media_urls").array(),
+  
+  // Status workflow
+  status: text("status").notNull().default("draft"), // draft, pending_review, approved, scheduled, published, rejected
+  
+  // Scheduling
+  scheduledFor: timestamp("scheduled_for"),
+  publishedAt: timestamp("published_at"),
+  
+  // Review
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  
+  // Metrics (for Phase 2)
+  views: integer("views").default(0),
+  clicks: integer("clicks").default(0),
+  engagement: integer("engagement").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const seoContentPostsRelations = relations(seoContentPosts, ({ one }) => ({
+  weeklyFocus: one(seoWeeklyFocus, {
+    fields: [seoContentPosts.weeklyFocusId],
+    references: [seoWeeklyFocus.id],
+  }),
+  job: one(jobs, {
+    fields: [seoContentPosts.jobId],
+    references: [jobs.id],
+  }),
+}));
+
+export const insertSeoContentPostSchema = createInsertSchema(seoContentPosts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSeoContentPost = z.infer<typeof insertSeoContentPostSchema>;
+export type SeoContentPost = typeof seoContentPosts.$inferSelect;
+
+// SEO Brand Tones
+export const SEO_BRAND_TONES = [
+  { value: "professional", label: "Professional", description: "Formal and business-like" },
+  { value: "friendly", label: "Friendly", description: "Warm and approachable" },
+  { value: "premium", label: "Premium", description: "High-end and exclusive" },
+  { value: "straight_talking", label: "Straight-Talking", description: "Direct and honest" },
+] as const;
+
+// SEO Post Platforms
+export const SEO_PLATFORMS = [
+  { value: "gbp", label: "Google Business Profile", description: "Google Maps & Search" },
+  { value: "facebook", label: "Facebook", description: "Facebook Page posts" },
+  { value: "instagram", label: "Instagram", description: "Instagram feed posts" },
+] as const;
+
+// SEO Post Types
+export const SEO_POST_TYPES = [
+  { value: "update", label: "Update", description: "General business update" },
+  { value: "offer", label: "Offer", description: "Special promotion or offer" },
+  { value: "before_after", label: "Before/After", description: "Project showcase" },
+  { value: "seasonal", label: "Seasonal", description: "Seasonal content" },
+  { value: "testimonial", label: "Testimonial", description: "Customer review highlight" },
+] as const;
+
+// SEO Post Statuses
+export const SEO_POST_STATUSES = [
+  { value: "draft", label: "Draft", description: "Initial draft" },
+  { value: "pending_review", label: "Pending Review", description: "Awaiting approval" },
+  { value: "approved", label: "Approved", description: "Ready to schedule" },
+  { value: "scheduled", label: "Scheduled", description: "Scheduled for publishing" },
+  { value: "published", label: "Published", description: "Published to platform" },
+  { value: "rejected", label: "Rejected", description: "Rejected, needs revision" },
+] as const;

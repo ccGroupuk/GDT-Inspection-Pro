@@ -20,6 +20,11 @@ import {
   calendarEvents, type CalendarEvent, type InsertCalendarEvent,
   partnerAvailability, type PartnerAvailability, type InsertPartnerAvailability,
   jobScheduleProposals, type JobScheduleProposal, type InsertJobScheduleProposal,
+  seoBusinessProfile, type SeoBusinessProfile, type InsertSeoBusinessProfile,
+  seoBrandVoice, type SeoBrandVoice, type InsertSeoBrandVoice,
+  seoWeeklyFocus, type SeoWeeklyFocus, type InsertSeoWeeklyFocus,
+  seoJobMedia, type SeoJobMedia, type InsertSeoJobMedia,
+  seoContentPosts, type SeoContentPost, type InsertSeoContentPost,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -162,6 +167,37 @@ export interface IStorage {
   createScheduleProposal(proposal: InsertJobScheduleProposal): Promise<JobScheduleProposal>;
   updateScheduleProposal(id: string, proposal: Partial<InsertJobScheduleProposal>): Promise<JobScheduleProposal | undefined>;
   archiveScheduleProposals(jobId: string): Promise<void>;
+
+  // SEO Business Profile
+  getSeoBusinessProfile(): Promise<SeoBusinessProfile | undefined>;
+  upsertSeoBusinessProfile(profile: InsertSeoBusinessProfile): Promise<SeoBusinessProfile>;
+
+  // SEO Brand Voice
+  getSeoBrandVoice(): Promise<SeoBrandVoice | undefined>;
+  upsertSeoBrandVoice(voice: InsertSeoBrandVoice): Promise<SeoBrandVoice>;
+
+  // SEO Weekly Focus
+  getSeoWeeklyFocusList(): Promise<SeoWeeklyFocus[]>;
+  getSeoWeeklyFocus(id: string): Promise<SeoWeeklyFocus | undefined>;
+  getActiveSeoWeeklyFocus(): Promise<SeoWeeklyFocus | undefined>;
+  createSeoWeeklyFocus(focus: InsertSeoWeeklyFocus): Promise<SeoWeeklyFocus>;
+  updateSeoWeeklyFocus(id: string, focus: Partial<InsertSeoWeeklyFocus>): Promise<SeoWeeklyFocus | undefined>;
+
+  // SEO Job Media
+  getSeoJobMediaByJob(jobId: string): Promise<SeoJobMedia[]>;
+  getAllSeoJobMedia(): Promise<SeoJobMedia[]>;
+  createSeoJobMedia(media: InsertSeoJobMedia): Promise<SeoJobMedia>;
+  updateSeoJobMedia(id: string, media: Partial<InsertSeoJobMedia>): Promise<SeoJobMedia | undefined>;
+  deleteSeoJobMedia(id: string): Promise<boolean>;
+
+  // SEO Content Posts
+  getSeoContentPosts(): Promise<SeoContentPost[]>;
+  getSeoContentPost(id: string): Promise<SeoContentPost | undefined>;
+  getSeoContentPostsByStatus(status: string): Promise<SeoContentPost[]>;
+  getSeoContentPostsByWeeklyFocus(weeklyFocusId: string): Promise<SeoContentPost[]>;
+  createSeoContentPost(post: InsertSeoContentPost): Promise<SeoContentPost>;
+  updateSeoContentPost(id: string, post: Partial<InsertSeoContentPost>): Promise<SeoContentPost | undefined>;
+  deleteSeoContentPost(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -769,6 +805,145 @@ export class DatabaseStorage implements IStorage {
     await db.update(jobScheduleProposals)
       .set({ isArchived: true, updatedAt: new Date() })
       .where(eq(jobScheduleProposals.jobId, jobId));
+  }
+
+  // SEO Business Profile Methods
+  async getSeoBusinessProfile(): Promise<SeoBusinessProfile | undefined> {
+    const [profile] = await db.select().from(seoBusinessProfile).limit(1);
+    return profile || undefined;
+  }
+
+  async upsertSeoBusinessProfile(profile: InsertSeoBusinessProfile): Promise<SeoBusinessProfile> {
+    const existing = await this.getSeoBusinessProfile();
+    if (existing) {
+      const [updated] = await db.update(seoBusinessProfile)
+        .set({ ...profile, updatedAt: new Date() })
+        .where(eq(seoBusinessProfile.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(seoBusinessProfile).values(profile).returning();
+    return created;
+  }
+
+  // SEO Brand Voice Methods
+  async getSeoBrandVoice(): Promise<SeoBrandVoice | undefined> {
+    const [voice] = await db.select().from(seoBrandVoice).limit(1);
+    return voice || undefined;
+  }
+
+  async upsertSeoBrandVoice(voice: InsertSeoBrandVoice): Promise<SeoBrandVoice> {
+    const existing = await this.getSeoBrandVoice();
+    if (existing) {
+      const [updated] = await db.update(seoBrandVoice)
+        .set({ ...voice, updatedAt: new Date() })
+        .where(eq(seoBrandVoice.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(seoBrandVoice).values(voice).returning();
+    return created;
+  }
+
+  // SEO Weekly Focus Methods
+  async getSeoWeeklyFocusList(): Promise<SeoWeeklyFocus[]> {
+    return db.select().from(seoWeeklyFocus).orderBy(desc(seoWeeklyFocus.weekStartDate));
+  }
+
+  async getSeoWeeklyFocus(id: string): Promise<SeoWeeklyFocus | undefined> {
+    const [focus] = await db.select().from(seoWeeklyFocus).where(eq(seoWeeklyFocus.id, id));
+    return focus || undefined;
+  }
+
+  async getActiveSeoWeeklyFocus(): Promise<SeoWeeklyFocus | undefined> {
+    const [focus] = await db.select()
+      .from(seoWeeklyFocus)
+      .where(eq(seoWeeklyFocus.status, "active"))
+      .orderBy(desc(seoWeeklyFocus.weekStartDate))
+      .limit(1);
+    return focus || undefined;
+  }
+
+  async createSeoWeeklyFocus(focus: InsertSeoWeeklyFocus): Promise<SeoWeeklyFocus> {
+    const [created] = await db.insert(seoWeeklyFocus).values(focus).returning();
+    return created;
+  }
+
+  async updateSeoWeeklyFocus(id: string, focus: Partial<InsertSeoWeeklyFocus>): Promise<SeoWeeklyFocus | undefined> {
+    const [updated] = await db.update(seoWeeklyFocus)
+      .set({ ...focus, updatedAt: new Date() })
+      .where(eq(seoWeeklyFocus.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  // SEO Job Media Methods
+  async getSeoJobMediaByJob(jobId: string): Promise<SeoJobMedia[]> {
+    return db.select().from(seoJobMedia).where(eq(seoJobMedia.jobId, jobId));
+  }
+
+  async getAllSeoJobMedia(): Promise<SeoJobMedia[]> {
+    return db.select().from(seoJobMedia).orderBy(desc(seoJobMedia.createdAt));
+  }
+
+  async createSeoJobMedia(media: InsertSeoJobMedia): Promise<SeoJobMedia> {
+    const [created] = await db.insert(seoJobMedia).values(media).returning();
+    return created;
+  }
+
+  async updateSeoJobMedia(id: string, media: Partial<InsertSeoJobMedia>): Promise<SeoJobMedia | undefined> {
+    const [updated] = await db.update(seoJobMedia)
+      .set(media)
+      .where(eq(seoJobMedia.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteSeoJobMedia(id: string): Promise<boolean> {
+    await db.delete(seoJobMedia).where(eq(seoJobMedia.id, id));
+    return true;
+  }
+
+  // SEO Content Posts Methods
+  async getSeoContentPosts(): Promise<SeoContentPost[]> {
+    return db.select().from(seoContentPosts).orderBy(desc(seoContentPosts.createdAt));
+  }
+
+  async getSeoContentPost(id: string): Promise<SeoContentPost | undefined> {
+    const [post] = await db.select().from(seoContentPosts).where(eq(seoContentPosts.id, id));
+    return post || undefined;
+  }
+
+  async getSeoContentPostsByStatus(status: string): Promise<SeoContentPost[]> {
+    return db.select()
+      .from(seoContentPosts)
+      .where(eq(seoContentPosts.status, status))
+      .orderBy(desc(seoContentPosts.createdAt));
+  }
+
+  async getSeoContentPostsByWeeklyFocus(weeklyFocusId: string): Promise<SeoContentPost[]> {
+    return db.select()
+      .from(seoContentPosts)
+      .where(eq(seoContentPosts.weeklyFocusId, weeklyFocusId))
+      .orderBy(desc(seoContentPosts.createdAt));
+  }
+
+  async createSeoContentPost(post: InsertSeoContentPost): Promise<SeoContentPost> {
+    const [created] = await db.insert(seoContentPosts).values(post).returning();
+    return created;
+  }
+
+  async updateSeoContentPost(id: string, post: Partial<InsertSeoContentPost>): Promise<SeoContentPost | undefined> {
+    const [updated] = await db.update(seoContentPosts)
+      .set({ ...post, updatedAt: new Date() })
+      .where(eq(seoContentPosts.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteSeoContentPost(id: string): Promise<boolean> {
+    await db.delete(seoContentPosts).where(eq(seoContentPosts.id, id));
+    return true;
   }
 }
 

@@ -1,0 +1,313 @@
+SEO POWER HOUSE – FEATURE LIST
+
+(Trade-Focused Content & Local SEO Platform)
+
+MODULE 1: USER & BUSINESS SETUP (FOUNDATION)
+1.1 Business Profile
+
+Must-Have
+
+Business name
+
+Trade type (carpentry, plumbing, electrical, etc.)
+
+Services offered (multi-select)
+
+Service locations (city / area based)
+
+Brand tone selector:
+
+Professional
+
+Friendly
+
+Premium
+
+Straight-talking
+
+Primary goals:
+
+More calls
+
+More quotes
+
+More local visibility
+
+Phase-2
+
+Multi-brand support (group companies)
+
+Multiple locations per brand
+
+Team member access levels
+
+MODULE 2: JOB & MEDIA HUB (CORE ENGINE)
+2.1 Job Entry
+
+Must-Have
+
+Job title
+
+Job type (install / repair / upgrade)
+
+Service category
+
+Location (linked to GBP location)
+
+Job completion date
+
+Optional notes (problem solved / upgrade)
+
+2.2 Media Upload
+
+Must-Have
+
+Upload:
+
+Photos
+
+Videos
+
+Auto-tag media to job
+
+Before / After toggle
+
+Auto-compression for web & social
+
+Phase-2
+
+Mobile app capture
+
+Voice-to-text notes
+
+AI image quality scoring
+
+MODULE 3: WEEKLY SEO FOCUS ENGINE
+3.1 Weekly Focus Generator
+
+Must-Have
+
+Auto-generated weekly focus:
+
+Primary service
+
+Primary location
+
+Supporting keywords
+
+Based on:
+
+Jobs completed last week
+
+Services needing visibility
+
+Seasonal relevance
+
+3.2 Focus Dashboard
+
+Must-Have
+
+“This Week’s SEO Focus” panel
+
+Recommended content mix:
+
+GBP posts (x2–3)
+
+Facebook posts (x2)
+
+Instagram posts (x2)
+
+Phase-2
+
+Competitor gap suggestions
+
+Local keyword difficulty scoring
+
+MODULE 4: CONTENT GENERATION ENGINE
+4.1 Platform-Specific Content
+
+Must-Have
+
+Google Business Profile posts:
+
+Update posts
+
+Offer posts
+
+Before/After posts
+
+Facebook captions
+
+Instagram captions
+
+Emoji + CTA auto-suggestions
+
+4.2 Content Intelligence
+
+Must-Have
+
+Uses:
+
+Job data
+
+Media
+
+Location keywords
+
+Service keywords
+
+Avoids duplicate content
+
+Local SEO-optimised phrasing
+
+Phase-2
+
+Reel / Short video script generation
+
+Carousel post captions
+
+MODULE 5: SEASONAL & TREND CONTENT
+5.1 Seasonal Engine
+
+Must-Have
+
+Auto-suggest content based on:
+
+Time of year
+
+Trade-specific seasonality
+
+UK public holidays
+
+Seasonal promo post suggestions
+
+5.2 Trend Awareness
+
+Phase-2
+
+Trending format alerts
+
+Caption structure recommendations
+
+Platform trend weighting
+
+MODULE 6: REVIEW & APPROVAL SYSTEM (CRITICAL)
+6.1 Content Review Panel
+
+Must-Have
+
+Preview every post before publishing
+
+Inline text editor
+
+Image swap / reorder
+
+Approve / Reject toggle
+
+6.2 Safety Controls
+
+Must-Have
+
+No auto-posting without approval
+
+Draft saving
+
+Edit history
+
+MODULE 7: SCHEDULING & PUBLISHING
+7.1 Scheduling
+
+Must-Have
+
+Schedule per platform
+
+Suggested best times (default)
+
+Manual override
+
+7.2 Publishing
+
+Must-Have
+
+Publish to:
+
+Google Business Profile
+
+Facebook
+
+Instagram
+
+Phase-2
+
+LinkedIn (commercial trades)
+
+TikTok captions only
+
+MODULE 8: PERFORMANCE & FEEDBACK LOOP
+8.1 Metrics Dashboard
+
+Must-Have
+
+GBP:
+
+Views
+
+Calls
+
+Direction requests
+
+Social:
+
+Reach
+
+Engagement
+
+Clicks
+
+8.2 AI Feedback Loop
+
+Phase-2
+
+“What worked last week”
+
+Optimisation suggestions for next week
+
+Content scoring
+
+MODULE 9: BRAND & VOICE CONTROL
+9.1 Tone Consistency
+
+Must-Have
+
+Brand tone presets
+
+Custom phrasing blacklist
+
+CTA preferences
+
+9.2 Location Control
+
+Must-Have
+
+Location-specific wording
+
+Avoid cross-location keyword confusion
+
+MODULE 10: ADMIN & SCALING
+10.1 User Management
+
+Phase-2
+
+Admin / editor roles
+
+Multi-trade partner access
+
+10.2 White-Label Support
+
+Phase-2
+
+Agency dashboard
+
+Client isolation
+
+Branding controls

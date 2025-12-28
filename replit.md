@@ -4,9 +4,9 @@
 A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The system manages clients, jobs, trade partners, and tasks with a visual pipeline for tracking job progress.
 
 ## Current State
-- **Version**: MVP Complete + Quote Builder + Job Notes + Financial Tracking + Calendar + Payment Details
+- **Version**: MVP Complete + Quote Builder + Job Notes + Financial Tracking + Calendar + Payment Details + SEO Power House
 - **Last Updated**: December 2024
-- **Status**: Fully functional CRM with persistent data storage, detailed quoting, job notes with photo attachments, financial tracking, work calendar, and payment details on invoices
+- **Status**: Fully functional CRM with persistent data storage, detailed quoting, job notes with photo attachments, financial tracking, work calendar, payment details on invoices, and AI-powered SEO content creation
 
 ## Core Features
 
@@ -119,6 +119,17 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Company settings management
 - Review URL configuration for social platforms
 - Client portal invite management
+
+### SEO Power House
+- AI-powered content creation and social media management tool
+- **Business Profile**: Configure business name, trade type, services, locations, brand tone
+- **Brand Voice**: Custom phrases, blacklisted words, preferred CTAs, emoji style, hashtags
+- **Weekly Focus**: Set primary service and location focus for each week
+- Content generator using OpenAI (via Replit AI Integrations - no API key required)
+- Platforms supported: Google Business Profile, Facebook, Instagram
+- Post types: Project Showcase, Before & After, Tips, Testimonials, Updates, Seasonal
+- Content queue with status workflow: Draft → Pending Review → Approved → Scheduled → Published
+- Tables: seo_business_profile, seo_brand_voice, seo_weekly_focus, seo_job_media, seo_content_posts
 
 ## Project Architecture
 

@@ -17,6 +17,7 @@ import Tasks from "@/pages/tasks";
 import Finance from "@/pages/finance";
 import CalendarPage from "@/pages/calendar";
 import Settings from "@/pages/settings";
+import SEOPowerHouse from "@/pages/seo";
 import NotFound from "@/pages/not-found";
 import PortalLogin from "@/pages/portal/login";
 import PortalInvite from "@/pages/portal/invite";
@@ -43,6 +44,7 @@ function AdminRouter() {
       <Route path="/tasks" component={Tasks} />
       <Route path="/calendar" component={CalendarPage} />
       <Route path="/finance" component={Finance} />
+      <Route path="/seo" component={SEOPowerHouse} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

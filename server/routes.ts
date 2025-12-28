@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema } from "@shared/schema";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema, insertSeoBusinessProfileSchema, insertSeoBrandVoiceSchema, insertSeoWeeklyFocusSchema, insertSeoJobMediaSchema, insertSeoContentPostSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(
@@ -2307,8 +2307,375 @@ export async function registerRoutes(
     }
   });
 
+  // =====================
+  // SEO POWER HOUSE ROUTES
+  // =====================
+
+  // SEO Business Profile
+  app.get("/api/seo/business-profile", async (req, res) => {
+    try {
+      const profile = await storage.getSeoBusinessProfile();
+      res.json(profile || null);
+    } catch (error) {
+      console.error("Get SEO business profile error:", error);
+      res.status(500).json({ message: "Failed to load business profile" });
+    }
+  });
+
+  app.post("/api/seo/business-profile", async (req, res) => {
+    try {
+      const parsed = insertSeoBusinessProfileSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const profile = await storage.upsertSeoBusinessProfile(parsed.data);
+      res.json(profile);
+    } catch (error) {
+      console.error("Save SEO business profile error:", error);
+      res.status(500).json({ message: "Failed to save business profile" });
+    }
+  });
+
+  // SEO Brand Voice
+  app.get("/api/seo/brand-voice", async (req, res) => {
+    try {
+      const voice = await storage.getSeoBrandVoice();
+      res.json(voice || null);
+    } catch (error) {
+      console.error("Get SEO brand voice error:", error);
+      res.status(500).json({ message: "Failed to load brand voice" });
+    }
+  });
+
+  app.post("/api/seo/brand-voice", async (req, res) => {
+    try {
+      const parsed = insertSeoBrandVoiceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const voice = await storage.upsertSeoBrandVoice(parsed.data);
+      res.json(voice);
+    } catch (error) {
+      console.error("Save SEO brand voice error:", error);
+      res.status(500).json({ message: "Failed to save brand voice" });
+    }
+  });
+
+  // SEO Weekly Focus
+  app.get("/api/seo/weekly-focus", async (req, res) => {
+    try {
+      const list = await storage.getSeoWeeklyFocusList();
+      res.json(list);
+    } catch (error) {
+      console.error("Get SEO weekly focus list error:", error);
+      res.status(500).json({ message: "Failed to load weekly focus list" });
+    }
+  });
+
+  app.get("/api/seo/weekly-focus/active", async (req, res) => {
+    try {
+      const focus = await storage.getActiveSeoWeeklyFocus();
+      res.json(focus || null);
+    } catch (error) {
+      console.error("Get active weekly focus error:", error);
+      res.status(500).json({ message: "Failed to load active weekly focus" });
+    }
+  });
+
+  app.get("/api/seo/weekly-focus/:id", async (req, res) => {
+    try {
+      const focus = await storage.getSeoWeeklyFocus(req.params.id);
+      if (!focus) {
+        return res.status(404).json({ message: "Weekly focus not found" });
+      }
+      res.json(focus);
+    } catch (error) {
+      console.error("Get weekly focus error:", error);
+      res.status(500).json({ message: "Failed to load weekly focus" });
+    }
+  });
+
+  app.post("/api/seo/weekly-focus", async (req, res) => {
+    try {
+      const parsed = insertSeoWeeklyFocusSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const focus = await storage.createSeoWeeklyFocus(parsed.data);
+      res.json(focus);
+    } catch (error) {
+      console.error("Create weekly focus error:", error);
+      res.status(500).json({ message: "Failed to create weekly focus" });
+    }
+  });
+
+  app.patch("/api/seo/weekly-focus/:id", async (req, res) => {
+    try {
+      const focus = await storage.updateSeoWeeklyFocus(req.params.id, req.body);
+      if (!focus) {
+        return res.status(404).json({ message: "Weekly focus not found" });
+      }
+      res.json(focus);
+    } catch (error) {
+      console.error("Update weekly focus error:", error);
+      res.status(500).json({ message: "Failed to update weekly focus" });
+    }
+  });
+
+  // SEO Job Media
+  app.get("/api/seo/job-media", async (req, res) => {
+    try {
+      const media = await storage.getAllSeoJobMedia();
+      res.json(media);
+    } catch (error) {
+      console.error("Get all SEO job media error:", error);
+      res.status(500).json({ message: "Failed to load job media" });
+    }
+  });
+
+  app.get("/api/seo/job-media/:jobId", async (req, res) => {
+    try {
+      const media = await storage.getSeoJobMediaByJob(req.params.jobId);
+      res.json(media);
+    } catch (error) {
+      console.error("Get job media error:", error);
+      res.status(500).json({ message: "Failed to load job media" });
+    }
+  });
+
+  app.post("/api/seo/job-media", async (req, res) => {
+    try {
+      const parsed = insertSeoJobMediaSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const media = await storage.createSeoJobMedia(parsed.data);
+      res.json(media);
+    } catch (error) {
+      console.error("Create job media error:", error);
+      res.status(500).json({ message: "Failed to create job media" });
+    }
+  });
+
+  app.patch("/api/seo/job-media/:id", async (req, res) => {
+    try {
+      const media = await storage.updateSeoJobMedia(req.params.id, req.body);
+      if (!media) {
+        return res.status(404).json({ message: "Job media not found" });
+      }
+      res.json(media);
+    } catch (error) {
+      console.error("Update job media error:", error);
+      res.status(500).json({ message: "Failed to update job media" });
+    }
+  });
+
+  app.delete("/api/seo/job-media/:id", async (req, res) => {
+    try {
+      await storage.deleteSeoJobMedia(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete job media error:", error);
+      res.status(500).json({ message: "Failed to delete job media" });
+    }
+  });
+
+  // SEO Content Posts
+  app.get("/api/seo/content-posts", async (req, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const weeklyFocusId = req.query.weeklyFocusId as string | undefined;
+      
+      let posts;
+      if (status) {
+        posts = await storage.getSeoContentPostsByStatus(status);
+      } else if (weeklyFocusId) {
+        posts = await storage.getSeoContentPostsByWeeklyFocus(weeklyFocusId);
+      } else {
+        posts = await storage.getSeoContentPosts();
+      }
+      res.json(posts);
+    } catch (error) {
+      console.error("Get content posts error:", error);
+      res.status(500).json({ message: "Failed to load content posts" });
+    }
+  });
+
+  app.get("/api/seo/content-posts/:id", async (req, res) => {
+    try {
+      const post = await storage.getSeoContentPost(req.params.id);
+      if (!post) {
+        return res.status(404).json({ message: "Content post not found" });
+      }
+      res.json(post);
+    } catch (error) {
+      console.error("Get content post error:", error);
+      res.status(500).json({ message: "Failed to load content post" });
+    }
+  });
+
+  app.post("/api/seo/content-posts", async (req, res) => {
+    try {
+      const parsed = insertSeoContentPostSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const post = await storage.createSeoContentPost(parsed.data);
+      res.json(post);
+    } catch (error) {
+      console.error("Create content post error:", error);
+      res.status(500).json({ message: "Failed to create content post" });
+    }
+  });
+
+  app.patch("/api/seo/content-posts/:id", async (req, res) => {
+    try {
+      const post = await storage.updateSeoContentPost(req.params.id, req.body);
+      if (!post) {
+        return res.status(404).json({ message: "Content post not found" });
+      }
+      res.json(post);
+    } catch (error) {
+      console.error("Update content post error:", error);
+      res.status(500).json({ message: "Failed to update content post" });
+    }
+  });
+
+  app.delete("/api/seo/content-posts/:id", async (req, res) => {
+    try {
+      await storage.deleteSeoContentPost(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete content post error:", error);
+      res.status(500).json({ message: "Failed to delete content post" });
+    }
+  });
+
+  // AI Content Generation endpoint (uses Replit AI Integrations)
+  app.post("/api/seo/generate-content", async (req, res) => {
+    try {
+      const { platform, postType, service, location, tone, keywords, mediaContext } = req.body;
+      
+      // Build prompt based on business profile and brand voice
+      const businessProfile = await storage.getSeoBusinessProfile();
+      const brandVoice = await storage.getSeoBrandVoice();
+      
+      const prompt = buildContentPrompt({
+        platform,
+        postType,
+        service,
+        location,
+        tone: tone || brandVoice?.emojiStyle || "professional",
+        keywords: keywords || [],
+        businessName: businessProfile?.businessName || "CCC Group",
+        tradeType: businessProfile?.tradeType || "Carpentry & Home Improvements",
+        customPhrases: brandVoice?.customPhrases || [],
+        blacklistedPhrases: brandVoice?.blacklistedPhrases || [],
+        preferredCtas: brandVoice?.preferredCtas || [],
+        hashtags: brandVoice?.hashtagPreferences || [],
+        locationKeywords: brandVoice?.locationKeywords || [],
+        mediaContext,
+      });
+
+      // Use OpenAI via Replit AI Integrations
+      const openai = await import("openai");
+      const client = new openai.default();
+      
+      const completion = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are a social media content creator for a local trade business. Write engaging, professional posts that highlight quality work and build local community trust." },
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 500,
+      });
+
+      const generatedContent = completion.choices[0]?.message?.content || "";
+      
+      res.json({ 
+        content: generatedContent,
+        platform,
+        postType,
+      });
+    } catch (error) {
+      console.error("Generate content error:", error);
+      res.status(500).json({ message: "Failed to generate content" });
+    }
+  });
+
   // Register object storage routes
   registerObjectStorageRoutes(app);
 
   return httpServer;
+}
+
+// Helper function to build AI prompt for content generation
+function buildContentPrompt(params: {
+  platform: string;
+  postType: string;
+  service: string;
+  location: string;
+  tone: string;
+  keywords: string[];
+  businessName: string;
+  tradeType: string;
+  customPhrases: string[];
+  blacklistedPhrases: string[];
+  preferredCtas: string[];
+  hashtags: string[];
+  locationKeywords: string[];
+  mediaContext?: string;
+}): string {
+  let prompt = `Write a ${params.platform} post for ${params.businessName}, a ${params.tradeType} business.\n\n`;
+  
+  prompt += `Post type: ${params.postType}\n`;
+  prompt += `Service to highlight: ${params.service}\n`;
+  prompt += `Location: ${params.location}\n`;
+  prompt += `Tone: ${params.tone}\n`;
+  
+  if (params.keywords.length > 0) {
+    prompt += `Keywords to include: ${params.keywords.join(", ")}\n`;
+  }
+  
+  if (params.customPhrases.length > 0) {
+    prompt += `Try to use these phrases: ${params.customPhrases.join(", ")}\n`;
+  }
+  
+  if (params.blacklistedPhrases.length > 0) {
+    prompt += `Do NOT use these phrases: ${params.blacklistedPhrases.join(", ")}\n`;
+  }
+  
+  if (params.preferredCtas.length > 0) {
+    prompt += `End with one of these calls-to-action: ${params.preferredCtas.join(" OR ")}\n`;
+  }
+  
+  if (params.hashtags.length > 0) {
+    prompt += `Include relevant hashtags from: ${params.hashtags.join(", ")}\n`;
+  }
+  
+  if (params.locationKeywords.length > 0) {
+    prompt += `Location keywords to potentially include: ${params.locationKeywords.join(", ")}\n`;
+  }
+  
+  if (params.mediaContext) {
+    prompt += `This post will accompany an image of: ${params.mediaContext}\n`;
+  }
+  
+  prompt += `\nRequirements:\n`;
+  prompt += `- Keep it concise and engaging\n`;
+  prompt += `- Sound authentic and local, not corporate\n`;
+  prompt += `- Focus on quality and trust\n`;
+  
+  if (params.platform === "google_business") {
+    prompt += `- Format for Google Business Profile (professional, informative)\n`;
+    prompt += `- Include a clear call-to-action\n`;
+  } else if (params.platform === "facebook") {
+    prompt += `- Format for Facebook (conversational, community-focused)\n`;
+    prompt += `- Encourage engagement (questions, reactions)\n`;
+  } else if (params.platform === "instagram") {
+    prompt += `- Format for Instagram (visual-first, lifestyle)\n`;
+    prompt += `- Include relevant hashtags at the end\n`;
+  }
+  
+  return prompt;
 }
