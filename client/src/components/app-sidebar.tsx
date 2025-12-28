@@ -12,6 +12,7 @@ import {
   Calendar,
   Megaphone,
   HelpCircle,
+  UserCog,
 } from "lucide-react";
 import {
   Sidebar,
@@ -62,6 +63,11 @@ const menuItems = [
     title: "Finance",
     url: "/finance",
     icon: PoundSterling,
+  },
+  {
+    title: "Employees",
+    url: "/employees",
+    icon: UserCog,
   },
   {
     title: "SEO Power House",

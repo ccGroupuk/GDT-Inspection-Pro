@@ -34,11 +34,16 @@ import PartnerPortalJobs from "@/pages/partner-portal/jobs";
 import PartnerPortalJobDetail from "@/pages/partner-portal/job-detail";
 import PartnerPortalCalendar from "@/pages/partner-portal/calendar";
 import PartnerPortalHelp from "@/pages/partner-portal/help";
+import Landing from "@/pages/landing";
+import EmployeePortalLogin from "@/pages/employee-portal-login";
+import EmployeePortalHome from "@/pages/employee-portal-home";
+import EmployeesAdmin from "@/pages/employees-admin";
 
 function AdminRouter() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/dashboard" component={Dashboard} />
       <Route path="/jobs" component={Jobs} />
       <Route path="/jobs/new" component={JobForm} />
       <Route path="/jobs/:id" component={JobDetail} />
@@ -48,9 +53,20 @@ function AdminRouter() {
       <Route path="/tasks" component={Tasks} />
       <Route path="/calendar" component={CalendarPage} />
       <Route path="/finance" component={Finance} />
+      <Route path="/employees" component={EmployeesAdmin} />
       <Route path="/seo" component={SEOPowerHouse} />
       <Route path="/help-center" component={HelpCenterAdmin} />
       <Route path="/settings" component={Settings} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function EmployeePortalRouter() {
+  return (
+    <Switch>
+      <Route path="/employee-portal" component={EmployeePortalLogin} />
+      <Route path="/employee-portal/home" component={EmployeePortalHome} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -112,15 +128,24 @@ function AdminLayout() {
 
 function App() {
   const [location] = useLocation();
+  const isLandingPage = location === "/landing";
   const isPortalRoute = location.startsWith("/portal");
   const isPartnerPortalRoute = location.startsWith("/partner-portal");
+  const isEmployeePortalRoute = location.startsWith("/employee-portal");
+
+  const getContent = () => {
+    if (isLandingPage) return <Landing />;
+    if (isPartnerPortalRoute) return <PartnerPortalRouter />;
+    if (isPortalRoute) return <PortalRouter />;
+    if (isEmployeePortalRoute) return <EmployeePortalRouter />;
+    return <AdminLayout />;
+  };
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
-          {isPartnerPortalRoute ? <PartnerPortalRouter /> : 
-           isPortalRoute ? <PortalRouter /> : <AdminLayout />}
+          {getContent()}
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>

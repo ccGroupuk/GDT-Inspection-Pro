@@ -1,10 +1,12 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema, insertSeoBusinessProfileSchema, insertSeoBrandVoiceSchema, insertSeoWeeklyFocusSchema, insertSeoJobMediaSchema, insertSeoContentPostSchema } from "@shared/schema";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema, insertSeoBusinessProfileSchema, insertSeoBrandVoiceSchema, insertSeoWeeklyFocusSchema, insertSeoJobMediaSchema, insertSeoContentPostSchema, insertEmployeeSchema, insertTimeEntrySchema, insertPayPeriodSchema, insertPayrollRunSchema, insertPayrollAdjustmentSchema, insertEmployeeDocumentSchema, type Employee } from "@shared/schema";
 import { z } from "zod";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -3500,6 +3502,668 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get partner portal help error:", error);
       res.status(500).json({ message: "Failed to get help content" });
+    }
+  });
+
+  // ==================== EMPLOYEE MANAGEMENT ====================
+
+  // Employee Authentication
+  app.post("/api/employee/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password required" });
+      }
+
+      const employee = await storage.getEmployeeByEmail(email);
+      if (!employee || !employee.isActive) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      const credential = await storage.getEmployeeCredential(employee.id);
+      if (!credential) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Check if account is locked
+      if (credential.lockedUntil && credential.lockedUntil > new Date()) {
+        return res.status(423).json({ message: "Account is temporarily locked" });
+      }
+
+      const isValid = await bcrypt.compare(password, credential.passwordHash);
+      if (!isValid) {
+        await storage.updateEmployeeCredential(employee.id, {
+          failedLoginAttempts: (credential.failedLoginAttempts || 0) + 1,
+          lockedUntil: (credential.failedLoginAttempts || 0) >= 4 
+            ? new Date(Date.now() + 15 * 60 * 1000) : null
+        });
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Reset failed attempts and create session
+      await storage.updateEmployeeCredential(employee.id, {
+        failedLoginAttempts: 0,
+        lockedUntil: null
+      });
+
+      const sessionToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
+
+      await storage.createEmployeeSession({
+        employeeId: employee.id,
+        sessionToken,
+        expiresAt,
+        ipAddress: req.ip || null,
+        userAgent: req.get("User-Agent") || null
+      });
+
+      res.json({
+        token: sessionToken,
+        employee: {
+          id: employee.id,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          email: employee.email,
+          role: employee.role,
+          accessAreas: employee.accessAreas
+        },
+        mustChangePassword: credential.mustChangePassword
+      });
+    } catch (error) {
+      console.error("Employee login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.post("/api/employee/logout", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (token) {
+        await storage.deleteEmployeeSession(token);
+      }
+      res.json({ message: "Logged out" });
+    } catch (error) {
+      console.error("Employee logout error:", error);
+      res.status(500).json({ message: "Logout failed" });
+    }
+  });
+
+  app.post("/api/employee/change-password", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const session = await storage.getEmployeeSession(token);
+      if (!session) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current and new password required" });
+      }
+
+      const credential = await storage.getEmployeeCredential(session.employeeId);
+      if (!credential) {
+        return res.status(400).json({ message: "No credentials found" });
+      }
+
+      const isValid = await bcrypt.compare(currentPassword, credential.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await storage.updateEmployeeCredential(session.employeeId, {
+        passwordHash,
+        mustChangePassword: false,
+        lastPasswordChange: new Date()
+      });
+
+      res.json({ message: "Password changed successfully" });
+    } catch (error) {
+      console.error("Change password error:", error);
+      res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
+  app.get("/api/employee/me", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const session = await storage.getEmployeeSession(token);
+      if (!session) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      const employee = await storage.getEmployee(session.employeeId);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      res.json({
+        id: employee.id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        email: employee.email,
+        role: employee.role,
+        accessAreas: employee.accessAreas
+      });
+    } catch (error) {
+      console.error("Get employee me error:", error);
+      res.status(500).json({ message: "Failed to get employee" });
+    }
+  });
+
+  // Admin: Employee Management (requires admin authentication)
+  app.get("/api/employees", isAuthenticated, async (req, res) => {
+    try {
+      const employees = await storage.getEmployees();
+      res.json(employees);
+    } catch (error) {
+      console.error("Get employees error:", error);
+      res.status(500).json({ message: "Failed to get employees" });
+    }
+  });
+
+  app.get("/api/employees/:id", isAuthenticated, async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      res.json(employee);
+    } catch (error) {
+      console.error("Get employee error:", error);
+      res.status(500).json({ message: "Failed to get employee" });
+    }
+  });
+
+  app.post("/api/employees", isAuthenticated, async (req, res) => {
+    try {
+      const { password, ...employeeData } = req.body;
+      const data = insertEmployeeSchema.parse(employeeData);
+      
+      // Check for existing email
+      const existing = await storage.getEmployeeByEmail(data.email);
+      if (existing) {
+        return res.status(400).json({ message: "Email already exists" });
+      }
+
+      const employee = await storage.createEmployee(data);
+
+      // Create credentials if password provided
+      if (password) {
+        const passwordHash = await bcrypt.hash(password, 10);
+        await storage.createEmployeeCredential({
+          employeeId: employee.id,
+          passwordHash,
+          mustChangePassword: true
+        });
+      }
+
+      res.status(201).json(employee);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create employee error:", error);
+      res.status(500).json({ message: "Failed to create employee" });
+    }
+  });
+
+  app.patch("/api/employees/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { password, ...updateData } = req.body;
+      const employee = await storage.updateEmployee(req.params.id, updateData);
+      
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      // Update password if provided
+      if (password) {
+        const passwordHash = await bcrypt.hash(password, 10);
+        const existing = await storage.getEmployeeCredential(employee.id);
+        if (existing) {
+          await storage.updateEmployeeCredential(employee.id, { passwordHash });
+        } else {
+          await storage.createEmployeeCredential({
+            employeeId: employee.id,
+            passwordHash,
+            mustChangePassword: true
+          });
+        }
+      }
+
+      res.json(employee);
+    } catch (error) {
+      console.error("Update employee error:", error);
+      res.status(500).json({ message: "Failed to update employee" });
+    }
+  });
+
+  app.delete("/api/employees/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteEmployee(req.params.id);
+      res.json({ message: "Employee deleted" });
+    } catch (error) {
+      console.error("Delete employee error:", error);
+      res.status(500).json({ message: "Failed to delete employee" });
+    }
+  });
+
+  // Time Entries (admin only - employees use /api/employee/* routes)
+  app.get("/api/time-entries", isAuthenticated, async (req, res) => {
+    try {
+      const { employeeId, startDate, endDate } = req.query;
+      
+      let entries;
+      if (employeeId) {
+        entries = await storage.getTimeEntriesByEmployee(employeeId as string);
+      } else if (startDate && endDate) {
+        entries = await storage.getTimeEntriesByDateRange(
+          new Date(startDate as string),
+          new Date(endDate as string)
+        );
+      } else {
+        entries = await storage.getTimeEntries();
+      }
+      
+      res.json(entries);
+    } catch (error) {
+      console.error("Get time entries error:", error);
+      res.status(500).json({ message: "Failed to get time entries" });
+    }
+  });
+
+  app.get("/api/time-entries/:id", isAuthenticated, async (req, res) => {
+    try {
+      const entry = await storage.getTimeEntry(req.params.id);
+      if (!entry) {
+        return res.status(404).json({ message: "Time entry not found" });
+      }
+      res.json(entry);
+    } catch (error) {
+      console.error("Get time entry error:", error);
+      res.status(500).json({ message: "Failed to get time entry" });
+    }
+  });
+
+  app.post("/api/time-entries", isAuthenticated, async (req, res) => {
+    try {
+      const data = insertTimeEntrySchema.parse(req.body);
+      const entry = await storage.createTimeEntry(data);
+      res.status(201).json(entry);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create time entry error:", error);
+      res.status(500).json({ message: "Failed to create time entry" });
+    }
+  });
+
+  app.patch("/api/time-entries/:id", isAuthenticated, async (req, res) => {
+    try {
+      const entry = await storage.updateTimeEntry(req.params.id, req.body);
+      if (!entry) {
+        return res.status(404).json({ message: "Time entry not found" });
+      }
+      res.json(entry);
+    } catch (error) {
+      console.error("Update time entry error:", error);
+      res.status(500).json({ message: "Failed to update time entry" });
+    }
+  });
+
+  app.delete("/api/time-entries/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteTimeEntry(req.params.id);
+      res.json({ message: "Time entry deleted" });
+    } catch (error) {
+      console.error("Delete time entry error:", error);
+      res.status(500).json({ message: "Failed to delete time entry" });
+    }
+  });
+
+  // Employee Clock In/Out
+  app.post("/api/employee/clock-in", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const session = await storage.getEmployeeSession(token);
+      if (!session) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      // Check for existing active entry
+      const activeEntry = await storage.getActiveTimeEntry(session.employeeId);
+      if (activeEntry) {
+        return res.status(400).json({ message: "Already clocked in", entry: activeEntry });
+      }
+
+      const { entryType, jobId, location, notes } = req.body;
+
+      const entry = await storage.createTimeEntry({
+        employeeId: session.employeeId,
+        clockIn: new Date(),
+        entryType: entryType || "work",
+        jobId: jobId || null,
+        location: location || null,
+        notes: notes || null
+      });
+
+      res.status(201).json(entry);
+    } catch (error) {
+      console.error("Clock in error:", error);
+      res.status(500).json({ message: "Failed to clock in" });
+    }
+  });
+
+  app.post("/api/employee/clock-out", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const session = await storage.getEmployeeSession(token);
+      if (!session) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      const activeEntry = await storage.getActiveTimeEntry(session.employeeId);
+      if (!activeEntry) {
+        return res.status(400).json({ message: "No active time entry" });
+      }
+
+      const clockOut = new Date();
+      const clockIn = new Date(activeEntry.clockIn);
+      const breakMinutes = req.body.breakMinutes || 0;
+      
+      const totalMinutes = (clockOut.getTime() - clockIn.getTime()) / 60000 - breakMinutes;
+      const totalHours = (totalMinutes / 60).toFixed(2);
+
+      const entry = await storage.updateTimeEntry(activeEntry.id, {
+        clockOut,
+        breakMinutes,
+        totalHours,
+        notes: req.body.notes || activeEntry.notes
+      });
+
+      res.json(entry);
+    } catch (error) {
+      console.error("Clock out error:", error);
+      res.status(500).json({ message: "Failed to clock out" });
+    }
+  });
+
+  app.get("/api/employee/active-entry", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const session = await storage.getEmployeeSession(token);
+      if (!session) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      const entry = await storage.getActiveTimeEntry(session.employeeId);
+      res.json(entry || null);
+    } catch (error) {
+      console.error("Get active entry error:", error);
+      res.status(500).json({ message: "Failed to get active entry" });
+    }
+  });
+
+  // Pay Periods (admin only)
+  app.get("/api/pay-periods", isAuthenticated, async (req, res) => {
+    try {
+      const periods = await storage.getPayPeriods();
+      res.json(periods);
+    } catch (error) {
+      console.error("Get pay periods error:", error);
+      res.status(500).json({ message: "Failed to get pay periods" });
+    }
+  });
+
+  app.get("/api/pay-periods/:id", isAuthenticated, async (req, res) => {
+    try {
+      const period = await storage.getPayPeriod(req.params.id);
+      if (!period) {
+        return res.status(404).json({ message: "Pay period not found" });
+      }
+      res.json(period);
+    } catch (error) {
+      console.error("Get pay period error:", error);
+      res.status(500).json({ message: "Failed to get pay period" });
+    }
+  });
+
+  app.post("/api/pay-periods", isAuthenticated, async (req, res) => {
+    try {
+      const data = insertPayPeriodSchema.parse(req.body);
+      const period = await storage.createPayPeriod(data);
+      res.status(201).json(period);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create pay period error:", error);
+      res.status(500).json({ message: "Failed to create pay period" });
+    }
+  });
+
+  app.patch("/api/pay-periods/:id", isAuthenticated, async (req, res) => {
+    try {
+      const period = await storage.updatePayPeriod(req.params.id, req.body);
+      if (!period) {
+        return res.status(404).json({ message: "Pay period not found" });
+      }
+      res.json(period);
+    } catch (error) {
+      console.error("Update pay period error:", error);
+      res.status(500).json({ message: "Failed to update pay period" });
+    }
+  });
+
+  // Payroll Runs (admin only)
+  app.get("/api/payroll-runs", isAuthenticated, async (req, res) => {
+    try {
+      const { periodId, employeeId } = req.query;
+      
+      let runs;
+      if (periodId) {
+        runs = await storage.getPayrollRunsByPeriod(periodId as string);
+      } else if (employeeId) {
+        runs = await storage.getPayrollRunsByEmployee(employeeId as string);
+      } else {
+        res.status(400).json({ message: "periodId or employeeId required" });
+        return;
+      }
+      
+      res.json(runs);
+    } catch (error) {
+      console.error("Get payroll runs error:", error);
+      res.status(500).json({ message: "Failed to get payroll runs" });
+    }
+  });
+
+  app.get("/api/payroll-runs/:id", isAuthenticated, async (req, res) => {
+    try {
+      const run = await storage.getPayrollRun(req.params.id);
+      if (!run) {
+        return res.status(404).json({ message: "Payroll run not found" });
+      }
+      
+      const adjustments = await storage.getPayrollAdjustments(run.id);
+      res.json({ ...run, adjustments });
+    } catch (error) {
+      console.error("Get payroll run error:", error);
+      res.status(500).json({ message: "Failed to get payroll run" });
+    }
+  });
+
+  app.post("/api/payroll-runs", isAuthenticated, async (req, res) => {
+    try {
+      const data = insertPayrollRunSchema.parse(req.body);
+      const run = await storage.createPayrollRun(data);
+      res.status(201).json(run);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create payroll run error:", error);
+      res.status(500).json({ message: "Failed to create payroll run" });
+    }
+  });
+
+  app.patch("/api/payroll-runs/:id", isAuthenticated, async (req, res) => {
+    try {
+      const run = await storage.updatePayrollRun(req.params.id, req.body);
+      if (!run) {
+        return res.status(404).json({ message: "Payroll run not found" });
+      }
+      res.json(run);
+    } catch (error) {
+      console.error("Update payroll run error:", error);
+      res.status(500).json({ message: "Failed to update payroll run" });
+    }
+  });
+
+  // Payroll Adjustments (admin only)
+  app.post("/api/payroll-adjustments", isAuthenticated, async (req, res) => {
+    try {
+      const data = insertPayrollAdjustmentSchema.parse(req.body);
+      const adjustment = await storage.createPayrollAdjustment(data);
+      res.status(201).json(adjustment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create adjustment error:", error);
+      res.status(500).json({ message: "Failed to create adjustment" });
+    }
+  });
+
+  app.delete("/api/payroll-adjustments/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deletePayrollAdjustment(req.params.id);
+      res.json({ message: "Adjustment deleted" });
+    } catch (error) {
+      console.error("Delete adjustment error:", error);
+      res.status(500).json({ message: "Failed to delete adjustment" });
+    }
+  });
+
+  // Employee Documents (admin only)
+  app.get("/api/employees/:employeeId/documents", isAuthenticated, async (req, res) => {
+    try {
+      const docs = await storage.getEmployeeDocuments(req.params.employeeId);
+      res.json(docs);
+    } catch (error) {
+      console.error("Get employee documents error:", error);
+      res.status(500).json({ message: "Failed to get documents" });
+    }
+  });
+
+  app.post("/api/employees/:employeeId/documents", isAuthenticated, async (req, res) => {
+    try {
+      const data = insertEmployeeDocumentSchema.parse({
+        ...req.body,
+        employeeId: req.params.employeeId
+      });
+      const doc = await storage.createEmployeeDocument(data);
+      res.status(201).json(doc);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create document error:", error);
+      res.status(500).json({ message: "Failed to create document" });
+    }
+  });
+
+  app.delete("/api/employee-documents/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteEmployeeDocument(req.params.id);
+      res.json({ message: "Document deleted" });
+    } catch (error) {
+      console.error("Delete document error:", error);
+      res.status(500).json({ message: "Failed to delete document" });
+    }
+  });
+
+  // Generate Payroll for Period (admin only)
+  app.post("/api/pay-periods/:id/generate-payroll", isAuthenticated, async (req, res) => {
+    try {
+      const period = await storage.getPayPeriod(req.params.id);
+      if (!period) {
+        return res.status(404).json({ message: "Pay period not found" });
+      }
+
+      const employees = await storage.getEmployees();
+      const activeEmployees = employees.filter(e => e.isActive);
+      
+      const runs = [];
+      for (const employee of activeEmployees) {
+        // Get time entries for this period
+        const entries = await storage.getTimeEntriesByEmployee(employee.id);
+        const periodEntries = entries.filter(e => {
+          const clockIn = new Date(e.clockIn);
+          return clockIn >= period.periodStart && clockIn <= period.periodEnd;
+        });
+
+        // Calculate hours
+        let regularHours = 0;
+        for (const entry of periodEntries) {
+          regularHours += parseFloat(entry.totalHours || "0");
+        }
+
+        // Calculate pay
+        const hourlyRate = parseFloat(employee.hourlyRate || "0");
+        const grossPay = regularHours * hourlyRate;
+
+        // Check for existing run
+        const existingRuns = await storage.getPayrollRunsByPeriod(period.id);
+        const existingRun = existingRuns.find(r => r.employeeId === employee.id);
+        
+        if (existingRun) {
+          const updated = await storage.updatePayrollRun(existingRun.id, {
+            regularHours: regularHours.toFixed(2),
+            hourlyRate: hourlyRate.toFixed(2),
+            grossPay: grossPay.toFixed(2),
+            netPay: grossPay.toFixed(2)
+          });
+          runs.push(updated);
+        } else {
+          const run = await storage.createPayrollRun({
+            payPeriodId: period.id,
+            employeeId: employee.id,
+            regularHours: regularHours.toFixed(2),
+            hourlyRate: hourlyRate.toFixed(2),
+            grossPay: grossPay.toFixed(2),
+            netPay: grossPay.toFixed(2)
+          });
+          runs.push(run);
+        }
+      }
+
+      res.json({ message: "Payroll generated", runs });
+    } catch (error) {
+      console.error("Generate payroll error:", error);
+      res.status(500).json({ message: "Failed to generate payroll" });
     }
   });
 

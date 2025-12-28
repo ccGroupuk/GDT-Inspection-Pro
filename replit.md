@@ -1,312 +1,53 @@
 # CCC Group CRM
 
 ## Overview
-A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The system manages clients, jobs, trade partners, and tasks with a visual pipeline for tracking job progress.
-
-## Current State
-- **Version**: MVP Complete + Quote Builder + Job Notes + Financial Tracking + Calendar + Payment Details + SEO Power House + Autopilot Mode + Global Search + Portal Messaging + Help Center
-- **Last Updated**: December 2024
-- **Status**: Fully functional CRM with persistent data storage, detailed quoting, job notes with photo attachments, financial tracking, work calendar, payment details on invoices, AI-powered SEO content creation, automated content scheduling, global search, portal messaging system, and Help Center documentation
-
-## Core Features
-
-### Dashboard
-- Overview stats: Active Jobs, Total Contacts, Trade Partners, Pipeline Value
-- Recent jobs list with status badges
-- Quick stats for in-progress, pending deposits, partner vs in-house jobs
-
-### Job Pipeline
-- Kanban board view with 16 pipeline stages
-- List view alternative
-- Filter by delivery type (In-House, Partner, Hybrid)
-- Search by job number, client, postcode, or service type
-- Automatic job number generation (CCC-YY-XXXX format)
-
-### Contacts
-- Client management with name, phone, email, address, postcode
-- Search and filter functionality
-- Create, edit, delete operations
-
-### Trade Partners
-- Partner profiles with business info, trade category, coverage areas
-- Commission tracking (percentage or fixed)
-- Insurance verification status
-- Rating system (1-5 stars)
-- Active/Inactive status
-- Portal invite system: Send invites, track status, open portal for partner
-
-### Tasks
-- Task management linked to jobs
-- Priority levels (Low, Medium, High)
-- Status tracking (Pending, Completed)
-- Due date tracking with overdue indicators
-
-### Quote Builder
-- Detailed itemized quoting with line items
-- Each line item: description, quantity, unit price, auto-calculated line total
-- Tax toggle with configurable VAT rate (default 20%)
-- Discount options: percentage or fixed amount
-- Live calculation of subtotal, discount, tax, and grand total
-- Quote items displayed on admin job detail and client portal
-- Bulk save endpoint for atomic quote item updates
-
-### Job Notes with Attachments
-- Notes with photo attachments for each job
-- Four visibility levels: internal (admin only), partner, client, all
-- Photo upload via Replit Object Storage with presigned URLs
-- Admin toggles to share quotes and notes with partners
-- Notes displayed on admin job detail page with full CRUD
-- Partner portal shows notes when sharing is enabled (filtered by visibility)
-
-### Client Portal
-- Separate portal for clients to view their job progress
-- Invite system: Admin sends email invites from contacts page
-- Token-based authentication (separate from admin Replit Auth)
-- Job list view showing client's projects only
-- Visual 16-stage progress timeline on job detail page
-- Payment requests section (deposit prompts, balance due)
-- Quote accept/decline: Clients can respond to quotes when status is "Quote Sent"
-  - Accept button moves job status to "Quote Accepted" automatically
-  - Response recorded with timestamp (one-time submission)
-- Profile management page
-- Reviews page with configurable social media links (Facebook, Google, Trustpilot)
-- Payment details displayed on invoices (bank name, account details, accepted methods)
-
-### Partner Portal
-- Separate portal for trade partners to view their assigned jobs
-- Invite system: Admin sends portal invites from Trade Partners page
-- Token-based authentication (7-day invite expiry, 30-day access tokens)
-- Job list view showing partner's assigned projects only
-- Job detail page with client contact info, job notes, and tasks
-- Visual 16-stage progress timeline on job detail page
-- Quote items displayed when admin enables quote sharing
-- Job notes with photos displayed when admin enables notes sharing (filtered by visibility)
-- Access via /partner-portal/* routes
-
-### Portal Messaging
-- Admin can send messages to clients and partners from Contacts and Partners pages
-- Message types: Warning, Announcement, Birthday, Sales, Custom
-- Urgency levels: Low, Normal, High
-- Quick templates for common message types
-- Messages displayed on portal home pages (client and partner)
-- Users can dismiss messages to mark as read
-- Messages include title, body, type icon, and date
-- High urgency messages have distinct styling for visibility
-
-### Help Center
-- Admin management of help articles and categories at /help-center
-- Categories with audience targeting (admin, client, partner, all)
-- Articles support:
-  - Markdown content with basic formatting
-  - Optional video embed (YouTube/Loom)
-  - Published/draft status
-  - Sort ordering
-  - Audience targeting
-- Client Portal Help page at /portal/help
-- Partner Portal Help page at /partner-portal/help
-- Category-based navigation with article search
-- Tables: help_categories, help_articles
-
-### Finance
-- Monthly financial overview with income, expenses, and profit tracking
-- Financial categories: Client Payments, Partner Payments, Materials, Overheads, Vehicle & Fuel, Tools & Equipment, Marketing, Other
-- Manual transaction entry with category, amount, date, description
-- Auto-transaction creation: When job moves to "Paid" status, automatically creates income transaction
-- Partner job profit separation:
-  - For partner jobs: CCC margin (income) vs Partner earnings (expense) are calculated automatically
-  - Income shows only CCC's profit (the margin percentage/amount)
-  - Expense created for partner payment due (what the partner earns)
-  - Clear breakdown in transaction descriptions showing gross, margin, and partner share
-- Optional job linking for transactions
-- Month-by-month navigation to view historical data
-- Summary statistics: total income, expenses, profit, margin percentage
-- Auto vs manual transaction source tracking
-- Cash flow forecast: Shows expected income from confirmed jobs (quote_accepted and beyond)
-- Forecast displays: total confirmed value, deposits pending, balance due
-- List of confirmed jobs with their quoted values and deposit status
-
-### Work Calendar
-- Week-based calendar view for scheduling work
-- Three team types with color-coded visibility:
-  - In-House (blue): CCC team only work
-  - Partner (orange): Trade partner assigned work
-  - Hybrid (purple): Combined CCC + Partner work
-- Event creation with job and partner linking
-- Confirmation workflow:
-  - Admin confirms scheduling from admin calendar
-  - Partners confirm availability from partner portal calendar
-  - Status changes to "confirmed" when both parties confirm
-- Partner portal calendar shows only partner/hybrid events assigned to that partner
-- Statistics dashboard: counts by team type and pending confirmations
-
-### Settings (Admin)
-- Company settings management
-- Review URL configuration for social platforms
-- Client portal invite management
-
-### SEO Power House
-- AI-powered content creation and social media management tool
-- **Business Profile**: Configure business name, trade type, services, locations, brand tone
-- **Brand Voice**: Custom phrases, blacklisted words, preferred CTAs, emoji style, hashtags
-- **Weekly Focus**: Set primary service and location focus for each week
-- Content generator using OpenAI (via Replit AI Integrations - no API key required)
-- Platforms supported: Google Business Profile, Facebook, Instagram
-- Post types: Project Showcase, Before & After, Tips, Testimonials, Updates, Seasonal
-- Content queue with status workflow: Draft → Pending Review → Approved → Scheduled → Published
-- Tables: seo_business_profile, seo_brand_voice, seo_weekly_focus, seo_job_media, seo_content_posts
-
-### Autopilot Mode (SEO Power House)
-- Automated content generation and scheduling system
-- **Platform Configuration**: Enable/disable Facebook, Instagram, Google Business individually
-- **Posting Schedule**: Set posts per week, preferred days, and posting times per platform
-- **Content Mix**: Weighted distribution of content types (project showcase, before/after, tips, testimonials, seasonal)
-- **Approval Workflow**: Optional approval requirement before posts are marked ready
-- **Scheduled Slots**: View upcoming scheduled content with approve/mark-posted actions
-- **Cron Scheduler**: 
-  - Daily content generation at 6 AM based on configured settings
-  - Posting reminders at 12 PM for approved posts due that day
-- Uses weekly focus images when available for multimodal AI content generation
-- Tables: seo_autopilot_settings, seo_autopilot_slots, seo_autopilot_runs
-
-## Project Architecture
-
-```
-client/
-├── src/
-│   ├── components/         # Reusable UI components
-│   │   ├── ui/            # Shadcn UI components
-│   │   ├── app-sidebar.tsx
-│   │   ├── job-card.tsx
-│   │   ├── stat-card.tsx
-│   │   ├── status-badge.tsx
-│   │   ├── theme-provider.tsx
-│   │   └── theme-toggle.tsx
-│   ├── pages/
-│   │   ├── dashboard.tsx
-│   │   ├── jobs.tsx
-│   │   ├── job-form.tsx
-│   │   ├── job-detail.tsx
-│   │   ├── contacts.tsx
-│   │   ├── partners.tsx
-│   │   └── tasks.tsx
-│   ├── App.tsx
-│   └── index.css
-
-server/
-├── db.ts                   # PostgreSQL connection
-├── storage.ts              # Database storage layer
-├── routes.ts               # API endpoints
-└── index.ts
-
-shared/
-└── schema.ts               # Drizzle ORM schemas & types
-```
-
-## Technology Stack
-
-- **Frontend**: React, TypeScript, TanStack Query, Wouter
-- **Styling**: Tailwind CSS, Shadcn UI
-- **Backend**: Express.js, Node.js
-- **Database**: PostgreSQL with Drizzle ORM
-- **Build**: Vite
-
-## API Endpoints
-
-### Dashboard
-- `GET /api/dashboard` - Dashboard data (jobs, contacts, partners, tasks)
-
-### Contacts
-- `GET /api/contacts` - List all contacts
-- `GET /api/contacts/:id` - Get single contact
-- `POST /api/contacts` - Create contact
-- `PATCH /api/contacts/:id` - Update contact
-- `DELETE /api/contacts/:id` - Delete contact
-
-### Jobs
-- `GET /api/jobs` - List all jobs with contacts and partners
-- `GET /api/jobs/:id` - Get job details
-- `POST /api/jobs` - Create job
-- `PATCH /api/jobs/:id` - Update job
-- `DELETE /api/jobs/:id` - Delete job
-
-### Quote Items
-- `GET /api/jobs/:jobId/quote-items` - List quote items for a job
-- `PUT /api/jobs/:jobId/quote-items` - Bulk update quote items (replaces all items)
-
-### Trade Partners
-- `GET /api/partners` - List all partners
-- `GET /api/partners/:id` - Get single partner
-- `POST /api/partners` - Create partner
-- `PATCH /api/partners/:id` - Update partner
-- `DELETE /api/partners/:id` - Delete partner
-
-### Job Notes
-- `GET /api/jobs/:jobId/notes` - List notes for a job (with attachments)
-- `POST /api/jobs/:jobId/notes` - Create note
-- `PATCH /api/jobs/:jobId/notes/:noteId` - Update note
-- `DELETE /api/jobs/:jobId/notes/:noteId` - Delete note
-- `POST /api/jobs/:jobId/notes/:noteId/attachments` - Add attachment to note
-- `DELETE /api/notes/attachments/:attachmentId` - Remove attachment
-
-### Partner Sharing
-- `PATCH /api/jobs/:jobId/share-quote` - Toggle quote sharing with partner
-- `PATCH /api/jobs/:jobId/share-notes` - Toggle notes sharing with partner
-
-### Client Portal Quote Response
-- `POST /api/portal/jobs/:jobId/quote-response` - Accept or decline a quote (body: { response: 'accepted' | 'declined' })
-
-### Partner Portal API
-- `GET /api/partner-portal/jobs/:jobId/quote-items` - Get quote items (if sharing enabled)
-- `GET /api/partner-portal/jobs/:jobId/notes` - Get notes (if sharing enabled, filtered by visibility)
-
-### Tasks
-- `GET /api/tasks` - List all tasks with jobs
-- `GET /api/tasks/:id` - Get single task
-- `POST /api/tasks` - Create task
-- `PATCH /api/tasks/:id` - Update task
-- `DELETE /api/tasks/:id` - Delete task
-
-## Pipeline Stages
-1. New Enquiry
-2. Contacted
-3. Survey Booked
-4. Quoting
-5. Quote Sent
-6. Follow-Up Due
-7. Quote Accepted
-8. Deposit Requested
-9. Deposit Paid
-10. Scheduled
-11. In Progress
-12. Completed
-13. Invoice Sent
-14. Paid
-15. Closed
-16. Lost
-
-## Service Types
-- Bespoke Carpentry
-- Under-Stairs Storage
-- Media Walls
-- Fitted Wardrobes
-- Kitchens / Joinery
-- Bathrooms
-- Plumbing
-- Electrical
-- Heating
-- Drains
-- Full Home Project
-- Other
-
-## Delivery Types
-- **In-House**: Jobs handled by CCC team
-- **Partner**: Jobs assigned to trade partners
-- **Hybrid**: Combined CCC + Partner work
-
-## Database Commands
-- Push schema: `npm run db:push`
-- Force push: `npm run db:push --force`
+A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group) designed to manage clients, jobs, trade partners, and tasks. It features a visual pipeline for job tracking, detailed quoting, financial tracking, a work calendar, and integrated portals for clients, partners, and employees. The system also includes advanced functionalities like AI-powered SEO content generation and automated scheduling to enhance business operations and market presence.
 
 ## User Preferences
-- Light/Dark theme toggle
-- Collapsible sidebar navigation
+- I prefer simple language and clear explanations.
+- I want iterative development with regular check-ins.
+- Ask for confirmation before implementing major changes or new features.
+- Provide detailed explanations for complex technical decisions.
+- Do not make changes to the `client/src/components/ui/` folder without explicit instruction.
+- I prefer a clean, readable code style with consistent formatting.
+- I prefer to be presented with options and their implications before decisions are made.
+- Light/Dark theme toggle for UI.
+- Collapsible sidebar navigation.
+
+## System Architecture
+The CRM is built with a clear separation of concerns, utilizing a modern web stack. The frontend is developed with React and TypeScript, styled with Tailwind CSS and Shadcn UI, providing a responsive and intuitive user experience. The backend leverages Node.js with Express.js to expose a comprehensive API. Data persistence is handled by PostgreSQL, managed through Drizzle ORM.
+
+**Key Features:**
+- **Dashboard**: Provides an overview of business metrics, active jobs, contacts, trade partners, and pipeline value.
+- **Job Pipeline**: A Kanban board and list view for tracking job progress through 16 defined stages, with filtering and search capabilities.
+- **Contact & Partner Management**: Comprehensive CRUD operations for clients and trade partners, including commission tracking and a partner rating system.
+- **Task Management**: Job-linked tasks with priority levels and due date tracking.
+- **Quote Builder**: Detailed itemized quoting with real-time calculations, tax, and discount options.
+- **Job Notes & Attachments**: Notes with photo attachments, featuring four visibility levels (internal, partner, client, all) and integration with Replit Object Storage for uploads.
+- **Client & Partner Portals**: Separate, token-authenticated portals allowing clients to track job progress, accept quotes, and manage profiles, and partners to view assigned jobs, notes, and quotes.
+- **Portal Messaging**: Admin-to-portal messaging system with various message types, urgency levels, and quick templates.
+- **Help Center**: Admin-managed knowledge base with categorised articles, Markdown support, video embeds, and audience targeting for different user roles.
+- **Employee Management**: Profiles, role assignments, time tracking (clock in/out, break tracking), and a payroll system with automatic generation and adjustments. Includes a dedicated employee portal.
+- **Financial Tracking**: Monthly overview of income, expenses, and profit, with manual and auto-generated transactions, cash flow forecasting, and specific handling for partner job financials.
+- **Work Calendar**: Week-based scheduling with color-coded team types (In-House, Partner, Hybrid) and a confirmation workflow for events.
+- **SEO Power House**: AI-powered content generation and social media management for Google Business Profile, Facebook, and Instagram. Features include business profile configuration, brand voice customization, weekly focus settings, and a content queue workflow.
+- **Autopilot Mode**: Automated content generation and scheduling, configurable per platform with posting schedules and content mix distribution. Includes a daily cron scheduler for content generation and reminders.
+
+**UI/UX Decisions:**
+- **Theming**: Supports light/dark mode.
+- **Components**: Utilizes Shadcn UI for consistent, accessible, and reusable components.
+- **Navigation**: Features a collapsible sidebar for efficient navigation.
+
+**Technical Implementations:**
+- **Frontend**: React, TypeScript, TanStack Query for data fetching, Wouter for routing.
+- **Backend**: Express.js for RESTful APIs, Node.js runtime.
+- **Database**: PostgreSQL for relational data storage, Drizzle ORM for type-safe database interactions.
+- **Authentication**: Token-based authentication for portals, password-based with Bcrypt hashing for employee logins, including features like failed login tracking and session management.
+- **Photo Storage**: Replit Object Storage with presigned URLs for secure and efficient image handling.
+- **AI Integration**: Utilizes Replit AI Integrations for SEO content generation, abstracting direct API key management.
+
+## External Dependencies
+- **Replit Object Storage**: Used for storing job note attachments (photos).
+- **OpenAI (via Replit AI Integrations)**: Powers the SEO content generation and social media management features.
+- **PostgreSQL**: The primary database for all application data.
+- **YouTube/Loom**: Supported for video embeds within Help Center articles.
