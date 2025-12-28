@@ -61,3 +61,15 @@ The CRM is built with a clear separation of concerns, utilizing a modern web sta
 - **OpenAI (via Replit AI Integrations)**: Powers the SEO content generation and social media management features.
 - **PostgreSQL**: The primary database for all application data.
 - **YouTube/Loom**: Supported for video embeds within Help Center articles.
+- **Resend (Email)**: Transactional email service for sending login credentials, portal access links, reminders, and notifications. Backend ready in `server/email.ts` - requires `RESEND_API_KEY` secret or Replit Resend integration to enable.
+
+## Pending Integrations
+- **Email (Resend)**: Backend email service is fully implemented with templates for:
+  - Employee login credentials
+  - Client portal access links
+  - Partner portal access links
+  - Job reminders
+  - Quote notifications
+  - Generic emails
+  
+  To enable: Either use Replit's Resend integration (recommended) or add `RESEND_API_KEY` as a secret. Also set `EMAIL_FROM` env var for custom sender address (default: `CCC Group <noreply@cccgroup.co.uk>`).

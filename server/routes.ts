@@ -4636,6 +4636,238 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   // Register object storage routes
   registerObjectStorageRoutes(app);
 
+  // Email endpoints
+  const { 
+    isEmailConfigured, 
+    sendEmployeeLoginCredentials, 
+    sendClientPortalAccess, 
+    sendPartnerPortalAccess,
+    sendJobReminder,
+    sendQuoteNotification,
+    sendGenericEmail 
+  } = await import("./email");
+
+  app.get("/api/email/status", isAdminAuthenticated, async (req, res) => {
+    res.json({ configured: isEmailConfigured() });
+  });
+
+  app.post("/api/email/send-employee-credentials", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { employeeId, password } = req.body;
+      
+      if (!employeeId || !password) {
+        return res.status(400).json({ message: "Employee ID and password required" });
+      }
+
+      const employee = await storage.getEmployee(employeeId);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      if (!employee.email) {
+        return res.status(400).json({ message: "Employee has no email address" });
+      }
+
+      const portalUrl = `${req.protocol}://${req.get('host')}/employee-portal`;
+      const result = await sendEmployeeLoginCredentials(
+        employee.email,
+        employee.firstName,
+        employee.email,
+        password,
+        portalUrl
+      );
+
+      if (result.success) {
+        res.json({ message: "Email sent successfully", messageId: result.messageId });
+      } else {
+        res.status(500).json({ message: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Send employee credentials error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/email/send-client-access", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { contactId } = req.body;
+      
+      if (!contactId) {
+        return res.status(400).json({ message: "Contact ID required" });
+      }
+
+      const contact = await storage.getContact(contactId);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      if (!contact.email) {
+        return res.status(400).json({ message: "Contact has no email address" });
+      }
+
+      const portalAccess = await storage.getClientPortalAccess(contactId);
+      if (!portalAccess) {
+        return res.status(400).json({ message: "Contact has no portal access. Generate access first." });
+      }
+
+      const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
+      const result = await sendClientPortalAccess(
+        contact.email,
+        contact.name,
+        portalUrl,
+        portalAccess.accessToken
+      );
+
+      if (result.success) {
+        res.json({ message: "Email sent successfully", messageId: result.messageId });
+      } else {
+        res.status(500).json({ message: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Send client access error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/email/send-partner-access", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { partnerId } = req.body;
+      
+      if (!partnerId) {
+        return res.status(400).json({ message: "Partner ID required" });
+      }
+
+      const partner = await storage.getTradePartner(partnerId);
+      if (!partner) {
+        return res.status(404).json({ message: "Partner not found" });
+      }
+
+      if (!partner.email) {
+        return res.status(400).json({ message: "Partner has no email address" });
+      }
+
+      const portalAccess = await storage.getPartnerPortalAccess(partnerId);
+      if (!portalAccess) {
+        return res.status(400).json({ message: "Partner has no portal access. Generate access first." });
+      }
+
+      const portalUrl = `${req.protocol}://${req.get('host')}/partner-portal`;
+      const result = await sendPartnerPortalAccess(
+        partner.email,
+        partner.contactName || partner.businessName,
+        portalUrl,
+        portalAccess.accessToken
+      );
+
+      if (result.success) {
+        res.json({ message: "Email sent successfully", messageId: result.messageId });
+      } else {
+        res.status(500).json({ message: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Send partner access error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/email/send-job-reminder", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { email, recipientName, jobTitle, jobAddress, scheduledDate, scheduledTime, notes } = req.body;
+      
+      if (!email || !recipientName || !jobTitle || !scheduledDate || !scheduledTime) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const result = await sendJobReminder(
+        email,
+        recipientName,
+        jobTitle,
+        jobAddress || "Address TBD",
+        scheduledDate,
+        scheduledTime,
+        notes
+      );
+
+      if (result.success) {
+        res.json({ message: "Reminder sent successfully", messageId: result.messageId });
+      } else {
+        res.status(500).json({ message: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Send job reminder error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/email/send-quote-notification", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { contactId, jobId, quoteAmount } = req.body;
+      
+      if (!contactId || !jobId || !quoteAmount) {
+        return res.status(400).json({ message: "Contact ID, Job ID, and quote amount required" });
+      }
+
+      const contact = await storage.getContact(contactId);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      if (!contact.email) {
+        return res.status(400).json({ message: "Contact has no email address" });
+      }
+
+      const portalAccess = await storage.getClientPortalAccess(contactId);
+      if (!portalAccess) {
+        return res.status(400).json({ message: "Contact has no portal access" });
+      }
+
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
+      const result = await sendQuoteNotification(
+        contact.email,
+        contact.name,
+        job.serviceType,
+        quoteAmount,
+        portalUrl,
+        portalAccess.accessToken
+      );
+
+      if (result.success) {
+        res.json({ message: "Quote notification sent successfully", messageId: result.messageId });
+      } else {
+        res.status(500).json({ message: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Send quote notification error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/email/send-generic", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { to, subject, message, recipientName } = req.body;
+      
+      if (!to || !subject || !message) {
+        return res.status(400).json({ message: "Recipient email, subject, and message required" });
+      }
+
+      const result = await sendGenericEmail(to, subject, message, recipientName);
+
+      if (result.success) {
+        res.json({ message: "Email sent successfully", messageId: result.messageId });
+      } else {
+        res.status(500).json({ message: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Send generic email error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   return httpServer;
 }
 
