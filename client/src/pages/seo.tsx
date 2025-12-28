@@ -785,6 +785,25 @@ function ContentCreatorSection() {
   const [location, setLocation] = useState("Cardiff");
   const [mediaContext, setMediaContext] = useState("");
   const [generatedContent, setGeneratedContent] = useState("");
+  const [selectedFocusId, setSelectedFocusId] = useState<string>("");
+
+  const { data: focusList = [] } = useQuery<SeoWeeklyFocus[]>({
+    queryKey: ["/api/seo/weekly-focus"],
+  });
+
+  const selectedFocus = focusList.find(f => f.id === selectedFocusId);
+
+  const handleFocusSelect = (focusId: string) => {
+    setSelectedFocusId(focusId);
+    const focus = focusList.find(f => f.id === focusId);
+    if (focus) {
+      setService(focus.primaryService);
+      setLocation(focus.primaryLocation);
+      if (focus.focusImageCaption) {
+        setMediaContext(focus.focusImageCaption);
+      }
+    }
+  };
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -794,12 +813,20 @@ function ContentCreatorSection() {
         service,
         location,
         mediaContext,
+        imageUrl: selectedFocus?.focusImageUrl || undefined,
+        imageCaption: selectedFocus?.focusImageCaption || undefined,
       });
-      return res.json() as Promise<{ content: string }>;
+      return res.json() as Promise<{ content: string; usedImage?: boolean; imageUrlUsed?: string }>;
     },
-    onSuccess: (data: { content: string }) => {
+    onSuccess: (data: { content: string; usedImage?: boolean; imageUrlUsed?: string }) => {
       setGeneratedContent(data.content);
-      toast({ title: "Content generated", description: "AI has created your post content." });
+      let description = "AI has created your post content.";
+      if (data.usedImage && data.imageUrlUsed) {
+        description = "AI analyzed your uploaded image and created matching content.";
+      } else if (selectedFocus?.focusImageCaption) {
+        description = "AI used your image description to create relevant content.";
+      }
+      toast({ title: "Content generated", description });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to generate content.", variant: "destructive" });
@@ -839,6 +866,47 @@ function ContentCreatorSection() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {focusList.length > 0 && (
+            <div className="space-y-2">
+              <Label>Weekly Focus (optional)</Label>
+              <Select value={selectedFocusId} onValueChange={handleFocusSelect}>
+                <SelectTrigger data-testid="select-weekly-focus">
+                  <SelectValue placeholder="Select a weekly focus to use its settings" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {focusList.map((focus) => (
+                    <SelectItem key={focus.id} value={focus.id}>
+                      <div className="flex items-center gap-2">
+                        {focus.focusImageUrl && <ImageIcon className="w-4 h-4 text-primary" />}
+                        <span>{focus.primaryService} - {focus.primaryLocation}</span>
+                        {focus.status === "active" && <Badge variant="secondary" className="ml-1 text-xs">Active</Badge>}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedFocus?.focusImageUrl && (
+                <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                  <img 
+                    src={selectedFocus.focusImageUrl} 
+                    alt="Focus image" 
+                    className="w-12 h-12 object-cover rounded"
+                  />
+                  <div className="text-sm">
+                    <p className="font-medium flex items-center gap-1">
+                      <ImageIcon className="w-3 h-3" />
+                      AI will use this image
+                    </p>
+                    {selectedFocus.focusImageCaption && (
+                      <p className="text-muted-foreground text-xs">{selectedFocus.focusImageCaption}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Platform</Label>
             <Select value={platform} onValueChange={setPlatform}>

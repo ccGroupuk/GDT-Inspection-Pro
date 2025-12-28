@@ -2566,7 +2566,7 @@ export async function registerRoutes(
   // AI Content Generation endpoint (uses Replit AI Integrations)
   app.post("/api/seo/generate-content", async (req, res) => {
     try {
-      const { platform, postType, service, location, tone, keywords, mediaContext } = req.body;
+      const { platform, postType, service, location, tone, keywords, mediaContext, imageUrl, imageCaption } = req.body;
       
       // Build prompt based on business profile and brand voice
       const businessProfile = await storage.getSeoBusinessProfile();
@@ -2583,10 +2583,10 @@ export async function registerRoutes(
         tradeType: businessProfile?.tradeType || "Carpentry & Home Improvements",
         customPhrases: brandVoice?.customPhrases || [],
         blacklistedPhrases: brandVoice?.blacklistedPhrases || [],
-        preferredCtas: brandVoice?.preferredCtas || [],
+        preferredCtas: brandVoice?.preferredCTAs || [],
         hashtags: brandVoice?.hashtagPreferences || [],
         locationKeywords: brandVoice?.locationKeywords || [],
-        mediaContext,
+        mediaContext: imageCaption || mediaContext,
       });
 
       // Use OpenAI via Replit AI Integrations
@@ -2596,12 +2596,55 @@ export async function registerRoutes(
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
       
+      // Build messages - try multimodal with vision if image provided
+      let usedImageSuccessfully = false;
+      
+      // Construct absolute URL for the image if provided
+      let absoluteImageUrl: string | null = null;
+      if (imageUrl) {
+        if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+          absoluteImageUrl = imageUrl;
+        } else {
+          // Construct URL from Replit environment
+          const replSlug = process.env.REPL_SLUG;
+          const replOwner = process.env.REPL_OWNER;
+          if (replSlug && replOwner) {
+            absoluteImageUrl = `https://${replSlug}.${replOwner}.repl.co${imageUrl}`;
+          }
+        }
+      }
+      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages: any[] = [
+        { role: "system", content: "You are a social media content creator for a local trade business. Write engaging, professional posts that highlight quality work and build local community trust. When analyzing an image, describe the craftsmanship and quality you observe, and create content that showcases this work." }
+      ];
+
+      if (absoluteImageUrl) {
+        // Multimodal request with vision - GPT-4o can analyze images
+        const textPrompt = imageCaption 
+          ? `${prompt}\n\nThe uploaded image shows: ${imageCaption}. Please analyze the image and create compelling content that highlights this work.`
+          : `${prompt}\n\nPlease analyze the uploaded image showing our craftsmanship and create content that highlights the quality of this work.`;
+        
+        messages.push({
+          role: "user",
+          content: [
+            { type: "text", text: textPrompt },
+            { type: "image_url", image_url: { url: absoluteImageUrl, detail: "low" } }
+          ]
+        });
+        usedImageSuccessfully = true;
+      } else if (imageUrl && imageCaption) {
+        // Fallback: URL couldn't be constructed but we have a caption - use caption as context
+        const textPrompt = `${prompt}\n\nThis post will feature an image showing: ${imageCaption}. Create content that complements and highlights this visual of our work.`;
+        messages.push({ role: "user", content: textPrompt });
+      } else {
+        // Text-only request
+        messages.push({ role: "user", content: prompt });
+      }
+      
       const completion = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "You are a social media content creator for a local trade business. Write engaging, professional posts that highlight quality work and build local community trust." },
-          { role: "user", content: prompt }
-        ],
+        model: usedImageSuccessfully ? "gpt-4o" : "gpt-4o-mini",
+        messages,
         max_completion_tokens: 500,
       });
 
@@ -2611,6 +2654,8 @@ export async function registerRoutes(
         content: generatedContent,
         platform,
         postType,
+        usedImage: usedImageSuccessfully,
+        imageUrlUsed: absoluteImageUrl || undefined,
       });
     } catch (error) {
       console.error("Generate content error:", error);
