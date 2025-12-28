@@ -129,6 +129,43 @@ export default function JobDetail() {
     enabled: Boolean(id),
   });
 
+  // Fetch partner quotes for this job (admin review)
+  interface PartnerQuoteItem {
+    id: string;
+    description: string;
+    quantity: number;
+    unitPrice: string;
+    total: string;
+  }
+  interface PartnerQuote {
+    id: string;
+    jobId: string;
+    partnerId: string;
+    surveyId?: string | null;
+    status: string;
+    subtotal: string;
+    taxEnabled: boolean;
+    taxRate: string;
+    taxAmount: string;
+    total: string;
+    notes?: string | null;
+    validUntil?: Date | null;
+    adminNotes?: string | null;
+    respondedAt?: Date | null;
+    submittedAt?: Date | null;
+    partner?: TradePartner;
+    items: PartnerQuoteItem[];
+  }
+  const { data: partnerQuotes } = useQuery<PartnerQuote[]>({
+    queryKey: ["/api/jobs", id, "partner-quotes"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/partner-quotes`);
+      if (!response.ok) throw new Error("Failed to fetch partner quotes");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
   // Schedule proposal dialog state
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [proposedStartDate, setProposedStartDate] = useState("");
@@ -415,6 +452,33 @@ export default function JobDetail() {
     },
     onError: () => {
       toast({ title: "Error deleting survey", variant: "destructive" });
+    },
+  });
+
+  // Partner quote mutations
+  const acceptPartnerQuoteMutation = useMutation({
+    mutationFn: async (quoteId: string) => {
+      return apiRequest("POST", `/api/partner-quotes/${quoteId}/accept`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "partner-quotes"] });
+      toast({ title: "Partner quote accepted" });
+    },
+    onError: () => {
+      toast({ title: "Error accepting partner quote", variant: "destructive" });
+    },
+  });
+
+  const declinePartnerQuoteMutation = useMutation({
+    mutationFn: async (quoteId: string) => {
+      return apiRequest("POST", `/api/partner-quotes/${quoteId}/decline`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "partner-quotes"] });
+      toast({ title: "Partner quote declined" });
+    },
+    onError: () => {
+      toast({ title: "Error declining partner quote", variant: "destructive" });
     },
   });
 
@@ -1291,6 +1355,103 @@ export default function JobDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* Partner Quotes Section - for admin approval */}
+          {partnerQuotes && partnerQuotes.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Receipt className="w-4 h-4" />
+                  Partner Quotes
+                  {partnerQuotes.some(q => q.status === "submitted") && (
+                    <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 ml-2">
+                      Awaiting Review
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {partnerQuotes.map((quote) => (
+                  <div key={quote.id} className="p-3 rounded-md bg-muted/50 space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm font-medium">
+                        {quote.partner?.businessName || "Unknown Partner"}
+                      </span>
+                      <Badge variant={
+                        quote.status === "accepted" ? "default" :
+                        quote.status === "declined" ? "destructive" :
+                        quote.status === "submitted" ? "secondary" :
+                        "outline"
+                      }>
+                        {quote.status.charAt(0).toUpperCase() + quote.status.slice(1)}
+                      </Badge>
+                    </div>
+                    
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Total: </span>
+                      <span className="font-medium">£{parseFloat(quote.total || "0").toFixed(2)}</span>
+                      {quote.taxEnabled && (
+                        <span className="text-xs text-muted-foreground ml-2">
+                          (inc. VAT)
+                        </span>
+                      )}
+                    </div>
+                    
+                    {quote.items && quote.items.length > 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        {quote.items.length} item{quote.items.length !== 1 ? 's' : ''}
+                        <ul className="mt-1 space-y-0.5 pl-3">
+                          {quote.items.slice(0, 3).map((item, idx) => (
+                            <li key={idx}>
+                              {item.quantity}x {item.description} - £{parseFloat(item.total).toFixed(2)}
+                            </li>
+                          ))}
+                          {quote.items.length > 3 && (
+                            <li className="text-muted-foreground">+{quote.items.length - 3} more...</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {quote.notes && (
+                      <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
+                        {quote.notes}
+                      </p>
+                    )}
+                    
+                    {quote.submittedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        Submitted: {new Date(quote.submittedAt).toLocaleDateString()}
+                      </p>
+                    )}
+                    
+                    {quote.status === "submitted" && (
+                      <div className="flex items-center gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          onClick={() => acceptPartnerQuoteMutation.mutate(quote.id)}
+                          disabled={acceptPartnerQuoteMutation.isPending}
+                          data-testid={`button-accept-partner-quote-${quote.id}`}
+                        >
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => declinePartnerQuoteMutation.mutate(quote.id)}
+                          disabled={declinePartnerQuoteMutation.isPending}
+                          data-testid={`button-decline-partner-quote-${quote.id}`}
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
