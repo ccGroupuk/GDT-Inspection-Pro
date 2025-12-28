@@ -40,6 +40,40 @@ function getSurveyStatusColor(status: string) {
   }
 }
 
+function getBookingStatusColor(status: string | null) {
+  switch (status) {
+    case "pending_client":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+    case "client_accepted":
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    case "client_declined":
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+    case "client_counter":
+      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
+    case "confirmed":
+      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200";
+    default:
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+  }
+}
+
+function getBookingStatusLabel(status: string | null) {
+  switch (status) {
+    case "pending_client":
+      return "Awaiting Client";
+    case "client_accepted":
+      return "Client Accepted";
+    case "client_declined":
+      return "Client Declined";
+    case "client_counter":
+      return "Client Counter-Proposal";
+    case "confirmed":
+      return "Confirmed";
+    default:
+      return null;
+  }
+}
+
 export default function PartnerPortalSurveys() {
   const { token, isAuthenticated, logout } = usePartnerPortalAuth();
   const [, setLocation] = useLocation();
@@ -48,6 +82,7 @@ export default function PartnerPortalSurveys() {
   const [acceptDialogOpen, setAcceptDialogOpen] = useState(false);
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [proposeDialogOpen, setProposeDialogOpen] = useState(false);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [selectedSurvey, setSelectedSurvey] = useState<SurveyWithDetails | null>(null);
   
@@ -56,6 +91,9 @@ export default function PartnerPortalSurveys() {
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleNotes, setScheduleNotes] = useState("");
+  const [proposeDate, setProposeDate] = useState("");
+  const [proposeTime, setProposeTime] = useState("");
+  const [proposeNotes, setProposeNotes] = useState("");
   const [surveyDetails, setSurveyDetails] = useState("");
   const [completeNotes, setCompleteNotes] = useState("");
 
@@ -170,6 +208,58 @@ export default function PartnerPortalSurveys() {
     },
   });
 
+  const proposeMutation = useMutation({
+    mutationFn: async (data: { surveyId: string; proposedDate: string; proposedTime?: string; notes?: string }) => {
+      const res = await fetch(`/api/partner-portal/surveys/${data.surveyId}/propose`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          proposedDate: data.proposedDate,
+          proposedTime: data.proposedTime,
+          notes: data.notes,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to propose date");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/surveys"] });
+      toast({ title: "Date proposal sent to client" });
+      setProposeDialogOpen(false);
+      setSelectedSurvey(null);
+      setProposeDate("");
+      setProposeTime("");
+      setProposeNotes("");
+    },
+    onError: () => {
+      toast({ title: "Error sending proposal", variant: "destructive" });
+    },
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: async (surveyId: string) => {
+      const res = await fetch(`/api/partner-portal/surveys/${surveyId}/confirm`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to confirm survey");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/surveys"] });
+      toast({ title: "Survey appointment confirmed" });
+    },
+    onError: () => {
+      toast({ title: "Error confirming survey", variant: "destructive" });
+    },
+  });
+
   const completeMutation = useMutation({
     mutationFn: async (data: { surveyId: string; surveyDetails?: string; notes?: string }) => {
       const res = await fetch(`/api/partner-portal/surveys/${data.surveyId}/complete`, {
@@ -217,6 +307,14 @@ export default function PartnerPortalSurveys() {
     setScheduleTime(survey.scheduledTime || "");
     setScheduleNotes("");
     setScheduleDialogOpen(true);
+  };
+
+  const openProposeDialog = (survey: SurveyWithDetails) => {
+    setSelectedSurvey(survey);
+    setProposeDate(survey.proposedDate ? new Date(survey.proposedDate).toISOString().split('T')[0] : "");
+    setProposeTime(survey.proposedTime || "");
+    setProposeNotes("");
+    setProposeDialogOpen(true);
   };
 
   const openCompleteDialog = (survey: SurveyWithDetails) => {
@@ -443,9 +541,16 @@ export default function PartnerPortalSurveys() {
                               {survey.job?.serviceType}
                             </p>
                           </div>
-                          <Badge className={getSurveyStatusColor(survey.status)}>
-                            {survey.status.charAt(0).toUpperCase() + survey.status.slice(1)}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={getSurveyStatusColor(survey.status)}>
+                              {survey.status.charAt(0).toUpperCase() + survey.status.slice(1)}
+                            </Badge>
+                            {getBookingStatusLabel(survey.bookingStatus) && (
+                              <Badge className={getBookingStatusColor(survey.bookingStatus)}>
+                                {getBookingStatusLabel(survey.bookingStatus)}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </CardHeader>
                       <CardContent>
@@ -462,34 +567,106 @@ export default function PartnerPortalSurveys() {
                               <span>{survey.job.jobPostcode}</span>
                             </div>
                           )}
-                          {survey.scheduledDate && (
+                          {survey.scheduledDate && survey.status === "scheduled" && (
                             <div className="flex items-center gap-1">
                               <Calendar className="w-4 h-4" />
-                              <span>{new Date(survey.scheduledDate).toLocaleDateString()}</span>
+                              <span>Scheduled: {new Date(survey.scheduledDate).toLocaleDateString()}</span>
                               {survey.scheduledTime && <span>at {survey.scheduledTime}</span>}
                             </div>
                           )}
+                          {survey.proposedDate && survey.bookingStatus === "pending_client" && (
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-4 h-4" />
+                              <span>Proposed: {new Date(survey.proposedDate).toLocaleDateString()}</span>
+                              {survey.proposedTime && <span>at {survey.proposedTime}</span>}
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          {survey.status === "accepted" && (
+
+                        {survey.bookingStatus === "client_counter" && survey.clientProposedDate && (
+                          <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 p-3 rounded-md mb-4">
+                            <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
+                              Client proposed alternative date:
+                            </p>
+                            <p className="text-sm text-orange-700 dark:text-orange-300">
+                              {new Date(survey.clientProposedDate).toLocaleDateString()}
+                              {survey.clientProposedTime && ` at ${survey.clientProposedTime}`}
+                            </p>
+                            {survey.clientNotes && (
+                              <p className="text-sm text-orange-600 dark:text-orange-400 mt-1">
+                                {survey.clientNotes}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {survey.bookingStatus === "client_accepted" && (
+                          <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-3 rounded-md mb-4">
+                            <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                              Client accepted your proposed date. Click Confirm to finalise the appointment.
+                            </p>
+                          </div>
+                        )}
+
+                        {survey.bookingStatus === "client_declined" && (
+                          <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 p-3 rounded-md mb-4">
+                            <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                              Client declined this date. Please propose an alternative.
+                            </p>
+                            {survey.clientNotes && (
+                              <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                                {survey.clientNotes}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {survey.status === "accepted" && !survey.bookingStatus && (
                             <Button
                               size="sm"
-                              onClick={() => openScheduleDialog(survey)}
-                              data-testid={`button-schedule-survey-${survey.id}`}
+                              onClick={() => openProposeDialog(survey)}
+                              data-testid={`button-propose-date-${survey.id}`}
                             >
                               <Calendar className="w-4 h-4 mr-1" />
-                              Schedule
+                              Propose Date
                             </Button>
                           )}
-                          <Button
-                            size="sm"
-                            variant={survey.status === "scheduled" ? "default" : "outline"}
-                            onClick={() => openCompleteDialog(survey)}
-                            data-testid={`button-complete-survey-${survey.id}`}
-                          >
-                            <Check className="w-4 h-4 mr-1" />
-                            Complete
-                          </Button>
+                          
+                          {(survey.bookingStatus === "client_declined" || survey.bookingStatus === "client_counter") && (
+                            <Button
+                              size="sm"
+                              onClick={() => openProposeDialog(survey)}
+                              data-testid={`button-propose-new-date-${survey.id}`}
+                            >
+                              <Calendar className="w-4 h-4 mr-1" />
+                              Propose New Date
+                            </Button>
+                          )}
+
+                          {(survey.bookingStatus === "client_accepted" || survey.bookingStatus === "client_counter") && (
+                            <Button
+                              size="sm"
+                              onClick={() => confirmMutation.mutate(survey.id)}
+                              disabled={confirmMutation.isPending}
+                              data-testid={`button-confirm-survey-${survey.id}`}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              {confirmMutation.isPending ? "Confirming..." : "Confirm Appointment"}
+                            </Button>
+                          )}
+
+                          {survey.status === "scheduled" && (
+                            <Button
+                              size="sm"
+                              onClick={() => openCompleteDialog(survey)}
+                              data-testid={`button-complete-survey-${survey.id}`}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Complete Survey
+                            </Button>
+                          )}
+
                           <Link href={`/partner-portal/quotes/new?surveyId=${survey.id}&jobId=${survey.jobId}`}>
                             <Button size="sm" variant="outline" data-testid={`button-create-quote-${survey.id}`}>
                               <FileText className="w-4 h-4 mr-1" />
@@ -711,6 +888,74 @@ export default function PartnerPortalSurveys() {
               data-testid="button-confirm-schedule"
             >
               {scheduleMutation.isPending ? "Scheduling..." : "Schedule Visit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={proposeDialogOpen} onOpenChange={setProposeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Propose Survey Date</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Propose a date and time for the survey. The client will be notified and can accept, decline, or suggest an alternative.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Proposed Date</Label>
+                <Input
+                  type="date"
+                  value={proposeDate}
+                  onChange={(e) => setProposeDate(e.target.value)}
+                  data-testid="input-propose-date"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Time (Optional)</Label>
+                <Input
+                  type="time"
+                  value={proposeTime}
+                  onChange={(e) => setProposeTime(e.target.value)}
+                  data-testid="input-propose-time"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Message to Client (Optional)</Label>
+              <Textarea
+                value={proposeNotes}
+                onChange={(e) => setProposeNotes(e.target.value)}
+                placeholder="Any message for the client..."
+                className="min-h-[80px]"
+                data-testid="textarea-propose-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProposeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!proposeDate) {
+                  toast({ title: "Please select a date", variant: "destructive" });
+                  return;
+                }
+                if (selectedSurvey) {
+                  proposeMutation.mutate({
+                    surveyId: selectedSurvey.id,
+                    proposedDate: proposeDate,
+                    proposedTime: proposeTime || undefined,
+                    notes: proposeNotes || undefined,
+                  });
+                }
+              }}
+              disabled={proposeMutation.isPending}
+              data-testid="button-confirm-propose"
+            >
+              {proposeMutation.isPending ? "Sending..." : "Send to Client"}
             </Button>
           </DialogFooter>
         </DialogContent>
