@@ -3129,6 +3129,234 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PORTAL MESSAGES ====================
+
+  // Admin: Get all messages
+  app.get("/api/portal-messages", async (req, res) => {
+    try {
+      const messages = await storage.getPortalMessages();
+      res.json(messages);
+    } catch (error) {
+      console.error("Get portal messages error:", error);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  // Admin: Get messages for specific client
+  app.get("/api/contacts/:id/messages", async (req, res) => {
+    try {
+      const messages = await storage.getPortalMessagesByAudience("client", req.params.id);
+      res.json(messages);
+    } catch (error) {
+      console.error("Get client messages error:", error);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  // Admin: Get messages for specific partner
+  app.get("/api/partners/:id/messages", async (req, res) => {
+    try {
+      const messages = await storage.getPortalMessagesByAudience("partner", req.params.id);
+      res.json(messages);
+    } catch (error) {
+      console.error("Get partner messages error:", error);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  // Admin: Create message for client
+  app.post("/api/contacts/:id/messages", async (req, res) => {
+    try {
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      const data = {
+        audienceType: "client" as const,
+        audienceId: req.params.id,
+        title: req.body.title,
+        body: req.body.body,
+        messageType: req.body.messageType || "announcement",
+        urgency: req.body.urgency || "normal",
+        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
+        createdBy: req.body.createdBy,
+      };
+
+      const message = await storage.createPortalMessage(data);
+      res.status(201).json(message);
+    } catch (error) {
+      console.error("Create client message error:", error);
+      res.status(500).json({ message: "Failed to create message" });
+    }
+  });
+
+  // Admin: Create message for partner
+  app.post("/api/partners/:id/messages", async (req, res) => {
+    try {
+      const partner = await storage.getTradePartner(req.params.id);
+      if (!partner) {
+        return res.status(404).json({ message: "Partner not found" });
+      }
+
+      const data = {
+        audienceType: "partner" as const,
+        audienceId: req.params.id,
+        title: req.body.title,
+        body: req.body.body,
+        messageType: req.body.messageType || "announcement",
+        urgency: req.body.urgency || "normal",
+        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
+        createdBy: req.body.createdBy,
+      };
+
+      const message = await storage.createPortalMessage(data);
+      res.status(201).json(message);
+    } catch (error) {
+      console.error("Create partner message error:", error);
+      res.status(500).json({ message: "Failed to create message" });
+    }
+  });
+
+  // Admin: Update message
+  app.patch("/api/portal-messages/:id", async (req, res) => {
+    try {
+      const message = await storage.updatePortalMessage(req.params.id, req.body);
+      if (!message) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+      res.json(message);
+    } catch (error) {
+      console.error("Update portal message error:", error);
+      res.status(500).json({ message: "Failed to update message" });
+    }
+  });
+
+  // Admin: Delete message
+  app.delete("/api/portal-messages/:id", async (req, res) => {
+    try {
+      await storage.deletePortalMessage(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete portal message error:", error);
+      res.status(500).json({ message: "Failed to delete message" });
+    }
+  });
+
+  // Client Portal: Get active messages
+  app.get("/api/portal/messages", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access) {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+
+      const messages = await storage.getActivePortalMessagesForClient(access.contactId);
+      
+      // Filter out read messages
+      const unreadMessages = [];
+      for (const msg of messages) {
+        const isRead = await storage.isPortalMessageRead(msg.id);
+        if (!isRead) {
+          unreadMessages.push(msg);
+        }
+      }
+      
+      res.json(unreadMessages);
+    } catch (error) {
+      console.error("Get client portal messages error:", error);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  // Client Portal: Mark message as read
+  app.post("/api/portal/messages/:id/read", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access) {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+
+      const message = await storage.getPortalMessage(req.params.id);
+      if (!message || message.audienceId !== access.contactId) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+
+      const read = await storage.markPortalMessageAsRead(req.params.id);
+      res.json(read);
+    } catch (error) {
+      console.error("Mark message read error:", error);
+      res.status(500).json({ message: "Failed to mark message as read" });
+    }
+  });
+
+  // Partner Portal: Get active messages
+  app.get("/api/partner-portal/messages", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access) {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+
+      const messages = await storage.getActivePortalMessagesForPartner(access.partnerId);
+      
+      // Filter out read messages
+      const unreadMessages = [];
+      for (const msg of messages) {
+        const isRead = await storage.isPortalMessageRead(msg.id);
+        if (!isRead) {
+          unreadMessages.push(msg);
+        }
+      }
+      
+      res.json(unreadMessages);
+    } catch (error) {
+      console.error("Get partner portal messages error:", error);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  // Partner Portal: Mark message as read
+  app.post("/api/partner-portal/messages/:id/read", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access) {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+
+      const message = await storage.getPortalMessage(req.params.id);
+      if (!message || message.audienceId !== access.partnerId) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+
+      const read = await storage.markPortalMessageAsRead(req.params.id);
+      res.json(read);
+    } catch (error) {
+      console.error("Mark message read error:", error);
+      res.status(500).json({ message: "Failed to mark message as read" });
+    }
+  });
+
   // Register object storage routes
   registerObjectStorageRoutes(app);
 
