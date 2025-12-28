@@ -28,6 +28,8 @@ import {
   seoAutopilotSettings, type SeoAutopilotSettings, type InsertSeoAutopilotSettings,
   seoAutopilotSlots, type SeoAutopilotSlot, type InsertSeoAutopilotSlot,
   seoAutopilotRuns, type SeoAutopilotRun, type InsertSeoAutopilotRun,
+  portalMessages, type PortalMessage, type InsertPortalMessage,
+  portalMessageReads, type PortalMessageRead, type InsertPortalMessageRead,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -1038,6 +1040,93 @@ export class DatabaseStorage implements IStorage {
   async createSeoAutopilotRun(run: InsertSeoAutopilotRun): Promise<SeoAutopilotRun> {
     const [created] = await db.insert(seoAutopilotRuns).values(run).returning();
     return created;
+  }
+
+  // Portal Messages Methods
+  async getPortalMessages(): Promise<PortalMessage[]> {
+    return db.select().from(portalMessages).orderBy(desc(portalMessages.createdAt));
+  }
+
+  async getPortalMessage(id: string): Promise<PortalMessage | undefined> {
+    const [msg] = await db.select().from(portalMessages).where(eq(portalMessages.id, id));
+    return msg || undefined;
+  }
+
+  async getPortalMessagesByAudience(audienceType: string, audienceId: string): Promise<PortalMessage[]> {
+    return db.select()
+      .from(portalMessages)
+      .where(and(
+        eq(portalMessages.audienceType, audienceType),
+        eq(portalMessages.audienceId, audienceId)
+      ))
+      .orderBy(desc(portalMessages.createdAt));
+  }
+
+  async getActivePortalMessagesForClient(contactId: string): Promise<PortalMessage[]> {
+    const now = new Date();
+    return db.select()
+      .from(portalMessages)
+      .where(and(
+        eq(portalMessages.audienceType, "client"),
+        eq(portalMessages.audienceId, contactId),
+        eq(portalMessages.isActive, true),
+        or(
+          isNull(portalMessages.expiresAt),
+          gte(portalMessages.expiresAt, now)
+        )
+      ))
+      .orderBy(desc(portalMessages.createdAt));
+  }
+
+  async getActivePortalMessagesForPartner(partnerId: string): Promise<PortalMessage[]> {
+    const now = new Date();
+    return db.select()
+      .from(portalMessages)
+      .where(and(
+        eq(portalMessages.audienceType, "partner"),
+        eq(portalMessages.audienceId, partnerId),
+        eq(portalMessages.isActive, true),
+        or(
+          isNull(portalMessages.expiresAt),
+          gte(portalMessages.expiresAt, now)
+        )
+      ))
+      .orderBy(desc(portalMessages.createdAt));
+  }
+
+  async createPortalMessage(message: InsertPortalMessage): Promise<PortalMessage> {
+    const [created] = await db.insert(portalMessages).values(message).returning();
+    return created;
+  }
+
+  async updatePortalMessage(id: string, message: Partial<InsertPortalMessage>): Promise<PortalMessage | undefined> {
+    const [updated] = await db.update(portalMessages)
+      .set(message)
+      .where(eq(portalMessages.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deletePortalMessage(id: string): Promise<boolean> {
+    await db.delete(portalMessages).where(eq(portalMessages.id, id));
+    return true;
+  }
+
+  // Portal Message Reads Methods
+  async getPortalMessageReads(messageId: string): Promise<PortalMessageRead[]> {
+    return db.select()
+      .from(portalMessageReads)
+      .where(eq(portalMessageReads.messageId, messageId));
+  }
+
+  async markPortalMessageAsRead(messageId: string): Promise<PortalMessageRead> {
+    const [created] = await db.insert(portalMessageReads).values({ messageId }).returning();
+    return created;
+  }
+
+  async isPortalMessageRead(messageId: string): Promise<boolean> {
+    const reads = await this.getPortalMessageReads(messageId);
+    return reads.length > 0;
   }
 }
 
