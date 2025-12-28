@@ -638,10 +638,33 @@ export default function Finance() {
                           {tx.sourceType === "auto" && (
                             <Badge variant="secondary" className="text-xs">Auto</Badge>
                           )}
+                          {tx.sourceType === "receipt_scan" && (
+                            <Badge variant="secondary" className="text-xs">Receipt</Badge>
+                          )}
+                          {tx.vendor && (
+                            <span className="text-muted-foreground">from {tx.vendor}</span>
+                          )}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {tx.receiptUrl && (
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button size="icon" variant="ghost" title="View Receipt" data-testid={`button-view-receipt-${tx.id}`}>
+                              <Receipt className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-lg">
+                            <DialogHeader>
+                              <DialogTitle>Receipt Image</DialogTitle>
+                            </DialogHeader>
+                            <div className="flex justify-center">
+                              <img src={tx.receiptUrl} alt="Receipt" className="max-w-full max-h-[60vh] object-contain rounded-md" />
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      )}
                       <span className={`font-semibold ${tx.type === "income" ? "text-green-600" : "text-red-600"}`}>
                         {tx.type === "income" ? "+" : "-"}£{parseFloat(tx.amount).toLocaleString()}
                       </span>
