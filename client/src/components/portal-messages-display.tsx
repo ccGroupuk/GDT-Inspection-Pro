@@ -42,6 +42,11 @@ interface PortalMessagesDisplayProps {
 export function PortalMessagesDisplay({ portalType, accessToken }: PortalMessagesDisplayProps) {
   const apiBase = portalType === "client" ? "/api/portal" : "/api/partner-portal";
 
+  // Don't attempt to load if no valid token
+  if (!accessToken) {
+    return null;
+  }
+
   const { data: messages = [], isLoading } = useQuery<PortalMessage[]>({
     queryKey: [apiBase, "messages"],
     queryFn: async () => {
