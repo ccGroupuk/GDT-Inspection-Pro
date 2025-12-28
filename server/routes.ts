@@ -69,14 +69,31 @@ export async function registerRoutes(
     return null;
   };
 
-  // Combined admin auth middleware - allows Replit Auth OR employee with owner/full_access
+  // Combined admin auth middleware - allows authorized Replit Auth OR employee with owner/full_access
   const isAdminAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
-    // First check Replit Auth
+    // First check Replit Auth - must be linked to employee or whitelisted
     const user = req.user as any;
-    if (req.isAuthenticated() && user?.expires_at) {
+    if (req.isAuthenticated() && user?.expires_at && user?.claims) {
       const now = Math.floor(Date.now() / 1000);
       if (now <= user.expires_at) {
-        return next();
+        const replitEmail = user.claims.email;
+        const replitUserId = user.claims.sub;
+        
+        // Check if Replit user has linked employee record
+        if (replitEmail) {
+          const linkedEmployee = await storage.getEmployeeByEmail(replitEmail);
+          if (linkedEmployee && linkedEmployee.isActive && 
+              (linkedEmployee.accessLevel === "owner" || linkedEmployee.accessLevel === "full_access")) {
+            (req as any).employee = linkedEmployee;
+            return next();
+          }
+        }
+        
+        // Check whitelist
+        const adminWhitelist = process.env.REPLIT_ADMIN_USER_IDS?.split(",").map(id => id.trim()) || [];
+        if (adminWhitelist.includes(replitUserId)) {
+          return next();
+        }
       }
     }
     
@@ -142,12 +159,33 @@ export async function registerRoutes(
       return next();
     }
 
-    // Check Replit Auth first
+    // Check Replit Auth first - verify user is authorized for this app
     const user = req.user as any;
-    if (req.isAuthenticated() && user?.expires_at) {
+    if (req.isAuthenticated() && user?.expires_at && user?.claims) {
       const now = Math.floor(Date.now() / 1000);
       if (now <= user.expires_at) {
-        return next();
+        // Verify Replit user is authorized (must have matching employee record OR be in whitelist)
+        const replitEmail = user.claims.email;
+        const replitUserId = user.claims.sub;
+        
+        // Check if there's an employee with matching email (linking Replit account to employee)
+        if (replitEmail) {
+          const linkedEmployee = await storage.getEmployeeByEmail(replitEmail);
+          if (linkedEmployee && linkedEmployee.isActive && 
+              (linkedEmployee.accessLevel === "owner" || linkedEmployee.accessLevel === "full_access")) {
+            (req as any).employee = linkedEmployee;
+            return next();
+          }
+        }
+        
+        // Check whitelist in environment (comma-separated Replit user IDs)
+        const adminWhitelist = process.env.REPLIT_ADMIN_USER_IDS?.split(",").map(id => id.trim()) || [];
+        if (adminWhitelist.includes(replitUserId)) {
+          return next();
+        }
+        
+        // Replit user not authorized for this app
+        console.log(`Unauthorized Replit user attempt: ${replitEmail} (${replitUserId})`);
       }
     }
 
@@ -163,23 +201,61 @@ export async function registerRoutes(
   });
   
   // Check authentication status (supports both Replit OAuth and employee sessions)
+  // Also verifies authorization for admin access
   app.get("/api/auth/me", async (req, res) => {
     try {
-      // Check Replit Auth first
+      // Check Replit Auth first - but verify authorization too
       const user = req.user as any;
-      if (req.isAuthenticated() && user?.expires_at) {
+      if (req.isAuthenticated() && user?.expires_at && user?.claims) {
         const now = Math.floor(Date.now() / 1000);
-        if (now <= user.expires_at && user.claims) {
-          return res.json({
-            authType: "replit",
-            user: {
-              id: user.claims.sub,
-              email: user.claims.email,
-              firstName: user.claims.first_name,
-              lastName: user.claims.last_name,
-              profileImageUrl: user.claims.profile_image_url,
-            },
-            employee: null,
+        if (now <= user.expires_at) {
+          const replitEmail = user.claims.email;
+          const replitUserId = user.claims.sub;
+          
+          // Check if Replit user has linked employee record
+          let linkedEmployee = null;
+          let isAuthorized = false;
+          
+          if (replitEmail) {
+            linkedEmployee = await storage.getEmployeeByEmail(replitEmail);
+            if (linkedEmployee && linkedEmployee.isActive && 
+                (linkedEmployee.accessLevel === "owner" || linkedEmployee.accessLevel === "full_access")) {
+              isAuthorized = true;
+            }
+          }
+          
+          // Check whitelist
+          const adminWhitelist = process.env.REPLIT_ADMIN_USER_IDS?.split(",").map(id => id.trim()) || [];
+          if (adminWhitelist.includes(replitUserId)) {
+            isAuthorized = true;
+          }
+          
+          if (isAuthorized) {
+            return res.json({
+              authType: "replit",
+              user: {
+                id: replitUserId,
+                email: replitEmail,
+                firstName: user.claims.first_name,
+                lastName: user.claims.last_name,
+                profileImageUrl: user.claims.profile_image_url,
+              },
+              employee: linkedEmployee ? {
+                id: linkedEmployee.id,
+                firstName: linkedEmployee.firstName,
+                lastName: linkedEmployee.lastName,
+                email: linkedEmployee.email,
+                accessLevel: linkedEmployee.accessLevel,
+                isActive: linkedEmployee.isActive,
+              } : null,
+            });
+          }
+          
+          // Replit user authenticated but not authorized
+          return res.status(403).json({ 
+            message: "Access denied. Your account is not authorized for this application.",
+            authenticated: true,
+            authorized: false 
           });
         }
       }

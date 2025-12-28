@@ -24,6 +24,12 @@ interface AuthData {
   authType: "replit" | "employee" | null;
 }
 
+interface AuthError {
+  message: string;
+  authenticated?: boolean;
+  authorized?: boolean;
+}
+
 async function fetchAuthStatus(): Promise<AuthData | null> {
   const response = await fetch("/api/auth/me", {
     credentials: "include",
@@ -31,6 +37,13 @@ async function fetchAuthStatus(): Promise<AuthData | null> {
 
   if (response.status === 401) {
     return null;
+  }
+
+  // Handle 403 - authenticated but not authorized
+  if (response.status === 403) {
+    const error: AuthError = await response.json();
+    // Return a special object indicating user is authenticated but not authorized
+    throw new Error(error.message || "Access denied");
   }
 
   if (!response.ok) {

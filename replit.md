@@ -42,9 +42,19 @@ The CRM is built with a clear separation of concerns, utilizing a modern web sta
 - **Frontend**: React, TypeScript, TanStack Query for data fetching, Wouter for routing.
 - **Backend**: Express.js for RESTful APIs, Node.js runtime.
 - **Database**: PostgreSQL for relational data storage, Drizzle ORM for type-safe database interactions.
-- **Authentication**: Token-based authentication for portals, password-based with Bcrypt hashing for employee logins, including features like failed login tracking and session management.
+- **Authentication**: Multi-layered security with:
+  - Replit OAuth for project owners (requires linked employee record OR whitelist)
+  - Employee login with HttpOnly, secure, SameSite=strict cookies
+  - Token-based authentication for client/partner portals
+  - Rate limiting on login endpoints (10 attempts per 15-minute window per IP)
+  - Global API middleware protecting all admin routes
 - **Photo Storage**: Replit Object Storage with presigned URLs for secure and efficient image handling.
 - **AI Integration**: Utilizes Replit AI Integrations for SEO content generation, abstracting direct API key management.
+
+## Security Configuration
+- **REPLIT_ADMIN_USER_IDS**: Optional environment variable containing comma-separated Replit user IDs that are whitelisted for admin access without needing an employee record.
+- **Authorization Flow**: Replit OAuth users must either have a linked employee record (matching email) with owner/full_access level, OR be in the REPLIT_ADMIN_USER_IDS whitelist.
+- **Session Management**: Employee sessions expire after 8 hours and are stored as HttpOnly cookies.
 
 ## External Dependencies
 - **Replit Object Storage**: Used for storing job note attachments (photos).
