@@ -2651,7 +2651,7 @@ export async function registerRoutes(
     }
   });
 
-  // Accept a partner quote (admin) - creates client-facing quote with margin and sends to client
+  // Accept a partner quote (admin) - creates client-facing quote using partner's commission as CCC profit
   app.post("/api/partner-quotes/:id/accept", async (req, res) => {
     try {
       const quote = await storage.getPartnerQuote(req.params.id);
@@ -2659,8 +2659,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Quote not found" });
       }
       
-      const { marginType, marginValue, adminNotes } = req.body;
-      const margin = parseFloat(marginValue) || 0;
+      const { adminNotes } = req.body;
       
       const updated = await storage.updatePartnerQuote(req.params.id, {
         status: "accepted",
@@ -2668,68 +2667,59 @@ export async function registerRoutes(
         adminNotes,
       });
       
-      // Update job with partner charge and create client-facing quote with margin
+      // Update job with partner charge and create client-facing quote
       if (quote.jobId) {
+        // Get the job to find the assigned partner
+        const job = await storage.getJob(quote.jobId);
+        if (!job) {
+          return res.status(404).json({ message: "Job not found" });
+        }
+        
+        // Get the trade partner to get their commission settings
+        let cccMarginAmount = 0;
+        if (job.partnerId) {
+          const partner = await storage.getTradePartner(job.partnerId);
+          if (partner) {
+            const partnerTotal = parseFloat(quote.total) || 0;
+            const commissionValue = parseFloat(partner.commissionValue || "10") || 10;
+            
+            if (partner.commissionType === "percentage") {
+              // Commission is a percentage of partner charge - this is CCC's profit
+              cccMarginAmount = partnerTotal * (commissionValue / 100);
+            } else {
+              // Fixed commission amount
+              cccMarginAmount = commissionValue;
+            }
+          }
+        }
+        
         // Get the partner quote items
         const partnerQuoteItems = await storage.getPartnerQuoteItems(req.params.id);
         
         // Delete existing job quote items to replace with partner quote items
         await storage.deleteQuoteItemsByJob(quote.jobId);
         
-        // Calculate margin multiplier
-        let marginMultiplier = 1;
-        let fixedMarginPerItem = 0;
-        if (marginType === "percentage" && margin > 0) {
-          marginMultiplier = 1 + (margin / 100);
-        } else if (marginType === "fixed" && margin > 0 && partnerQuoteItems.length > 0) {
-          // Distribute fixed margin across items proportionally
-          fixedMarginPerItem = margin / partnerQuoteItems.length;
-        }
-        
-        // Create job quote items from partner quote items with margin applied
+        // Create job quote items from partner quote items (same prices - client pays what partner charges)
         for (const item of partnerQuoteItems) {
-          const originalUnitPrice = parseFloat(item.unitPrice) || 0;
-          const originalLineTotal = parseFloat(item.lineTotal) || 0;
-          
-          let newUnitPrice: number;
-          let newLineTotal: number;
-          
-          if (marginType === "percentage") {
-            newUnitPrice = originalUnitPrice * marginMultiplier;
-            newLineTotal = originalLineTotal * marginMultiplier;
-          } else {
-            // Fixed margin distributed per item
-            newUnitPrice = originalUnitPrice + (fixedMarginPerItem / (parseFloat(item.quantity) || 1));
-            newLineTotal = originalLineTotal + fixedMarginPerItem;
-          }
-          
           await storage.createQuoteItem({
             jobId: quote.jobId,
             description: item.description,
             quantity: item.quantity,
-            unitPrice: newUnitPrice.toFixed(2),
-            lineTotal: newLineTotal.toFixed(2),
+            unitPrice: item.unitPrice,
+            lineTotal: item.lineTotal,
           });
         }
         
-        // Calculate final client total with margin
+        // Client pays the partner's total charge
+        // CCC Margin is calculated from the partner's commission percentage
         const partnerTotal = parseFloat(quote.total) || 0;
-        let clientTotal: number;
-        if (marginType === "percentage") {
-          clientTotal = partnerTotal * marginMultiplier;
-        } else {
-          clientTotal = partnerTotal + margin;
-        }
         
-        // Calculate the CCC margin amount
-        const cccMarginAmount = clientTotal - partnerTotal;
-        
-        // Update job with partner charge, quote value, margin, tax settings, and set status to quote_sent
+        // Update job with partner charge, quote value (same as partner charge), CCC margin, tax settings
         await storage.updateJob(quote.jobId, {
           partnerCharge: quote.total,
           partnerChargeType: "fixed",
-          quotedValue: clientTotal.toFixed(2),
-          cccMargin: cccMarginAmount.toFixed(2),
+          quotedValue: quote.total, // Client pays what partner charges
+          cccMargin: cccMarginAmount.toFixed(2), // CCC's profit from partner commission
           taxEnabled: quote.taxEnabled,
           taxRate: quote.taxRate,
           status: "quote_sent",
