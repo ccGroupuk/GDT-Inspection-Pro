@@ -20,7 +20,8 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, Handshake, Phone, Mail, Star, Edit, Trash2, CheckCircle, UserPlus, Copy, ExternalLink } from "lucide-react";
+import { Plus, Search, Handshake, Phone, Mail, Star, Edit, Trash2, CheckCircle, UserPlus, Copy, ExternalLink, MessageSquare } from "lucide-react";
+import { SendMessageDialog } from "@/components/send-message-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TradePartner, InsertTradePartner } from "@shared/schema";
 import { insertTradePartnerSchema, TRADE_CATEGORIES } from "@shared/schema";
@@ -437,6 +438,16 @@ export default function Partners() {
                     <p className="text-sm text-muted-foreground">{partner.contactName}</p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    <SendMessageDialog
+                      recipientId={partner.id}
+                      recipientName={partner.businessName}
+                      recipientType="partner"
+                      trigger={
+                        <Button variant="ghost" size="icon" data-testid={`button-message-partner-${partner.id}`}>
+                          <MessageSquare className="w-4 h-4" />
+                        </Button>
+                      }
+                    />
                     <Button
                       variant="ghost"
                       size="icon"

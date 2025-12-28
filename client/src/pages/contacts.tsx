@@ -18,7 +18,8 @@ import { TableRowSkeleton } from "@/components/loading-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2, UserPlus, CheckCircle, Copy, ExternalLink } from "lucide-react";
+import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2, UserPlus, CheckCircle, Copy, ExternalLink, MessageSquare } from "lucide-react";
+import { SendMessageDialog } from "@/components/send-message-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -458,6 +459,16 @@ export default function Contacts() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <SendMessageDialog
+                          recipientId={contact.id}
+                          recipientName={contact.name}
+                          recipientType="client"
+                          trigger={
+                            <Button variant="ghost" size="icon" data-testid={`button-message-contact-${contact.id}`}>
+                              <MessageSquare className="w-4 h-4" />
+                            </Button>
+                          }
+                        />
                         <Button
                           variant="ghost"
                           size="icon"
