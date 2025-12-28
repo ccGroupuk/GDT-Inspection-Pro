@@ -1831,6 +1831,208 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== JOB SURVEYS API ====================
+
+  // Get all surveys for a job (admin)
+  app.get("/api/jobs/:jobId/surveys", async (req, res) => {
+    try {
+      const surveys = await storage.getJobSurveysByJob(req.params.jobId);
+      // Include partner info for each survey
+      const surveysWithPartner = await Promise.all(
+        surveys.map(async (survey) => {
+          const partner = survey.partnerId ? await storage.getTradePartner(survey.partnerId) : null;
+          return { ...survey, partner };
+        })
+      );
+      res.json(surveysWithPartner);
+    } catch (error) {
+      console.error("Get job surveys error:", error);
+      res.status(500).json({ message: "Failed to load surveys" });
+    }
+  });
+
+  // Get a specific survey (admin)
+  app.get("/api/surveys/:id", async (req, res) => {
+    try {
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      const partner = survey.partnerId ? await storage.getTradePartner(survey.partnerId) : null;
+      const job = await storage.getJob(survey.jobId);
+      res.json({ ...survey, partner, job });
+    } catch (error) {
+      console.error("Get survey error:", error);
+      res.status(500).json({ message: "Failed to load survey" });
+    }
+  });
+
+  // Create a survey request for a job (admin assigns to partner)
+  app.post("/api/jobs/:jobId/surveys", async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const { partnerId, adminNotes, scheduledDate, scheduledTime } = req.body;
+      
+      if (!partnerId) {
+        return res.status(400).json({ message: "Partner ID is required" });
+      }
+      
+      const partner = await storage.getTradePartner(partnerId);
+      if (!partner) {
+        return res.status(404).json({ message: "Partner not found" });
+      }
+      
+      const survey = await storage.createJobSurvey({
+        jobId: req.params.jobId,
+        partnerId,
+        status: "requested",
+        adminNotes,
+        scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+        scheduledTime,
+      });
+      
+      res.status(201).json(survey);
+    } catch (error) {
+      console.error("Create survey error:", error);
+      res.status(500).json({ message: "Failed to create survey request" });
+    }
+  });
+
+  // Update a survey (admin)
+  app.patch("/api/surveys/:id", async (req, res) => {
+    try {
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      const updated = await storage.updateJobSurvey(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update survey error:", error);
+      res.status(500).json({ message: "Failed to update survey" });
+    }
+  });
+
+  // Cancel a survey (admin)
+  app.post("/api/surveys/:id/cancel", async (req, res) => {
+    try {
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      const updated = await storage.updateJobSurvey(req.params.id, {
+        status: "cancelled",
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Cancel survey error:", error);
+      res.status(500).json({ message: "Failed to cancel survey" });
+    }
+  });
+
+  // Delete a survey (admin)
+  app.delete("/api/surveys/:id", async (req, res) => {
+    try {
+      await storage.deleteJobSurvey(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete survey error:", error);
+      res.status(500).json({ message: "Failed to delete survey" });
+    }
+  });
+
+  // Get partner quotes for a job (admin)
+  app.get("/api/jobs/:jobId/partner-quotes", async (req, res) => {
+    try {
+      const quotes = await storage.getPartnerQuotesByJob(req.params.jobId);
+      const quotesWithDetails = await Promise.all(
+        quotes.map(async (quote) => {
+          const partner = await storage.getTradePartner(quote.partnerId);
+          const items = await storage.getPartnerQuoteItems(quote.id);
+          return { ...quote, partner, items };
+        })
+      );
+      res.json(quotesWithDetails);
+    } catch (error) {
+      console.error("Get partner quotes error:", error);
+      res.status(500).json({ message: "Failed to load partner quotes" });
+    }
+  });
+
+  // Get a specific partner quote (admin)
+  app.get("/api/partner-quotes/:id", async (req, res) => {
+    try {
+      const quote = await storage.getPartnerQuote(req.params.id);
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+      const partner = await storage.getTradePartner(quote.partnerId);
+      const items = await storage.getPartnerQuoteItems(quote.id);
+      const job = await storage.getJob(quote.jobId);
+      res.json({ ...quote, partner, items, job });
+    } catch (error) {
+      console.error("Get partner quote error:", error);
+      res.status(500).json({ message: "Failed to load partner quote" });
+    }
+  });
+
+  // Accept a partner quote (admin)
+  app.post("/api/partner-quotes/:id/accept", async (req, res) => {
+    try {
+      const quote = await storage.getPartnerQuote(req.params.id);
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+      
+      const updated = await storage.updatePartnerQuote(req.params.id, {
+        status: "accepted",
+        respondedAt: new Date(),
+        adminNotes: req.body.adminNotes,
+      });
+      
+      // Update job with partner charge from quote
+      if (quote.jobId) {
+        await storage.updateJob(quote.jobId, {
+          partnerCharge: quote.total,
+          partnerChargeType: "fixed",
+        });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Accept partner quote error:", error);
+      res.status(500).json({ message: "Failed to accept quote" });
+    }
+  });
+
+  // Decline a partner quote (admin)
+  app.post("/api/partner-quotes/:id/decline", async (req, res) => {
+    try {
+      const quote = await storage.getPartnerQuote(req.params.id);
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+      
+      const updated = await storage.updatePartnerQuote(req.params.id, {
+        status: "declined",
+        respondedAt: new Date(),
+        adminNotes: req.body.adminNotes,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Decline partner quote error:", error);
+      res.status(500).json({ message: "Failed to decline quote" });
+    }
+  });
+
   // ==================== JOB NOTES API ====================
 
   // Get job notes (admin)
