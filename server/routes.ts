@@ -129,21 +129,22 @@ export async function registerRoutes(
   // ==================== UNIFIED AUTH ENDPOINTS ====================
   
   // Public routes that don't require authentication
+  // Note: req.path inside app.use("/api", ...) is the path AFTER /api
   const publicRoutes = [
-    "/api/auth/me",
-    "/api/auth/logout",
-    "/api/login",
-    "/api/logout",
-    "/api/callback",
-    "/api/employee/login",
-    "/api/employee/logout",
-    "/api/portal/login",
-    "/api/portal/logout",
-    "/api/portal/auth/me",
-    "/api/partner-portal/login",
-    "/api/partner-portal/logout",
-    "/api/partner-portal/auth/me",
-    "/api/employee/auth/me",
+    "/auth/me",
+    "/auth/logout",
+    "/login",
+    "/logout",
+    "/callback",
+    "/employee/login",
+    "/employee/logout",
+    "/portal/login",
+    "/portal/logout",
+    "/portal/auth/me",
+    "/partner-portal/login",
+    "/partner-portal/logout",
+    "/partner-portal/auth/me",
+    "/employee/auth/me",
   ];
 
   // Global admin route protection middleware
