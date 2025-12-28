@@ -40,6 +40,9 @@ import {
   payrollRuns, type PayrollRun, type InsertPayrollRun,
   payrollAdjustments, type PayrollAdjustment, type InsertPayrollAdjustment,
   employeeDocuments, type EmployeeDocument, type InsertEmployeeDocument,
+  jobSurveys, type JobSurvey, type InsertJobSurvey,
+  partnerQuotes, type PartnerQuote, type InsertPartnerQuote,
+  partnerQuoteItems, type PartnerQuoteItem, type InsertPartnerQuoteItem,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -303,6 +306,31 @@ export interface IStorage {
   getEmployeeDocument(id: string): Promise<EmployeeDocument | undefined>;
   createEmployeeDocument(doc: InsertEmployeeDocument): Promise<EmployeeDocument>;
   deleteEmployeeDocument(id: string): Promise<boolean>;
+
+  // Job Surveys
+  getJobSurveys(): Promise<JobSurvey[]>;
+  getJobSurvey(id: string): Promise<JobSurvey | undefined>;
+  getJobSurveysByJob(jobId: string): Promise<JobSurvey[]>;
+  getJobSurveysByPartner(partnerId: string): Promise<JobSurvey[]>;
+  createJobSurvey(survey: InsertJobSurvey): Promise<JobSurvey>;
+  updateJobSurvey(id: string, survey: Partial<InsertJobSurvey>): Promise<JobSurvey | undefined>;
+  deleteJobSurvey(id: string): Promise<boolean>;
+
+  // Partner Quotes
+  getPartnerQuotes(): Promise<PartnerQuote[]>;
+  getPartnerQuote(id: string): Promise<PartnerQuote | undefined>;
+  getPartnerQuotesByJob(jobId: string): Promise<PartnerQuote[]>;
+  getPartnerQuotesByPartner(partnerId: string): Promise<PartnerQuote[]>;
+  createPartnerQuote(quote: InsertPartnerQuote): Promise<PartnerQuote>;
+  updatePartnerQuote(id: string, quote: Partial<InsertPartnerQuote>): Promise<PartnerQuote | undefined>;
+  deletePartnerQuote(id: string): Promise<boolean>;
+
+  // Partner Quote Items
+  getPartnerQuoteItems(quoteId: string): Promise<PartnerQuoteItem[]>;
+  createPartnerQuoteItem(item: InsertPartnerQuoteItem): Promise<PartnerQuoteItem>;
+  updatePartnerQuoteItem(id: string, item: Partial<InsertPartnerQuoteItem>): Promise<PartnerQuoteItem | undefined>;
+  deletePartnerQuoteItem(id: string): Promise<boolean>;
+  deletePartnerQuoteItemsByQuote(quoteId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1531,6 +1559,97 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEmployeeDocument(id: string): Promise<boolean> {
     await db.delete(employeeDocuments).where(eq(employeeDocuments.id, id));
+    return true;
+  }
+
+  // Job Surveys
+  async getJobSurveys(): Promise<JobSurvey[]> {
+    return db.select().from(jobSurveys).orderBy(desc(jobSurveys.createdAt));
+  }
+
+  async getJobSurvey(id: string): Promise<JobSurvey | undefined> {
+    const [survey] = await db.select().from(jobSurveys).where(eq(jobSurveys.id, id));
+    return survey || undefined;
+  }
+
+  async getJobSurveysByJob(jobId: string): Promise<JobSurvey[]> {
+    return db.select().from(jobSurveys).where(eq(jobSurveys.jobId, jobId)).orderBy(desc(jobSurveys.createdAt));
+  }
+
+  async getJobSurveysByPartner(partnerId: string): Promise<JobSurvey[]> {
+    return db.select().from(jobSurveys).where(eq(jobSurveys.partnerId, partnerId)).orderBy(desc(jobSurveys.createdAt));
+  }
+
+  async createJobSurvey(survey: InsertJobSurvey): Promise<JobSurvey> {
+    const [created] = await db.insert(jobSurveys).values(survey).returning();
+    return created;
+  }
+
+  async updateJobSurvey(id: string, survey: Partial<InsertJobSurvey>): Promise<JobSurvey | undefined> {
+    const [updated] = await db.update(jobSurveys).set({ ...survey, updatedAt: new Date() }).where(eq(jobSurveys.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteJobSurvey(id: string): Promise<boolean> {
+    await db.delete(jobSurveys).where(eq(jobSurveys.id, id));
+    return true;
+  }
+
+  // Partner Quotes
+  async getPartnerQuotes(): Promise<PartnerQuote[]> {
+    return db.select().from(partnerQuotes).orderBy(desc(partnerQuotes.createdAt));
+  }
+
+  async getPartnerQuote(id: string): Promise<PartnerQuote | undefined> {
+    const [quote] = await db.select().from(partnerQuotes).where(eq(partnerQuotes.id, id));
+    return quote || undefined;
+  }
+
+  async getPartnerQuotesByJob(jobId: string): Promise<PartnerQuote[]> {
+    return db.select().from(partnerQuotes).where(eq(partnerQuotes.jobId, jobId)).orderBy(desc(partnerQuotes.createdAt));
+  }
+
+  async getPartnerQuotesByPartner(partnerId: string): Promise<PartnerQuote[]> {
+    return db.select().from(partnerQuotes).where(eq(partnerQuotes.partnerId, partnerId)).orderBy(desc(partnerQuotes.createdAt));
+  }
+
+  async createPartnerQuote(quote: InsertPartnerQuote): Promise<PartnerQuote> {
+    const [created] = await db.insert(partnerQuotes).values(quote).returning();
+    return created;
+  }
+
+  async updatePartnerQuote(id: string, quote: Partial<InsertPartnerQuote>): Promise<PartnerQuote | undefined> {
+    const [updated] = await db.update(partnerQuotes).set({ ...quote, updatedAt: new Date() }).where(eq(partnerQuotes.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deletePartnerQuote(id: string): Promise<boolean> {
+    await db.delete(partnerQuotes).where(eq(partnerQuotes.id, id));
+    return true;
+  }
+
+  // Partner Quote Items
+  async getPartnerQuoteItems(quoteId: string): Promise<PartnerQuoteItem[]> {
+    return db.select().from(partnerQuoteItems).where(eq(partnerQuoteItems.quoteId, quoteId)).orderBy(asc(partnerQuoteItems.sortOrder));
+  }
+
+  async createPartnerQuoteItem(item: InsertPartnerQuoteItem): Promise<PartnerQuoteItem> {
+    const [created] = await db.insert(partnerQuoteItems).values(item).returning();
+    return created;
+  }
+
+  async updatePartnerQuoteItem(id: string, item: Partial<InsertPartnerQuoteItem>): Promise<PartnerQuoteItem | undefined> {
+    const [updated] = await db.update(partnerQuoteItems).set(item).where(eq(partnerQuoteItems.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deletePartnerQuoteItem(id: string): Promise<boolean> {
+    await db.delete(partnerQuoteItems).where(eq(partnerQuoteItems.id, id));
+    return true;
+  }
+
+  async deletePartnerQuoteItemsByQuote(quoteId: string): Promise<boolean> {
+    await db.delete(partnerQuoteItems).where(eq(partnerQuoteItems.quoteId, quoteId));
     return true;
   }
 }
