@@ -1243,6 +1243,7 @@ export const employees = pgTable("employees", {
   
   // Access control
   isActive: boolean("is_active").default(true),
+  accessLevel: text("access_level").notNull().default("standard"), // standard, full_access, owner
   accessAreas: text("access_areas").array(), // Array of areas they can access
   
   // Emergency contact

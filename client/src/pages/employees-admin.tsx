@@ -25,6 +25,7 @@ export default function EmployeesAdmin() {
     email: "",
     phone: "",
     role: "fitting",
+    accessLevel: "standard",
     hourlyRate: "",
     password: "",
     emergencyContactName: "",
@@ -87,6 +88,7 @@ export default function EmployeesAdmin() {
       email: "",
       phone: "",
       role: "fitting",
+      accessLevel: "standard",
       hourlyRate: "",
       password: "",
       emergencyContactName: "",
@@ -102,6 +104,7 @@ export default function EmployeesAdmin() {
       email: employee.email,
       phone: employee.phone || "",
       role: employee.role,
+      accessLevel: employee.accessLevel || "standard",
       hourlyRate: employee.hourlyRate || "",
       password: "",
       emergencyContactName: employee.emergencyContactName || "",
@@ -116,6 +119,7 @@ export default function EmployeesAdmin() {
       email: formData.email,
       phone: formData.phone || null,
       role: formData.role,
+      accessLevel: formData.accessLevel,
       hourlyRate: formData.hourlyRate || null,
       emergencyContactName: formData.emergencyContactName || null,
       emergencyContactPhone: formData.emergencyContactPhone || null,
@@ -234,6 +238,22 @@ export default function EmployeesAdmin() {
                 </div>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="accessLevel">System Access</Label>
+                <Select value={formData.accessLevel} onValueChange={(v) => setFormData({ ...formData, accessLevel: v })}>
+                  <SelectTrigger data-testid="select-access-level">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standard - Employee Portal Only</SelectItem>
+                    <SelectItem value="full_access">Full Access - Admin Panel</SelectItem>
+                    <SelectItem value="owner">Owner - Full Admin Rights</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Owner and Full Access can log in to the admin panel using their employee credentials
+                </p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="password">Initial Password</Label>
                 <Input
                   id="password"
@@ -347,6 +367,7 @@ export default function EmployeesAdmin() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Access</TableHead>
                   <TableHead>Rate</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-24">Actions</TableHead>
@@ -361,6 +382,17 @@ export default function EmployeesAdmin() {
                     <TableCell>{employee.email}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{roleLabels[employee.role] || employee.role}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {employee.accessLevel === "owner" && (
+                        <Badge className="bg-purple-600 text-white">Owner</Badge>
+                      )}
+                      {employee.accessLevel === "full_access" && (
+                        <Badge className="bg-blue-600 text-white">Full Access</Badge>
+                      )}
+                      {(!employee.accessLevel || employee.accessLevel === "standard") && (
+                        <Badge variant="secondary">Standard</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {employee.hourlyRate ? `£${employee.hourlyRate}/hr` : "-"}
@@ -444,6 +476,19 @@ export default function EmployeesAdmin() {
                                     onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
                                   />
                                 </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>System Access</Label>
+                                <Select value={formData.accessLevel} onValueChange={(v) => setFormData({ ...formData, accessLevel: v })}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="standard">Standard - Employee Portal Only</SelectItem>
+                                    <SelectItem value="full_access">Full Access - Admin Panel</SelectItem>
+                                    <SelectItem value="owner">Owner - Full Admin Rights</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </div>
                               <div className="space-y-2">
                                 <Label>New Password (leave blank to keep current)</Label>

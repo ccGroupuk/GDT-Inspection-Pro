@@ -40,6 +40,12 @@ export default function EmployeePortalLogin() {
           description: "Please change your password before continuing."
         });
         setLocation("/employee-portal/change-password");
+      } else if (data.employee.accessLevel === "owner" || data.employee.accessLevel === "full_access") {
+        toast({
+          title: "Welcome back!",
+          description: `Logged in as ${data.employee.firstName} ${data.employee.lastName} with admin access`
+        });
+        setLocation("/");
       } else {
         toast({
           title: "Welcome back!",

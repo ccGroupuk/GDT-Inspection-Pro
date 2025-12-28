@@ -16,6 +16,40 @@ export async function registerRoutes(
   // Setup authentication (BEFORE other routes)
   await setupAuth(app);
   registerAuthRoutes(app);
+
+  // Combined admin auth middleware - allows Replit Auth OR employee with owner/full_access
+  const isAdminAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
+    // First check Replit Auth
+    const user = req.user as any;
+    if (req.isAuthenticated() && user?.expires_at) {
+      const now = Math.floor(Date.now() / 1000);
+      if (now <= user.expires_at) {
+        return next();
+      }
+    }
+    
+    // Then check employee token auth
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      try {
+        const session = await storage.getEmployeeSession(token);
+        if (session && new Date(session.expiresAt) > new Date()) {
+          const employee = await storage.getEmployee(session.employeeId);
+          if (employee && employee.isActive && 
+              (employee.accessLevel === "owner" || employee.accessLevel === "full_access")) {
+            // Attach employee to request for use in handlers
+            (req as any).employee = employee;
+            return next();
+          }
+        }
+      } catch (error) {
+        console.error("Employee token auth error:", error);
+      }
+    }
+    
+    res.status(401).json({ message: "Unauthorized" });
+  };
   
   // Dashboard
   app.get("/api/dashboard", async (req, res) => {
@@ -3661,7 +3695,7 @@ export async function registerRoutes(
   });
 
   // Admin: Employee Management (requires admin authentication)
-  app.get("/api/employees", isAuthenticated, async (req, res) => {
+  app.get("/api/employees", isAdminAuthenticated, async (req, res) => {
     try {
       const employees = await storage.getEmployees();
       res.json(employees);
@@ -3671,7 +3705,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/employees/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/employees/:id", isAdminAuthenticated, async (req, res) => {
     try {
       const employee = await storage.getEmployee(req.params.id);
       if (!employee) {
@@ -3684,7 +3718,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/employees", isAuthenticated, async (req, res) => {
+  app.post("/api/employees", isAdminAuthenticated, async (req, res) => {
     try {
       const { password, ...employeeData } = req.body;
       const data = insertEmployeeSchema.parse(employeeData);
@@ -3717,7 +3751,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/employees/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/employees/:id", isAdminAuthenticated, async (req, res) => {
     try {
       const { password, ...updateData } = req.body;
       const employee = await storage.updateEmployee(req.params.id, updateData);
@@ -3748,7 +3782,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/employees/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/employees/:id", isAdminAuthenticated, async (req, res) => {
     try {
       await storage.deleteEmployee(req.params.id);
       res.json({ message: "Employee deleted" });
@@ -3759,7 +3793,7 @@ export async function registerRoutes(
   });
 
   // Time Entries (admin only - employees use /api/employee/* routes)
-  app.get("/api/time-entries", isAuthenticated, async (req, res) => {
+  app.get("/api/time-entries", isAdminAuthenticated, async (req, res) => {
     try {
       const { employeeId, startDate, endDate } = req.query;
       
@@ -3782,7 +3816,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/time-entries/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/time-entries/:id", isAdminAuthenticated, async (req, res) => {
     try {
       const entry = await storage.getTimeEntry(req.params.id);
       if (!entry) {
@@ -3795,7 +3829,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/time-entries", isAuthenticated, async (req, res) => {
+  app.post("/api/time-entries", isAdminAuthenticated, async (req, res) => {
     try {
       const data = insertTimeEntrySchema.parse(req.body);
       const entry = await storage.createTimeEntry(data);
@@ -3809,7 +3843,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/time-entries/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/time-entries/:id", isAdminAuthenticated, async (req, res) => {
     try {
       const entry = await storage.updateTimeEntry(req.params.id, req.body);
       if (!entry) {
@@ -3822,7 +3856,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/time-entries/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/time-entries/:id", isAdminAuthenticated, async (req, res) => {
     try {
       await storage.deleteTimeEntry(req.params.id);
       res.json({ message: "Time entry deleted" });
@@ -3928,7 +3962,7 @@ export async function registerRoutes(
   });
 
   // Pay Periods (admin only)
-  app.get("/api/pay-periods", isAuthenticated, async (req, res) => {
+  app.get("/api/pay-periods", isAdminAuthenticated, async (req, res) => {
     try {
       const periods = await storage.getPayPeriods();
       res.json(periods);
@@ -3938,7 +3972,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/pay-periods/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/pay-periods/:id", isAdminAuthenticated, async (req, res) => {
     try {
       const period = await storage.getPayPeriod(req.params.id);
       if (!period) {
@@ -3951,7 +3985,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/pay-periods", isAuthenticated, async (req, res) => {
+  app.post("/api/pay-periods", isAdminAuthenticated, async (req, res) => {
     try {
       const data = insertPayPeriodSchema.parse(req.body);
       const period = await storage.createPayPeriod(data);
@@ -3965,7 +3999,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/pay-periods/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/pay-periods/:id", isAdminAuthenticated, async (req, res) => {
     try {
       const period = await storage.updatePayPeriod(req.params.id, req.body);
       if (!period) {
@@ -3979,7 +4013,7 @@ export async function registerRoutes(
   });
 
   // Payroll Runs (admin only)
-  app.get("/api/payroll-runs", isAuthenticated, async (req, res) => {
+  app.get("/api/payroll-runs", isAdminAuthenticated, async (req, res) => {
     try {
       const { periodId, employeeId } = req.query;
       
@@ -4000,7 +4034,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/payroll-runs/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/payroll-runs/:id", isAdminAuthenticated, async (req, res) => {
     try {
       const run = await storage.getPayrollRun(req.params.id);
       if (!run) {
@@ -4015,7 +4049,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/payroll-runs", isAuthenticated, async (req, res) => {
+  app.post("/api/payroll-runs", isAdminAuthenticated, async (req, res) => {
     try {
       const data = insertPayrollRunSchema.parse(req.body);
       const run = await storage.createPayrollRun(data);
@@ -4029,7 +4063,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/payroll-runs/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/payroll-runs/:id", isAdminAuthenticated, async (req, res) => {
     try {
       const run = await storage.updatePayrollRun(req.params.id, req.body);
       if (!run) {
@@ -4043,7 +4077,7 @@ export async function registerRoutes(
   });
 
   // Payroll Adjustments (admin only)
-  app.post("/api/payroll-adjustments", isAuthenticated, async (req, res) => {
+  app.post("/api/payroll-adjustments", isAdminAuthenticated, async (req, res) => {
     try {
       const data = insertPayrollAdjustmentSchema.parse(req.body);
       const adjustment = await storage.createPayrollAdjustment(data);
@@ -4057,7 +4091,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/payroll-adjustments/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/payroll-adjustments/:id", isAdminAuthenticated, async (req, res) => {
     try {
       await storage.deletePayrollAdjustment(req.params.id);
       res.json({ message: "Adjustment deleted" });
@@ -4068,7 +4102,7 @@ export async function registerRoutes(
   });
 
   // Employee Documents (admin only)
-  app.get("/api/employees/:employeeId/documents", isAuthenticated, async (req, res) => {
+  app.get("/api/employees/:employeeId/documents", isAdminAuthenticated, async (req, res) => {
     try {
       const docs = await storage.getEmployeeDocuments(req.params.employeeId);
       res.json(docs);
@@ -4078,7 +4112,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/employees/:employeeId/documents", isAuthenticated, async (req, res) => {
+  app.post("/api/employees/:employeeId/documents", isAdminAuthenticated, async (req, res) => {
     try {
       const data = insertEmployeeDocumentSchema.parse({
         ...req.body,
@@ -4095,7 +4129,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/employee-documents/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/employee-documents/:id", isAdminAuthenticated, async (req, res) => {
     try {
       await storage.deleteEmployeeDocument(req.params.id);
       res.json({ message: "Document deleted" });
@@ -4106,7 +4140,7 @@ export async function registerRoutes(
   });
 
   // Generate Payroll for Period (admin only)
-  app.post("/api/pay-periods/:id/generate-payroll", isAuthenticated, async (req, res) => {
+  app.post("/api/pay-periods/:id/generate-payroll", isAdminAuthenticated, async (req, res) => {
     try {
       const period = await storage.getPayPeriod(req.params.id);
       if (!period) {

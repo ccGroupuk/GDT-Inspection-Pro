@@ -36,16 +36,16 @@ export default function Landing() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Clock className="h-6 w-6 text-primary" />
-                <CardTitle>Employee Portal</CardTitle>
+                <CardTitle>Staff Login</CardTitle>
               </div>
               <CardDescription>
-                Clock in/out, view timecards, and access payslips
+                Owner, managers, and employees. Access admin panel or timecard based on your access level.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Link href="/employee-portal">
-                <Button className="w-full" variant="outline" data-testid="button-employee-login">
-                  Employee Login
+                <Button className="w-full" data-testid="button-employee-login">
+                  Staff Login
                 </Button>
               </Link>
             </CardContent>
