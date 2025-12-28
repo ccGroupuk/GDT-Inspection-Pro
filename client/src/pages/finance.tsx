@@ -21,6 +21,10 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   Calendar,
+  Camera,
+  Receipt,
+  Loader2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -68,11 +72,24 @@ interface PartnerJobVolume {
   partners: PartnerVolume[];
 }
 
+interface ScannedReceiptData {
+  vendor: string;
+  date: string;
+  amount: number;
+  description: string;
+  items: string[];
+  category: string;
+}
+
 export default function Finance() {
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
+  const [isReceiptDialogOpen, setIsReceiptDialogOpen] = useState(false);
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannedData, setScannedData] = useState<ScannedReceiptData | null>(null);
   
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -178,6 +195,80 @@ export default function Finance() {
 
   const incomeCategories = categories.filter(c => c.type === "income");
   const expenseCategories = categories.filter(c => c.type === "expense");
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setReceiptImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleScanReceipt = async () => {
+    if (!receiptImage) return;
+
+    setIsScanning(true);
+    try {
+      const response = await fetch("/api/scan-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: receiptImage }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to scan receipt");
+      }
+
+      setScannedData(result.data);
+      toast({
+        title: "Receipt Scanned",
+        description: `Found £${result.data.amount} from ${result.data.vendor}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Scan Failed",
+        description: error.message || "Could not read the receipt. Try a clearer photo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleCreateFromScan = () => {
+    if (!scannedData) return;
+
+    const matchedCategory = expenseCategories.find(
+      c => c.name.toLowerCase().includes(scannedData.category.toLowerCase().split(" ")[0])
+    );
+
+    createMutation.mutate({
+      type: "expense",
+      categoryId: matchedCategory?.id || null,
+      amount: scannedData.amount.toString(),
+      description: scannedData.description || `${scannedData.vendor} purchase`,
+      date: scannedData.date ? new Date(scannedData.date) : new Date(),
+      notes: scannedData.items?.length > 0 ? `Items: ${scannedData.items.join(", ")}` : null,
+      sourceType: "receipt_scan",
+      vendor: scannedData.vendor,
+      receiptUrl: receiptImage,
+    });
+
+    setIsReceiptDialogOpen(false);
+    setReceiptImage(null);
+    setScannedData(null);
+  };
+
+  const resetReceiptScanner = () => {
+    setReceiptImage(null);
+    setScannedData(null);
+    setIsScanning(false);
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -337,16 +428,155 @@ export default function Finance() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-4">
             <CardTitle className="text-base font-semibold">Transactions</CardTitle>
-            <Dialog open={isDialogOpen} onOpenChange={(open) => {
-              setIsDialogOpen(open);
-              if (!open) setEditingTransaction(null);
-            }}>
-              <DialogTrigger asChild>
-                <Button size="sm" data-testid="button-add-transaction">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Transaction
-                </Button>
-              </DialogTrigger>
+            <div className="flex items-center gap-2">
+              <Dialog open={isReceiptDialogOpen} onOpenChange={(open) => {
+                setIsReceiptDialogOpen(open);
+                if (!open) resetReceiptScanner();
+              }}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" data-testid="button-scan-receipt">
+                    <Camera className="h-4 w-4 mr-2" />
+                    Scan Receipt
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <Receipt className="h-5 w-5" />
+                      Scan Receipt
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    {!receiptImage ? (
+                      <div className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          Take a photo or upload an image of your receipt. The AI will read it and create an expense entry automatically.
+                        </p>
+                        <div className="flex flex-col gap-3">
+                          <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg cursor-pointer hover-elevate">
+                            <Camera className="h-10 w-10 text-muted-foreground mb-2" />
+                            <span className="text-sm font-medium">Take Photo</span>
+                            <span className="text-xs text-muted-foreground">Use your camera</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={handleFileChange}
+                              data-testid="input-receipt-camera"
+                            />
+                          </label>
+                          <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-lg cursor-pointer hover-elevate">
+                            <ImageIcon className="h-6 w-6 text-muted-foreground mb-1" />
+                            <span className="text-sm">Upload from gallery</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleFileChange}
+                              data-testid="input-receipt-upload"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : !scannedData ? (
+                      <div className="space-y-4">
+                        <div className="relative">
+                          <img 
+                            src={receiptImage} 
+                            alt="Receipt preview" 
+                            className="w-full max-h-64 object-contain rounded-lg border"
+                          />
+                          {isScanning && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-lg">
+                              <div className="flex flex-col items-center gap-2">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                <span className="text-sm font-medium">Reading receipt...</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            onClick={resetReceiptScanner}
+                            className="flex-1"
+                            data-testid="button-retake-receipt"
+                          >
+                            Retake
+                          </Button>
+                          <Button 
+                            onClick={handleScanReceipt}
+                            disabled={isScanning}
+                            className="flex-1"
+                            data-testid="button-scan-now"
+                          >
+                            {isScanning ? "Scanning..." : "Scan Receipt"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                          <h4 className="font-medium text-sm">Extracted Data</h4>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Vendor:</span>
+                              <p className="font-medium" data-testid="text-scanned-vendor">{scannedData.vendor}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Amount:</span>
+                              <p className="font-medium text-lg" data-testid="text-scanned-amount">£{scannedData.amount.toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Date:</span>
+                              <p className="font-medium" data-testid="text-scanned-date">{scannedData.date || "Today"}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Category:</span>
+                              <p className="font-medium" data-testid="text-scanned-category">{scannedData.category}</p>
+                            </div>
+                          </div>
+                          {scannedData.items && scannedData.items.length > 0 && (
+                            <div>
+                              <span className="text-muted-foreground text-sm">Items:</span>
+                              <p className="text-sm">{scannedData.items.slice(0, 3).join(", ")}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            onClick={resetReceiptScanner}
+                            className="flex-1"
+                            data-testid="button-scan-again"
+                          >
+                            Scan Another
+                          </Button>
+                          <Button 
+                            onClick={handleCreateFromScan}
+                            disabled={createMutation.isPending}
+                            className="flex-1"
+                            data-testid="button-add-expense"
+                          >
+                            {createMutation.isPending ? "Adding..." : "Add Expense"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) setEditingTransaction(null);
+              }}>
+                <DialogTrigger asChild>
+                  <Button size="sm" data-testid="button-add-transaction">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Transaction
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>{editingTransaction ? "Edit Transaction" : "Add Transaction"}</DialogTitle>
@@ -367,6 +597,7 @@ export default function Finance() {
                 />
               </DialogContent>
             </Dialog>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
