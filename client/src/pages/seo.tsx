@@ -794,6 +794,10 @@ function ContentCreatorSection() {
   const selectedFocus = focusList.find(f => f.id === selectedFocusId);
 
   const handleFocusSelect = (focusId: string) => {
+    if (focusId === "none") {
+      setSelectedFocusId("");
+      return;
+    }
     setSelectedFocusId(focusId);
     const focus = focusList.find(f => f.id === focusId);
     if (focus) {
@@ -869,12 +873,12 @@ function ContentCreatorSection() {
           {focusList.length > 0 && (
             <div className="space-y-2">
               <Label>Weekly Focus (optional)</Label>
-              <Select value={selectedFocusId} onValueChange={handleFocusSelect}>
+              <Select value={selectedFocusId || "none"} onValueChange={handleFocusSelect}>
                 <SelectTrigger data-testid="select-weekly-focus">
                   <SelectValue placeholder="Select a weekly focus to use its settings" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {focusList.map((focus) => (
                     <SelectItem key={focus.id} value={focus.id}>
                       <div className="flex items-center gap-2">
