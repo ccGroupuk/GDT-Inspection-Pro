@@ -30,6 +30,8 @@ import {
   seoAutopilotRuns, type SeoAutopilotRun, type InsertSeoAutopilotRun,
   portalMessages, type PortalMessage, type InsertPortalMessage,
   portalMessageReads, type PortalMessageRead, type InsertPortalMessageRead,
+  helpCategories, type HelpCategory, type InsertHelpCategory,
+  helpArticles, type HelpArticle, type InsertHelpArticle,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -220,6 +222,23 @@ export interface IStorage {
   // SEO Autopilot Runs
   getSeoAutopilotRuns(): Promise<SeoAutopilotRun[]>;
   createSeoAutopilotRun(run: InsertSeoAutopilotRun): Promise<SeoAutopilotRun>;
+
+  // Help Categories
+  getHelpCategories(): Promise<HelpCategory[]>;
+  getHelpCategoriesByAudience(audience: string): Promise<HelpCategory[]>;
+  getHelpCategory(id: string): Promise<HelpCategory | undefined>;
+  createHelpCategory(category: InsertHelpCategory): Promise<HelpCategory>;
+  updateHelpCategory(id: string, category: Partial<InsertHelpCategory>): Promise<HelpCategory | undefined>;
+  deleteHelpCategory(id: string): Promise<boolean>;
+
+  // Help Articles
+  getHelpArticles(): Promise<HelpArticle[]>;
+  getHelpArticlesByAudience(audience: string): Promise<HelpArticle[]>;
+  getHelpArticlesByCategory(categoryId: string): Promise<HelpArticle[]>;
+  getHelpArticle(id: string): Promise<HelpArticle | undefined>;
+  createHelpArticle(article: InsertHelpArticle): Promise<HelpArticle>;
+  updateHelpArticle(id: string, article: Partial<InsertHelpArticle>): Promise<HelpArticle | undefined>;
+  deleteHelpArticle(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1127,6 +1146,92 @@ export class DatabaseStorage implements IStorage {
   async isPortalMessageRead(messageId: string): Promise<boolean> {
     const reads = await this.getPortalMessageReads(messageId);
     return reads.length > 0;
+  }
+
+  // Help Categories Methods
+  async getHelpCategories(): Promise<HelpCategory[]> {
+    return db.select().from(helpCategories).orderBy(asc(helpCategories.sortOrder));
+  }
+
+  async getHelpCategoriesByAudience(audience: string): Promise<HelpCategory[]> {
+    return db.select()
+      .from(helpCategories)
+      .where(or(
+        eq(helpCategories.audience, audience),
+        eq(helpCategories.audience, "all")
+      ))
+      .orderBy(asc(helpCategories.sortOrder));
+  }
+
+  async getHelpCategory(id: string): Promise<HelpCategory | undefined> {
+    const [category] = await db.select().from(helpCategories).where(eq(helpCategories.id, id));
+    return category || undefined;
+  }
+
+  async createHelpCategory(category: InsertHelpCategory): Promise<HelpCategory> {
+    const [created] = await db.insert(helpCategories).values(category).returning();
+    return created;
+  }
+
+  async updateHelpCategory(id: string, category: Partial<InsertHelpCategory>): Promise<HelpCategory | undefined> {
+    const [updated] = await db.update(helpCategories)
+      .set(category)
+      .where(eq(helpCategories.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteHelpCategory(id: string): Promise<boolean> {
+    await db.delete(helpCategories).where(eq(helpCategories.id, id));
+    return true;
+  }
+
+  // Help Articles Methods
+  async getHelpArticles(): Promise<HelpArticle[]> {
+    return db.select().from(helpArticles).orderBy(asc(helpArticles.sortOrder));
+  }
+
+  async getHelpArticlesByAudience(audience: string): Promise<HelpArticle[]> {
+    return db.select()
+      .from(helpArticles)
+      .where(and(
+        eq(helpArticles.isPublished, true),
+        or(
+          eq(helpArticles.audience, audience),
+          eq(helpArticles.audience, "all")
+        )
+      ))
+      .orderBy(asc(helpArticles.sortOrder));
+  }
+
+  async getHelpArticlesByCategory(categoryId: string): Promise<HelpArticle[]> {
+    return db.select()
+      .from(helpArticles)
+      .where(eq(helpArticles.categoryId, categoryId))
+      .orderBy(asc(helpArticles.sortOrder));
+  }
+
+  async getHelpArticle(id: string): Promise<HelpArticle | undefined> {
+    const [article] = await db.select().from(helpArticles).where(eq(helpArticles.id, id));
+    return article || undefined;
+  }
+
+  async createHelpArticle(article: InsertHelpArticle): Promise<HelpArticle> {
+    const [created] = await db.insert(helpArticles).values(article).returning();
+    return created;
+  }
+
+  async updateHelpArticle(id: string, article: Partial<InsertHelpArticle>): Promise<HelpArticle | undefined> {
+    const [updated] = await db.update(helpArticles)
+      .set({ ...article, updatedAt: new Date() })
+      .where(eq(helpArticles.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteHelpArticle(id: string): Promise<boolean> {
+    await db.delete(helpArticles).where(eq(helpArticles.id, id));
+    return true;
   }
 }
 

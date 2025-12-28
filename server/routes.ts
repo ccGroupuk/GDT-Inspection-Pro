@@ -3357,6 +3357,152 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== HELP CENTER ROUTES ====================
+
+  // Admin: Get all help categories
+  app.get("/api/help-categories", async (req, res) => {
+    try {
+      const categories = await storage.getHelpCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Get help categories error:", error);
+      res.status(500).json({ message: "Failed to get categories" });
+    }
+  });
+
+  // Admin: Create help category
+  app.post("/api/help-categories", async (req, res) => {
+    try {
+      const category = await storage.createHelpCategory(req.body);
+      res.status(201).json(category);
+    } catch (error) {
+      console.error("Create help category error:", error);
+      res.status(500).json({ message: "Failed to create category" });
+    }
+  });
+
+  // Admin: Update help category
+  app.patch("/api/help-categories/:id", async (req, res) => {
+    try {
+      const category = await storage.updateHelpCategory(req.params.id, req.body);
+      if (!category) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+      res.json(category);
+    } catch (error) {
+      console.error("Update help category error:", error);
+      res.status(500).json({ message: "Failed to update category" });
+    }
+  });
+
+  // Admin: Delete help category
+  app.delete("/api/help-categories/:id", async (req, res) => {
+    try {
+      await storage.deleteHelpCategory(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete help category error:", error);
+      res.status(500).json({ message: "Failed to delete category" });
+    }
+  });
+
+  // Admin: Get all help articles
+  app.get("/api/help-articles", async (req, res) => {
+    try {
+      const articles = await storage.getHelpArticles();
+      res.json(articles);
+    } catch (error) {
+      console.error("Get help articles error:", error);
+      res.status(500).json({ message: "Failed to get articles" });
+    }
+  });
+
+  // Admin: Get single help article
+  app.get("/api/help-articles/:id", async (req, res) => {
+    try {
+      const article = await storage.getHelpArticle(req.params.id);
+      if (!article) {
+        return res.status(404).json({ message: "Article not found" });
+      }
+      res.json(article);
+    } catch (error) {
+      console.error("Get help article error:", error);
+      res.status(500).json({ message: "Failed to get article" });
+    }
+  });
+
+  // Admin: Create help article
+  app.post("/api/help-articles", async (req, res) => {
+    try {
+      const article = await storage.createHelpArticle(req.body);
+      res.status(201).json(article);
+    } catch (error) {
+      console.error("Create help article error:", error);
+      res.status(500).json({ message: "Failed to create article" });
+    }
+  });
+
+  // Admin: Update help article
+  app.patch("/api/help-articles/:id", async (req, res) => {
+    try {
+      const article = await storage.updateHelpArticle(req.params.id, req.body);
+      if (!article) {
+        return res.status(404).json({ message: "Article not found" });
+      }
+      res.json(article);
+    } catch (error) {
+      console.error("Update help article error:", error);
+      res.status(500).json({ message: "Failed to update article" });
+    }
+  });
+
+  // Admin: Delete help article
+  app.delete("/api/help-articles/:id", async (req, res) => {
+    try {
+      await storage.deleteHelpArticle(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete help article error:", error);
+      res.status(500).json({ message: "Failed to delete article" });
+    }
+  });
+
+  // Public: Get help articles for admin audience
+  app.get("/api/help/admin", async (req, res) => {
+    try {
+      const categories = await storage.getHelpCategoriesByAudience("admin");
+      const articles = await storage.getHelpArticlesByAudience("admin");
+      res.json({ categories, articles });
+    } catch (error) {
+      console.error("Get admin help error:", error);
+      res.status(500).json({ message: "Failed to get help content" });
+    }
+  });
+
+  // Client Portal: Get help content
+  app.get("/api/portal/help", async (req, res) => {
+    try {
+      const categories = await storage.getHelpCategoriesByAudience("client");
+      const articles = await storage.getHelpArticlesByAudience("client");
+      res.json({ categories, articles });
+    } catch (error) {
+      console.error("Get client portal help error:", error);
+      res.status(500).json({ message: "Failed to get help content" });
+    }
+  });
+
+  // Partner Portal: Get help content
+  app.get("/api/partner-portal/help", async (req, res) => {
+    try {
+      const categories = await storage.getHelpCategoriesByAudience("partner");
+      const articles = await storage.getHelpArticlesByAudience("partner");
+      res.json({ categories, articles });
+    } catch (error) {
+      console.error("Get partner portal help error:", error);
+      res.status(500).json({ message: "Failed to get help content" });
+    }
+  });
+
   // Register object storage routes
   registerObjectStorageRoutes(app);
 
