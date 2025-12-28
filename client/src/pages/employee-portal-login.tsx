@@ -22,6 +22,7 @@ export default function EmployeePortalLogin() {
       const response = await fetch("/api/employee/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password })
       });
 
@@ -30,9 +31,6 @@ export default function EmployeePortalLogin() {
       if (!response.ok) {
         throw new Error(data.message || "Login failed");
       }
-
-      localStorage.setItem("employeeToken", data.token);
-      localStorage.setItem("employeeData", JSON.stringify(data.employee));
 
       if (data.mustChangePassword) {
         toast({

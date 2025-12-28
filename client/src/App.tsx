@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,6 +8,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { GlobalSearch } from "@/components/global-search";
+import { useAuth } from "@/hooks/use-auth";
+import { Loader2 } from "lucide-react";
 import Dashboard from "@/pages/dashboard";
 import Jobs from "@/pages/jobs";
 import JobForm from "@/pages/job-form";
@@ -103,7 +105,35 @@ function PartnerPortalRouter() {
   );
 }
 
-function AdminLayout() {
+function AuthLoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="text-center">
+        <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+        <p className="mt-2 text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+function ProtectedAdminLayout() {
+  const { isLoading, isAuthenticated, hasAdminAccess } = useAuth();
+  const [, setLocation] = useLocation();
+
+  if (isLoading) {
+    return <AuthLoadingScreen />;
+  }
+
+  if (!isAuthenticated) {
+    setLocation("/landing");
+    return null;
+  }
+
+  if (!hasAdminAccess) {
+    setLocation("/employee-portal/home");
+    return null;
+  }
+
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
@@ -140,7 +170,7 @@ function App() {
     if (isPartnerPortalRoute) return <PartnerPortalRouter />;
     if (isPortalRoute) return <PortalRouter />;
     if (isEmployeePortalRoute) return <EmployeePortalRouter />;
-    return <AdminLayout />;
+    return <ProtectedAdminLayout />;
   };
 
   return (

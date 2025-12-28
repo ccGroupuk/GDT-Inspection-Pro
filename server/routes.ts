@@ -17,6 +17,25 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
+  // Helper to get employee from session cookie
+  const getEmployeeFromCookie = async (req: Request): Promise<Employee | null> => {
+    const sessionToken = req.cookies?.employeeSession;
+    if (!sessionToken) return null;
+    
+    try {
+      const session = await storage.getEmployeeSession(sessionToken);
+      if (session && new Date(session.expiresAt) > new Date()) {
+        const employee = await storage.getEmployee(session.employeeId);
+        if (employee && employee.isActive) {
+          return employee;
+        }
+      }
+    } catch (error) {
+      console.error("Employee cookie auth error:", error);
+    }
+    return null;
+  };
+
   // Combined admin auth middleware - allows Replit Auth OR employee with owner/full_access
   const isAdminAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
     // First check Replit Auth
@@ -28,18 +47,24 @@ export async function registerRoutes(
       }
     }
     
-    // Then check employee token auth
+    // Then check employee cookie auth
+    const employee = await getEmployeeFromCookie(req);
+    if (employee && (employee.accessLevel === "owner" || employee.accessLevel === "full_access")) {
+      (req as any).employee = employee;
+      return next();
+    }
+    
+    // Fallback: check Bearer token for backward compatibility
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
       try {
         const session = await storage.getEmployeeSession(token);
         if (session && new Date(session.expiresAt) > new Date()) {
-          const employee = await storage.getEmployee(session.employeeId);
-          if (employee && employee.isActive && 
-              (employee.accessLevel === "owner" || employee.accessLevel === "full_access")) {
-            // Attach employee to request for use in handlers
-            (req as any).employee = employee;
+          const emp = await storage.getEmployee(session.employeeId);
+          if (emp && emp.isActive && 
+              (emp.accessLevel === "owner" || emp.accessLevel === "full_access")) {
+            (req as any).employee = emp;
             return next();
           }
         }
@@ -50,6 +75,80 @@ export async function registerRoutes(
     
     res.status(401).json({ message: "Unauthorized" });
   };
+
+  // ==================== UNIFIED AUTH ENDPOINTS ====================
+  
+  // Check authentication status (supports both Replit OAuth and employee sessions)
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      // Check Replit Auth first
+      const user = req.user as any;
+      if (req.isAuthenticated() && user?.expires_at) {
+        const now = Math.floor(Date.now() / 1000);
+        if (now <= user.expires_at && user.claims) {
+          return res.json({
+            authType: "replit",
+            user: {
+              id: user.claims.sub,
+              email: user.claims.email,
+              firstName: user.claims.first_name,
+              lastName: user.claims.last_name,
+              profileImageUrl: user.claims.profile_image_url,
+            },
+            employee: null,
+          });
+        }
+      }
+      
+      // Check employee session cookie
+      const employee = await getEmployeeFromCookie(req);
+      if (employee) {
+        return res.json({
+          authType: "employee",
+          user: null,
+          employee: {
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            email: employee.email,
+            accessLevel: employee.accessLevel,
+            isActive: employee.isActive,
+          },
+        });
+      }
+      
+      res.status(401).json({ message: "Not authenticated" });
+    } catch (error) {
+      console.error("Auth check error:", error);
+      res.status(500).json({ message: "Auth check failed" });
+    }
+  });
+
+  // Unified logout endpoint
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      // Clear employee session cookie if present
+      const sessionToken = req.cookies?.employeeSession;
+      if (sessionToken) {
+        await storage.deleteEmployeeSession(sessionToken);
+        res.clearCookie("employeeSession", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+        });
+      }
+      
+      // If using Replit Auth, log them out too
+      if (req.isAuthenticated()) {
+        req.logout(() => {});
+      }
+      
+      res.json({ message: "Logged out successfully" });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ message: "Logout failed" });
+    }
+  });
   
   // Dashboard
   app.get("/api/dashboard", async (req, res) => {
@@ -3678,8 +3777,16 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         userAgent: req.get("User-Agent") || null
       });
 
+      // Set HttpOnly cookie for secure session management
+      res.cookie("employeeSession", sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        expires: expiresAt,
+        path: "/",
+      });
+
       res.json({
-        token: sessionToken,
         employee: {
           id: employee.id,
           firstName: employee.firstName,
@@ -3699,10 +3806,16 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
   app.post("/api/employee/logout", async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (token) {
-        await storage.deleteEmployeeSession(token);
+      const sessionToken = req.cookies?.employeeSession;
+      if (sessionToken) {
+        await storage.deleteEmployeeSession(sessionToken);
       }
+      res.clearCookie("employeeSession", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+      });
       res.json({ message: "Logged out" });
     } catch (error) {
       console.error("Employee logout error:", error);
@@ -3710,14 +3823,35 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     }
   });
 
+  // Employee auth check endpoint
+  app.get("/api/employee/auth/me", async (req, res) => {
+    try {
+      const employee = await getEmployeeFromCookie(req);
+      if (!employee) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      res.json({
+        id: employee.id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        email: employee.email,
+        accessLevel: employee.accessLevel,
+        role: employee.role,
+      });
+    } catch (error) {
+      console.error("Employee auth check error:", error);
+      res.status(500).json({ message: "Auth check failed" });
+    }
+  });
+
   app.post("/api/employee/change-password", async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
+      const sessionToken = req.cookies?.employeeSession;
+      if (!sessionToken) {
         return res.status(401).json({ message: "Not authenticated" });
       }
 
-      const session = await storage.getEmployeeSession(token);
+      const session = await storage.getEmployeeSession(sessionToken);
       if (!session) {
         return res.status(401).json({ message: "Session expired" });
       }
