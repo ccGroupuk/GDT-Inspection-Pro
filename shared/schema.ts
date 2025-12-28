@@ -589,6 +589,10 @@ export const financialTransactions = pgTable("financial_transactions", {
   partnerCost: decimal("partner_cost", { precision: 10, scale: 2 }), // What we paid partner
   profitAmount: decimal("profit_amount", { precision: 10, scale: 2 }), // Our margin
   
+  // Receipt scanning
+  receiptUrl: text("receipt_url"), // URL to receipt image in object storage
+  vendor: text("vendor"), // Extracted vendor name from receipt
+  
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -636,6 +640,7 @@ export const TRANSACTION_SOURCE_TYPES = [
   { value: "partner_payment", label: "Partner Payment", description: "Payment made to trade partner" },
   { value: "manual", label: "Manual Entry", description: "Manually entered transaction" },
   { value: "adjustment", label: "Adjustment", description: "Adjustment or correction" },
+  { value: "receipt_scan", label: "Receipt Scan", description: "Scanned from receipt photo" },
 ] as const;
 
 // Calendar Events - for scheduling jobs with partners/in-house team
