@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +30,8 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  Upload,
+  X,
 } from "lucide-react";
 import { SiGoogle, SiInstagram, SiFacebook } from "react-icons/si";
 import type { SeoBusinessProfile, SeoContentPost, SeoWeeklyFocus } from "@shared/schema";
@@ -469,7 +471,46 @@ function WeeklyFocusSection() {
     seasonalTheme: "",
     recommendedPostCount: 6,
     notes: "",
+    focusImageUrl: "",
+    focusImageCaption: "",
   });
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const res = await apiRequest("POST", "/api/uploads/request-url", {
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      });
+      const { uploadURL, objectPath } = await res.json();
+      
+      await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      
+      setFormData(prev => ({ ...prev, focusImageUrl: objectPath }));
+      setImagePreview(URL.createObjectURL(file));
+      toast({ title: "Image uploaded", description: "Your focus image is ready for AI content generation." });
+    } catch (error) {
+      toast({ title: "Upload failed", description: "Could not upload the image.", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removeImage = () => {
+    setFormData(prev => ({ ...prev, focusImageUrl: "", focusImageCaption: "" }));
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const { data: focusList = [], isLoading } = useQuery<SeoWeeklyFocus[]>({
     queryKey: ["/api/seo/weekly-focus"],
@@ -488,6 +529,8 @@ function WeeklyFocusSection() {
       queryClient.invalidateQueries({ queryKey: ["/api/seo/weekly-focus"] });
       toast({ title: "Weekly focus created", description: "Your content focus for this week has been set." });
       setShowForm(false);
+      setImagePreview(null);
+      setFormData(prev => ({ ...prev, focusImageUrl: "", focusImageCaption: "" }));
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to create weekly focus.", variant: "destructive" });
@@ -600,6 +643,71 @@ function WeeklyFocusSection() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label>Focus Image (for AI-powered posts)</Label>
+                <div className="border-2 border-dashed rounded-md p-4">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    data-testid="input-focus-image"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImageUpload(file);
+                    }}
+                  />
+                  {imagePreview ? (
+                    <div className="space-y-3">
+                      <div className="relative inline-block">
+                        <img
+                          src={imagePreview}
+                          alt="Focus image preview"
+                          className="max-h-48 rounded-md object-contain"
+                        />
+                        <Button
+                          size="icon"
+                          variant="destructive"
+                          className="absolute -top-2 -right-2"
+                          onClick={removeImage}
+                          data-testid="button-remove-image"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Image Description (helps AI understand the image)</Label>
+                        <Input
+                          data-testid="input-image-caption"
+                          value={formData.focusImageCaption}
+                          onChange={(e) => setFormData(prev => ({ ...prev, focusImageCaption: e.target.value }))}
+                          placeholder="e.g., Completed under-stairs storage unit with oak finish"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="flex flex-col items-center justify-center py-6 cursor-pointer"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {isUploading ? (
+                        <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground text-center">
+                            Click to upload an image for this week's content focus
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            AI will use this image to generate relevant social posts
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 <Button
                   onClick={() => createMutation.mutate(formData)}
@@ -647,6 +755,18 @@ function WeeklyFocusSection() {
                 </div>
                 {focus.seasonalTheme && (
                   <p className="text-sm mt-2 text-muted-foreground">{focus.seasonalTheme}</p>
+                )}
+                {focus.focusImageUrl && (
+                  <div className="mt-3 space-y-2">
+                    <img
+                      src={focus.focusImageUrl}
+                      alt={focus.focusImageCaption || "Focus image"}
+                      className="w-full max-h-32 object-cover rounded-md"
+                    />
+                    {focus.focusImageCaption && (
+                      <p className="text-xs text-muted-foreground">{focus.focusImageCaption}</p>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
