@@ -90,6 +90,7 @@ export default function Finance() {
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scannedData, setScannedData] = useState<ScannedReceiptData | null>(null);
+  const [receiptJobId, setReceiptJobId] = useState<string>("none");
   
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -257,17 +258,18 @@ export default function Finance() {
       sourceType: "receipt_scan",
       vendor: scannedData.vendor,
       receiptUrl: receiptImage,
+      jobId: receiptJobId === "none" ? null : receiptJobId,
     });
 
     setIsReceiptDialogOpen(false);
-    setReceiptImage(null);
-    setScannedData(null);
+    resetReceiptScanner();
   };
 
   const resetReceiptScanner = () => {
     setReceiptImage(null);
     setScannedData(null);
     setIsScanning(false);
+    setReceiptJobId("none");
   };
 
   return (
@@ -543,6 +545,22 @@ export default function Finance() {
                               <p className="text-sm">{scannedData.items.slice(0, 3).join(", ")}</p>
                             </div>
                           )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm">Link to Job (optional)</Label>
+                          <Select value={receiptJobId} onValueChange={setReceiptJobId}>
+                            <SelectTrigger data-testid="select-receipt-job">
+                              <SelectValue placeholder="Select job" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No job</SelectItem>
+                              {allJobs.map(job => (
+                                <SelectItem key={job.id} value={job.id}>
+                                  {job.jobNumber} - {job.serviceType}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="flex gap-2">
                           <Button 
