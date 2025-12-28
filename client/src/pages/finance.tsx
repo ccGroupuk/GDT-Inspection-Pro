@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ import {
   Receipt,
   Loader2,
   Image as ImageIcon,
+  ExternalLink,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -651,7 +653,10 @@ export default function Finance() {
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                           <span>{format(new Date(tx.date), "dd MMM yyyy")}</span>
                           {jobInfo && (
-                            <span className="text-primary">Job: {jobInfo.jobNumber}</span>
+                            <Link href={`/jobs/${tx.jobId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                              Job: {jobInfo.jobNumber}
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
                           )}
                           {tx.sourceType === "auto" && (
                             <Badge variant="secondary" className="text-xs">Auto</Badge>
