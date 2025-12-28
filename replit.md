@@ -4,9 +4,9 @@
 A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The system manages clients, jobs, trade partners, and tasks with a visual pipeline for tracking job progress.
 
 ## Current State
-- **Version**: MVP Complete + Quote Builder + Job Notes + Financial Tracking + Calendar + Payment Details + SEO Power House
+- **Version**: MVP Complete + Quote Builder + Job Notes + Financial Tracking + Calendar + Payment Details + SEO Power House + Autopilot Mode
 - **Last Updated**: December 2024
-- **Status**: Fully functional CRM with persistent data storage, detailed quoting, job notes with photo attachments, financial tracking, work calendar, payment details on invoices, and AI-powered SEO content creation
+- **Status**: Fully functional CRM with persistent data storage, detailed quoting, job notes with photo attachments, financial tracking, work calendar, payment details on invoices, AI-powered SEO content creation, and automated content scheduling
 
 ## Core Features
 
@@ -130,6 +130,19 @@ A professional CRM system for Cardiff & Caerphilly Carpentry (CCC Group). The sy
 - Post types: Project Showcase, Before & After, Tips, Testimonials, Updates, Seasonal
 - Content queue with status workflow: Draft → Pending Review → Approved → Scheduled → Published
 - Tables: seo_business_profile, seo_brand_voice, seo_weekly_focus, seo_job_media, seo_content_posts
+
+### Autopilot Mode (SEO Power House)
+- Automated content generation and scheduling system
+- **Platform Configuration**: Enable/disable Facebook, Instagram, Google Business individually
+- **Posting Schedule**: Set posts per week, preferred days, and posting times per platform
+- **Content Mix**: Weighted distribution of content types (project showcase, before/after, tips, testimonials, seasonal)
+- **Approval Workflow**: Optional approval requirement before posts are marked ready
+- **Scheduled Slots**: View upcoming scheduled content with approve/mark-posted actions
+- **Cron Scheduler**: 
+  - Daily content generation at 6 AM based on configured settings
+  - Posting reminders at 12 PM for approved posts due that day
+- Uses weekly focus images when available for multimodal AI content generation
+- Tables: seo_autopilot_settings, seo_autopilot_slots, seo_autopilot_runs
 
 ## Project Architecture
 
