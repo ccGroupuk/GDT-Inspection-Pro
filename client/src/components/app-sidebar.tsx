@@ -150,7 +150,7 @@ export function AppSidebar() {
           onClick={() => {
             localStorage.removeItem("employeeToken");
             localStorage.removeItem("employeeData");
-            window.location.href = "/api/logout";
+            window.location.href = "/landing";
           }}
         >
           <LogOut className="w-4 h-4" />
