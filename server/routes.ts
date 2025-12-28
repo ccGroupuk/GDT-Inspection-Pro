@@ -2651,7 +2651,7 @@ export async function registerRoutes(
     }
   });
 
-  // Accept a partner quote (admin)
+  // Accept a partner quote (admin) - creates client-facing quote and sends to client
   app.post("/api/partner-quotes/:id/accept", async (req, res) => {
     try {
       const quote = await storage.getPartnerQuote(req.params.id);
@@ -2665,11 +2665,35 @@ export async function registerRoutes(
         adminNotes: req.body.adminNotes,
       });
       
-      // Update job with partner charge from quote
+      // Update job with partner charge and create client-facing quote
       if (quote.jobId) {
+        // Get the partner quote items
+        const partnerQuoteItems = await storage.getPartnerQuoteItems(req.params.id);
+        
+        // Delete existing job quote items to replace with partner quote items
+        await storage.deleteQuoteItemsByJob(quote.jobId);
+        
+        // Create job quote items from partner quote items
+        for (const item of partnerQuoteItems) {
+          await storage.createQuoteItem({
+            jobId: quote.jobId,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            lineTotal: item.lineTotal,
+          });
+        }
+        
+        // Update job with partner charge, quote value, tax settings, and set status to quote_sent
         await storage.updateJob(quote.jobId, {
           partnerCharge: quote.total,
           partnerChargeType: "fixed",
+          quotedValue: quote.total,
+          taxEnabled: quote.taxEnabled,
+          taxRate: quote.taxRate,
+          status: "quote_sent",
+          quoteResponse: null,
+          quoteRespondedAt: null,
         });
       }
       
