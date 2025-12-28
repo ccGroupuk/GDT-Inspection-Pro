@@ -8,6 +8,39 @@ import { z } from "zod";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
+// Simple in-memory rate limiter for login endpoints
+const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const MAX_LOGIN_ATTEMPTS = 10;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const attempts = loginAttempts.get(ip);
+  
+  if (!attempts || now - attempts.firstAttempt > RATE_LIMIT_WINDOW) {
+    loginAttempts.set(ip, { count: 1, firstAttempt: now });
+    return true;
+  }
+  
+  if (attempts.count >= MAX_LOGIN_ATTEMPTS) {
+    return false;
+  }
+  
+  attempts.count++;
+  return true;
+}
+
+// Cleanup old entries periodically
+setInterval(() => {
+  const now = Date.now();
+  const entries = Array.from(loginAttempts.entries());
+  for (const [ip, attempts] of entries) {
+    if (now - attempts.firstAttempt > RATE_LIMIT_WINDOW) {
+      loginAttempts.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -77,6 +110,57 @@ export async function registerRoutes(
   };
 
   // ==================== UNIFIED AUTH ENDPOINTS ====================
+  
+  // Public routes that don't require authentication
+  const publicRoutes = [
+    "/api/auth/me",
+    "/api/auth/logout",
+    "/api/login",
+    "/api/logout",
+    "/api/callback",
+    "/api/employee/login",
+    "/api/employee/logout",
+    "/api/portal/login",
+    "/api/portal/logout",
+    "/api/portal/auth/me",
+    "/api/partner-portal/login",
+    "/api/partner-portal/logout",
+    "/api/partner-portal/auth/me",
+    "/api/employee/auth/me",
+  ];
+
+  // Global admin route protection middleware
+  app.use("/api", async (req, res, next) => {
+    // Skip auth for public routes
+    const isPublicRoute = publicRoutes.some(route => req.path === route || req.path.startsWith(route + "/"));
+    if (isPublicRoute) {
+      return next();
+    }
+
+    // Skip auth for portal routes (they have their own auth)
+    if (req.path.startsWith("/portal/") || req.path.startsWith("/partner-portal/")) {
+      return next();
+    }
+
+    // Check Replit Auth first
+    const user = req.user as any;
+    if (req.isAuthenticated() && user?.expires_at) {
+      const now = Math.floor(Date.now() / 1000);
+      if (now <= user.expires_at) {
+        return next();
+      }
+    }
+
+    // Check employee cookie auth
+    const employee = await getEmployeeFromCookie(req);
+    if (employee && (employee.accessLevel === "owner" || employee.accessLevel === "full_access")) {
+      (req as any).employee = employee;
+      return next();
+    }
+
+    // Not authenticated
+    res.status(401).json({ message: "Unauthorized" });
+  });
   
   // Check authentication status (supports both Replit OAuth and employee sessions)
   app.get("/api/auth/me", async (req, res) => {
@@ -1124,6 +1208,27 @@ export async function registerRoutes(
     }
   });
 
+  // Client portal auth check endpoint
+  app.get("/api/portal/auth/me", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const contact = await storage.getContact(access.contactId);
+      res.json({ authenticated: true, contact });
+    } catch (error) {
+      console.error("Portal auth check error:", error);
+      res.status(500).json({ message: "Auth check failed" });
+    }
+  });
+
   app.get("/api/portal/profile", async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
@@ -1379,6 +1484,27 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Partner portal job detail error:", error);
       res.status(500).json({ message: "Failed to load job" });
+    }
+  });
+
+  // Partner portal auth check endpoint
+  app.get("/api/partner-portal/auth/me", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const partner = await storage.getTradePartner(access.partnerId);
+      res.json({ authenticated: true, partner });
+    } catch (error) {
+      console.error("Partner portal auth check error:", error);
+      res.status(500).json({ message: "Auth check failed" });
     }
   });
 
@@ -3727,9 +3853,16 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
   // ==================== EMPLOYEE MANAGEMENT ====================
 
-  // Employee Authentication
+  // Employee Authentication with rate limiting
   app.post("/api/employee/login", async (req, res) => {
     try {
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      
+      // Check rate limit
+      if (!checkRateLimit(clientIp)) {
+        return res.status(429).json({ message: "Too many login attempts. Please try again later." });
+      }
+
       const { email, password } = req.body;
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password required" });

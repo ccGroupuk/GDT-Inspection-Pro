@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -118,20 +119,33 @@ function AuthLoadingScreen() {
 
 function ProtectedAdminLayout() {
   const { isLoading, isAuthenticated, hasAdminAccess } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const [shouldRedirect, setShouldRedirect] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        setShouldRedirect("/landing");
+      } else if (!hasAdminAccess) {
+        setShouldRedirect("/employee-portal/home");
+      } else {
+        setShouldRedirect(null);
+      }
+    }
+  }, [isLoading, isAuthenticated, hasAdminAccess]);
+
+  useEffect(() => {
+    if (shouldRedirect) {
+      setLocation(shouldRedirect);
+    }
+  }, [shouldRedirect, setLocation]);
 
   if (isLoading) {
     return <AuthLoadingScreen />;
   }
 
-  if (!isAuthenticated) {
-    setLocation("/landing");
-    return null;
-  }
-
-  if (!hasAdminAccess) {
-    setLocation("/employee-portal/home");
-    return null;
+  if (shouldRedirect) {
+    return <AuthLoadingScreen />;
   }
 
   const style = {
