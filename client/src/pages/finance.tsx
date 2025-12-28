@@ -53,6 +53,21 @@ interface FinancialForecast {
   jobs: ForecastJob[];
 }
 
+interface PartnerVolume {
+  partnerId: string;
+  businessName: string;
+  totalValue: number;
+  jobCount: number;
+  cccMargin: number;
+}
+
+interface PartnerJobVolume {
+  totalVolume: number;
+  totalMargin: number;
+  totalJobCount: number;
+  partners: PartnerVolume[];
+}
+
 export default function Finance() {
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -91,6 +106,15 @@ export default function Finance() {
 
   const { data: forecast } = useQuery<FinancialForecast>({
     queryKey: ["/api/financial-forecast"],
+  });
+
+  const { data: partnerVolume } = useQuery<PartnerJobVolume>({
+    queryKey: ["/api/partner-job-volume", year, month],
+    queryFn: async () => {
+      const res = await fetch(`/api/partner-job-volume?year=${year}&month=${month}`);
+      if (!res.ok) throw new Error("Failed to fetch partner volume");
+      return res.json();
+    },
   });
 
   const createMutation = useMutation({
@@ -265,6 +289,49 @@ export default function Finance() {
           )}
         </CardContent>
       </Card>
+
+      {(partnerVolume?.totalJobCount || 0) > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Partner Job Volume</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="p-4 rounded-md bg-muted/50">
+                <p className="text-sm text-muted-foreground">Total Job Value</p>
+                <p className="text-2xl font-semibold" data-testid="text-partner-volume">
+                  £{(partnerVolume?.totalVolume || 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">{partnerVolume?.totalJobCount || 0} partner jobs</p>
+              </div>
+              <div className="p-4 rounded-md bg-muted/50">
+                <p className="text-sm text-muted-foreground">CCC Profit</p>
+                <p className="text-2xl font-semibold text-green-600" data-testid="text-partner-margin">
+                  £{(partnerVolume?.totalMargin || 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">Your earnings</p>
+              </div>
+            </div>
+            {partnerVolume?.partners && partnerVolume.partners.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">By Partner</p>
+                {partnerVolume.partners.map(p => (
+                  <div key={p.partnerId} className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/30" data-testid={`partner-volume-${p.partnerId}`}>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="font-medium">{p.businessName}</span>
+                      <Badge variant="secondary" className="text-xs">{p.jobCount} job{p.jobCount !== 1 ? "s" : ""}</Badge>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">£{p.totalValue.toLocaleString()}</p>
+                      <p className="text-xs text-green-600">Profit: £{p.cccMargin.toLocaleString()}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">

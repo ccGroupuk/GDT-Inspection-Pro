@@ -268,11 +268,10 @@ export async function registerRoutes(
               ? `CCC Margin for ${job.jobNumber}${contact ? ` - ${contact.name}` : ""} (${job.partnerChargeType === "percentage" ? job.partnerCharge + "%" : "£" + job.partnerCharge} of £${grossAmount.toFixed(2)})`
               : `Payment received for ${job.jobNumber}${contact ? ` - ${contact.name}` : ""}`,
             jobId: job.id,
-            partnerId: undefined,
+            partnerId: job.deliveryType === "partner" ? job.partnerId : undefined,
             invoiceId: undefined,
             sourceType: "job_payment",
             grossAmount: grossAmount.toFixed(2),
-            partnerCost: partnerEarnings > 0 ? partnerEarnings.toFixed(2) : undefined,
             profitAmount: cccMargin.toFixed(2),
           });
           console.log(`Auto-created income transaction for job ${job.jobNumber} - CCC Margin: £${cccMargin.toFixed(2)}`);
@@ -1651,6 +1650,80 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get financial forecast error:", error);
       res.status(500).json({ message: "Failed to load financial forecast" });
+    }
+  });
+
+  // Partner Job Volume - track total value of jobs brought in by partners
+  app.get("/api/partner-job-volume", async (req, res) => {
+    try {
+      const { year, month } = req.query;
+      const jobs = await storage.getJobs();
+      const partners = await storage.getTradePartners();
+      
+      // Filter for partner jobs only
+      let partnerJobs = jobs.filter(j => j.deliveryType === "partner" && j.partnerId);
+      
+      // Optionally filter by date (jobs that reached paid status in this month)
+      // For now, we'll show all paid partner jobs for the selected month
+      if (year && month) {
+        const startDate = new Date(parseInt(year as string), parseInt(month as string) - 1, 1);
+        const endDate = new Date(parseInt(year as string), parseInt(month as string), 0);
+        
+        partnerJobs = partnerJobs.filter(j => {
+          if (!j.updatedAt) return false;
+          const jobDate = new Date(j.updatedAt);
+          return jobDate >= startDate && jobDate <= endDate && j.status === "paid";
+        });
+      }
+      
+      // Group by partner
+      const partnerVolume: Record<string, { partnerId: string; businessName: string; totalValue: number; jobCount: number; cccMargin: number }> = {};
+      
+      for (const job of partnerJobs) {
+        if (!job.partnerId) continue;
+        
+        if (!partnerVolume[job.partnerId]) {
+          const partner = partners.find(p => p.id === job.partnerId);
+          partnerVolume[job.partnerId] = {
+            partnerId: job.partnerId,
+            businessName: partner?.businessName || "Unknown Partner",
+            totalValue: 0,
+            jobCount: 0,
+            cccMargin: 0,
+          };
+        }
+        
+        const grossValue = parseFloat(job.quotedValue || "0");
+        let margin = grossValue;
+        
+        if (job.partnerCharge) {
+          const charge = parseFloat(job.partnerCharge);
+          if (job.partnerChargeType === "percentage") {
+            margin = grossValue * (charge / 100);
+          } else {
+            margin = charge;
+          }
+        }
+        
+        partnerVolume[job.partnerId].totalValue += grossValue;
+        partnerVolume[job.partnerId].jobCount += 1;
+        partnerVolume[job.partnerId].cccMargin += margin;
+      }
+      
+      const partnerList = Object.values(partnerVolume);
+      const totalVolume = partnerList.reduce((sum, p) => sum + p.totalValue, 0);
+      const totalMargin = partnerList.reduce((sum, p) => sum + p.cccMargin, 0);
+      const totalJobCount = partnerList.reduce((sum, p) => sum + p.jobCount, 0);
+      
+      res.json({
+        totalVolume,
+        totalMargin,
+        totalJobCount,
+        partners: partnerList
+      });
+    } catch (error) {
+      console.error("Get partner job volume error:", error);
+      res.status(500).json({ message: "Failed to load partner job volume" });
     }
   });
 
