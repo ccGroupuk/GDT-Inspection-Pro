@@ -1155,3 +1155,57 @@ export const SEO_POST_STATUSES = [
   { value: "published", label: "Published", description: "Published to platform" },
   { value: "rejected", label: "Rejected", description: "Rejected, needs revision" },
 ] as const;
+
+// ==================== HELP CENTER ====================
+
+// Help Categories
+export const helpCategories = pgTable("help_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  icon: text("icon"), // lucide icon name
+  audience: text("audience").notNull().default("all"), // admin, client, partner, all
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const helpCategoriesRelations = relations(helpCategories, ({ many }) => ({
+  articles: many(helpArticles),
+}));
+
+export const insertHelpCategorySchema = createInsertSchema(helpCategories).omit({ id: true, createdAt: true });
+export type InsertHelpCategory = z.infer<typeof insertHelpCategorySchema>;
+export type HelpCategory = typeof helpCategories.$inferSelect;
+
+// Help Articles
+export const helpArticles = pgTable("help_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  categoryId: varchar("category_id").references(() => helpCategories.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  content: text("content").notNull(), // markdown or rich text content
+  audience: text("audience").notNull().default("all"), // admin, client, partner, all
+  videoUrl: text("video_url"), // YouTube or Vimeo embed URL
+  sortOrder: integer("sort_order").default(0),
+  isPublished: boolean("is_published").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const helpArticlesRelations = relations(helpArticles, ({ one }) => ({
+  category: one(helpCategories, {
+    fields: [helpArticles.categoryId],
+    references: [helpCategories.id],
+  }),
+}));
+
+export const insertHelpArticleSchema = createInsertSchema(helpArticles).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertHelpArticle = z.infer<typeof insertHelpArticleSchema>;
+export type HelpArticle = typeof helpArticles.$inferSelect;
+
+// Help Audiences
+export const HELP_AUDIENCES = [
+  { value: "all", label: "Everyone" },
+  { value: "admin", label: "Admin Only" },
+  { value: "client", label: "Clients Only" },
+  { value: "partner", label: "Partners Only" },
+] as const;
