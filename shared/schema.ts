@@ -907,6 +907,7 @@ export const seoContentPosts = pgTable("seo_content_posts", {
   
   // Status workflow
   status: text("status").notNull().default("draft"), // draft, pending_review, approved, scheduled, published, rejected
+  source: text("source").default("manual"), // manual, autopilot
   
   // Scheduling
   scheduledFor: timestamp("scheduled_for"),
@@ -940,6 +941,119 @@ export const seoContentPostsRelations = relations(seoContentPosts, ({ one }) => 
 export const insertSeoContentPostSchema = createInsertSchema(seoContentPosts).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSeoContentPost = z.infer<typeof insertSeoContentPostSchema>;
 export type SeoContentPost = typeof seoContentPosts.$inferSelect;
+
+// SEO Autopilot Settings
+export const seoAutopilotSettings = pgTable("seo_autopilot_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Global toggle
+  enabled: boolean("enabled").default(false),
+  
+  // Platform-specific settings
+  facebookEnabled: boolean("facebook_enabled").default(true),
+  facebookPostsPerWeek: integer("facebook_posts_per_week").default(3),
+  facebookPreferredDays: text("facebook_preferred_days").array(), // ['monday', 'wednesday', 'friday']
+  facebookPreferredTime: text("facebook_preferred_time").default("09:00"), // 24hr format
+  
+  instagramEnabled: boolean("instagram_enabled").default(true),
+  instagramPostsPerWeek: integer("instagram_posts_per_week").default(3),
+  instagramPreferredDays: text("instagram_preferred_days").array(), // ['tuesday', 'thursday', 'saturday']
+  instagramPreferredTime: text("instagram_preferred_time").default("18:00"),
+  
+  googleEnabled: boolean("google_enabled").default(true),
+  googlePostsPerWeek: integer("google_posts_per_week").default(2),
+  googlePreferredDays: text("google_preferred_days").array(), // ['monday', 'thursday']
+  googlePreferredTime: text("google_preferred_time").default("12:00"),
+  
+  // Content mix weights (percentage allocation)
+  projectShowcaseWeight: integer("project_showcase_weight").default(40),
+  beforeAfterWeight: integer("before_after_weight").default(20),
+  tipsWeight: integer("tips_weight").default(15),
+  testimonialWeight: integer("testimonial_weight").default(15),
+  seasonalWeight: integer("seasonal_weight").default(10),
+  
+  // Auto-generation preferences
+  autoGenerateAhead: integer("auto_generate_ahead").default(7), // days ahead to generate
+  requireApproval: boolean("require_approval").default(true),
+  useWeeklyFocusImages: boolean("use_weekly_focus_images").default(true),
+  
+  // Notification preferences
+  notifyOnGeneration: boolean("notify_on_generation").default(true),
+  notifyBeforePost: boolean("notify_before_post").default(true),
+  notifyBeforePostHours: integer("notify_before_post_hours").default(2),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSeoAutopilotSettingsSchema = createInsertSchema(seoAutopilotSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSeoAutopilotSettings = z.infer<typeof insertSeoAutopilotSettingsSchema>;
+export type SeoAutopilotSettings = typeof seoAutopilotSettings.$inferSelect;
+
+// SEO Autopilot Scheduled Slots
+export const seoAutopilotSlots = pgTable("seo_autopilot_slots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Scheduling info
+  platform: text("platform").notNull(), // facebook, instagram, google_business
+  scheduledFor: timestamp("scheduled_for").notNull(),
+  contentType: text("content_type").notNull(), // project_showcase, before_after, tip, testimonial, seasonal
+  
+  // Status
+  status: text("status").notNull().default("pending"), // pending, generated, approved, posted, skipped
+  
+  // Link to generated post
+  contentPostId: varchar("content_post_id").references(() => seoContentPosts.id),
+  
+  // Weekly focus to use (if any)
+  weeklyFocusId: varchar("weekly_focus_id").references(() => seoWeeklyFocus.id),
+  
+  // Approval
+  approvedAt: timestamp("approved_at"),
+  approvedBy: text("approved_by"),
+  
+  // Posted info
+  postedAt: timestamp("posted_at"),
+  postError: text("post_error"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const seoAutopilotSlotsRelations = relations(seoAutopilotSlots, ({ one }) => ({
+  contentPost: one(seoContentPosts, {
+    fields: [seoAutopilotSlots.contentPostId],
+    references: [seoContentPosts.id],
+  }),
+  weeklyFocus: one(seoWeeklyFocus, {
+    fields: [seoAutopilotSlots.weeklyFocusId],
+    references: [seoWeeklyFocus.id],
+  }),
+}));
+
+export const insertSeoAutopilotSlotSchema = createInsertSchema(seoAutopilotSlots).omit({ id: true, createdAt: true });
+export type InsertSeoAutopilotSlot = z.infer<typeof insertSeoAutopilotSlotSchema>;
+export type SeoAutopilotSlot = typeof seoAutopilotSlots.$inferSelect;
+
+// SEO Autopilot Generation Runs (audit log)
+export const seoAutopilotRuns = pgTable("seo_autopilot_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Run info
+  ranAt: timestamp("ran_at").defaultNow(),
+  slotsGenerated: integer("slots_generated").default(0),
+  postsCreated: integer("posts_created").default(0),
+  
+  // Status
+  status: text("status").notNull().default("success"), // success, partial, failed
+  errorMessage: text("error_message"),
+  
+  // Details
+  details: text("details"), // JSON string with generation details
+});
+
+export const insertSeoAutopilotRunSchema = createInsertSchema(seoAutopilotRuns).omit({ id: true });
+export type InsertSeoAutopilotRun = z.infer<typeof insertSeoAutopilotRunSchema>;
+export type SeoAutopilotRun = typeof seoAutopilotRuns.$inferSelect;
 
 // SEO Brand Tones
 export const SEO_BRAND_TONES = [
