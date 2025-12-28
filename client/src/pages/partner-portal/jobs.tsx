@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
 import { PortalMessagesDisplay } from "@/components/portal-messages-display";
 import { useTabNotification } from "@/hooks/use-tab-notification";
-import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight, Calendar, HelpCircle } from "lucide-react";
+import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight, Calendar, HelpCircle, Settings } from "lucide-react";
 import type { Job, Contact } from "@shared/schema";
 
 type JobWithContact = Job & { contact?: Contact };
@@ -127,6 +127,17 @@ export default function PartnerPortalJobs() {
               >
                 <HelpCircle className="w-4 h-4 mr-2" />
                 Help
+              </Button>
+            </Link>
+            <Link href="/partner-portal/profile">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-profile"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
               </Button>
             </Link>
           </div>
