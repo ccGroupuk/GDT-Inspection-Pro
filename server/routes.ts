@@ -1405,7 +1405,36 @@ export async function registerRoutes(
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       });
 
-      res.status(201).json({ invite, inviteLink: `/partner-portal/invite/${inviteToken}` });
+      const inviteLink = `/partner-portal/invite/${inviteToken}`;
+      const fullInviteUrl = `${req.protocol}://${req.get('host')}${inviteLink}`;
+      
+      // Send email with invite link
+      const { sendPartnerPortalAccess } = await import('./email');
+      const emailResult = await sendPartnerPortalAccess(
+        partner.email,
+        partner.contactName || partner.businessName,
+        fullInviteUrl,
+        inviteToken
+      );
+      
+      if (emailResult.success) {
+        console.log(`[email] Partner invite sent to ${partner.email}`);
+        res.status(201).json({ 
+          invite, 
+          inviteLink,
+          emailSent: true,
+          message: "Invite sent successfully" 
+        });
+      } else {
+        console.warn(`[email] Failed to send partner invite: ${emailResult.error}`);
+        res.status(201).json({ 
+          invite, 
+          inviteLink,
+          emailSent: false,
+          emailError: emailResult.error,
+          message: "Invite created but email could not be sent" 
+        });
+      }
     } catch (error) {
       console.error("Send partner portal invite error:", error);
       res.status(500).json({ message: "Failed to send invite" });
