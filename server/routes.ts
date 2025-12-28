@@ -53,13 +53,21 @@ export async function registerRoutes(
         c.postcode?.toLowerCase().includes(query)
       ).slice(0, 5);
 
-      const matchedJobs = jobs.filter(j => 
-        j.jobNumber?.toLowerCase().includes(query) ||
-        j.serviceType?.toLowerCase().includes(query) ||
-        j.description?.toLowerCase().includes(query) ||
-        j.jobPostcode?.toLowerCase().includes(query) ||
-        j.jobAddress?.toLowerCase().includes(query)
-      ).slice(0, 5);
+      // Create contact lookup for enriching jobs
+      const contactMap = new Map(contacts.map(c => [c.id, c]));
+
+      const matchedJobs = jobs.filter(j => {
+        const contact = contactMap.get(j.contactId);
+        return j.jobNumber?.toLowerCase().includes(query) ||
+          j.serviceType?.toLowerCase().includes(query) ||
+          j.description?.toLowerCase().includes(query) ||
+          j.jobPostcode?.toLowerCase().includes(query) ||
+          j.jobAddress?.toLowerCase().includes(query) ||
+          contact?.name.toLowerCase().includes(query);
+      }).slice(0, 5).map(j => ({
+        ...j,
+        contact: contactMap.get(j.contactId),
+      }));
 
       const matchedPartners = partners.filter(p => 
         p.businessName.toLowerCase().includes(query) ||
