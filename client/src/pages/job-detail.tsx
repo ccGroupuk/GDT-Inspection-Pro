@@ -187,6 +187,12 @@ export default function JobDetail() {
   const [surveyDate, setSurveyDate] = useState("");
   const [surveyTime, setSurveyTime] = useState("");
 
+  // Margin dialog state for accepting partner quotes
+  const [marginDialogOpen, setMarginDialogOpen] = useState(false);
+  const [selectedQuoteForMargin, setSelectedQuoteForMargin] = useState<string | null>(null);
+  const [marginType, setMarginType] = useState<string>("percentage");
+  const [marginValue, setMarginValue] = useState<string>("20");
+
   const { uploadFile } = useUpload({
     onSuccess: (response) => {
       setPendingAttachments(prev => [...prev, {
@@ -457,12 +463,15 @@ export default function JobDetail() {
 
   // Partner quote mutations
   const acceptPartnerQuoteMutation = useMutation({
-    mutationFn: async (quoteId: string) => {
-      return apiRequest("POST", `/api/partner-quotes/${quoteId}/accept`);
+    mutationFn: async ({ quoteId, marginType, marginValue }: { quoteId: string; marginType: string; marginValue: string }) => {
+      return apiRequest("POST", `/api/partner-quotes/${quoteId}/accept`, { marginType, marginValue });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "partner-quotes"] });
-      toast({ title: "Partner quote accepted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      setMarginDialogOpen(false);
+      setSelectedQuoteForMargin(null);
+      toast({ title: "Partner quote accepted and sent to client" });
     },
     onError: () => {
       toast({ title: "Error accepting partner quote", variant: "destructive" });
@@ -1429,12 +1438,15 @@ export default function JobDetail() {
                       <div className="flex items-center gap-2 pt-2">
                         <Button
                           size="sm"
-                          onClick={() => acceptPartnerQuoteMutation.mutate(quote.id)}
+                          onClick={() => {
+                            setSelectedQuoteForMargin(quote.id);
+                            setMarginDialogOpen(true);
+                          }}
                           disabled={acceptPartnerQuoteMutation.isPending}
                           data-testid={`button-accept-partner-quote-${quote.id}`}
                         >
                           <CheckCircle className="w-3 h-3 mr-1" />
-                          Accept
+                          Accept & Send to Client
                         </Button>
                         <Button
                           size="sm"
@@ -1690,6 +1702,90 @@ export default function JobDetail() {
               data-testid="button-save-note"
             >
               {editingNote ? "Update" : "Add"} Note
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Margin Dialog for accepting partner quotes */}
+      <Dialog open={marginDialogOpen} onOpenChange={setMarginDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Your Margin</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Add your margin to the partner quote. The client will see the final price with your margin included.
+            </p>
+            
+            {selectedQuoteForMargin && partnerQuotes && (
+              <div className="p-3 bg-muted rounded-md text-sm">
+                <span className="text-muted-foreground">Partner Quote Total: </span>
+                <span className="font-medium">
+                  £{parseFloat(partnerQuotes.find(q => q.id === selectedQuoteForMargin)?.total || "0").toFixed(2)}
+                </span>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label>Margin Type</Label>
+              <Select value={marginType} onValueChange={setMarginType}>
+                <SelectTrigger data-testid="select-margin-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="percentage">Percentage (%)</SelectItem>
+                  <SelectItem value="fixed">Fixed Amount (£)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>{marginType === "percentage" ? "Margin Percentage" : "Margin Amount"}</Label>
+              <Input
+                type="number"
+                value={marginValue}
+                onChange={(e) => setMarginValue(e.target.value)}
+                placeholder={marginType === "percentage" ? "e.g. 20" : "e.g. 100"}
+                data-testid="input-margin-value"
+              />
+            </div>
+            
+            {selectedQuoteForMargin && partnerQuotes && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-md text-sm">
+                <span className="text-muted-foreground">Client will see: </span>
+                <span className="font-semibold text-green-700 dark:text-green-400">
+                  £{(() => {
+                    const partnerTotal = parseFloat(partnerQuotes.find(q => q.id === selectedQuoteForMargin)?.total || "0");
+                    const margin = parseFloat(marginValue) || 0;
+                    if (marginType === "percentage") {
+                      return (partnerTotal * (1 + margin / 100)).toFixed(2);
+                    } else {
+                      return (partnerTotal + margin).toFixed(2);
+                    }
+                  })()}
+                </span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMarginDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedQuoteForMargin) {
+                  acceptPartnerQuoteMutation.mutate({
+                    quoteId: selectedQuoteForMargin,
+                    marginType,
+                    marginValue,
+                  });
+                }
+              }}
+              disabled={acceptPartnerQuoteMutation.isPending}
+              data-testid="button-confirm-accept-quote"
+            >
+              Accept & Send to Client
             </Button>
           </DialogFooter>
         </DialogContent>

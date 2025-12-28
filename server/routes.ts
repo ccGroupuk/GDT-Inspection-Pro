@@ -2651,7 +2651,7 @@ export async function registerRoutes(
     }
   });
 
-  // Accept a partner quote (admin) - creates client-facing quote and sends to client
+  // Accept a partner quote (admin) - creates client-facing quote with margin and sends to client
   app.post("/api/partner-quotes/:id/accept", async (req, res) => {
     try {
       const quote = await storage.getPartnerQuote(req.params.id);
@@ -2659,13 +2659,16 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Quote not found" });
       }
       
+      const { marginType, marginValue, adminNotes } = req.body;
+      const margin = parseFloat(marginValue) || 0;
+      
       const updated = await storage.updatePartnerQuote(req.params.id, {
         status: "accepted",
         respondedAt: new Date(),
-        adminNotes: req.body.adminNotes,
+        adminNotes,
       });
       
-      // Update job with partner charge and create client-facing quote
+      // Update job with partner charge and create client-facing quote with margin
       if (quote.jobId) {
         // Get the partner quote items
         const partnerQuoteItems = await storage.getPartnerQuoteItems(req.params.id);
@@ -2673,22 +2676,60 @@ export async function registerRoutes(
         // Delete existing job quote items to replace with partner quote items
         await storage.deleteQuoteItemsByJob(quote.jobId);
         
-        // Create job quote items from partner quote items
+        // Calculate margin multiplier
+        let marginMultiplier = 1;
+        let fixedMarginPerItem = 0;
+        if (marginType === "percentage" && margin > 0) {
+          marginMultiplier = 1 + (margin / 100);
+        } else if (marginType === "fixed" && margin > 0 && partnerQuoteItems.length > 0) {
+          // Distribute fixed margin across items proportionally
+          fixedMarginPerItem = margin / partnerQuoteItems.length;
+        }
+        
+        // Create job quote items from partner quote items with margin applied
         for (const item of partnerQuoteItems) {
+          const originalUnitPrice = parseFloat(item.unitPrice) || 0;
+          const originalLineTotal = parseFloat(item.lineTotal) || 0;
+          
+          let newUnitPrice: number;
+          let newLineTotal: number;
+          
+          if (marginType === "percentage") {
+            newUnitPrice = originalUnitPrice * marginMultiplier;
+            newLineTotal = originalLineTotal * marginMultiplier;
+          } else {
+            // Fixed margin distributed per item
+            newUnitPrice = originalUnitPrice + (fixedMarginPerItem / (parseFloat(item.quantity) || 1));
+            newLineTotal = originalLineTotal + fixedMarginPerItem;
+          }
+          
           await storage.createQuoteItem({
             jobId: quote.jobId,
             description: item.description,
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            lineTotal: item.lineTotal,
+            unitPrice: newUnitPrice.toFixed(2),
+            lineTotal: newLineTotal.toFixed(2),
           });
         }
         
-        // Update job with partner charge, quote value, tax settings, and set status to quote_sent
+        // Calculate final client total with margin
+        const partnerTotal = parseFloat(quote.total) || 0;
+        let clientTotal: number;
+        if (marginType === "percentage") {
+          clientTotal = partnerTotal * marginMultiplier;
+        } else {
+          clientTotal = partnerTotal + margin;
+        }
+        
+        // Calculate the CCC margin amount
+        const cccMarginAmount = clientTotal - partnerTotal;
+        
+        // Update job with partner charge, quote value, margin, tax settings, and set status to quote_sent
         await storage.updateJob(quote.jobId, {
           partnerCharge: quote.total,
           partnerChargeType: "fixed",
-          quotedValue: quote.total,
+          quotedValue: clientTotal.toFixed(2),
+          cccMargin: cccMarginAmount.toFixed(2),
           taxEnabled: quote.taxEnabled,
           taxRate: quote.taxRate,
           status: "quote_sent",
