@@ -1,8 +1,45 @@
+// Email service using Replit Resend Integration
 import { Resend } from 'resend';
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+let connectionSettings: any;
 
-const FROM_EMAIL = process.env.EMAIL_FROM || 'CCC Group <noreply@cccgroup.co.uk>';
+async function getCredentials() {
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY 
+    ? 'repl ' + process.env.REPL_IDENTITY 
+    : process.env.WEB_REPL_RENEWAL 
+    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
+    : null;
+
+  if (!xReplitToken) {
+    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
+  }
+
+  connectionSettings = await fetch(
+    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=resend',
+    {
+      headers: {
+        'Accept': 'application/json',
+        'X_REPLIT_TOKEN': xReplitToken
+      }
+    }
+  ).then(res => res.json()).then(data => data.items?.[0]);
+
+  if (!connectionSettings || (!connectionSettings.settings.api_key)) {
+    throw new Error('Resend not connected');
+  }
+  return {apiKey: connectionSettings.settings.api_key, fromEmail: connectionSettings.settings.from_email};
+}
+
+// WARNING: Never cache this client.
+// Access tokens expire, so a new client must be created each time.
+export async function getUncachableResendClient() {
+  const credentials = await getCredentials();
+  return {
+    client: new Resend(credentials.apiKey),
+    fromEmail: credentials.fromEmail
+  };
+}
 
 export interface EmailResult {
   success: boolean;
@@ -11,7 +48,7 @@ export interface EmailResult {
 }
 
 export function isEmailConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY;
+  return !!process.env.REPLIT_CONNECTORS_HOSTNAME;
 }
 
 async function sendEmail(
@@ -20,15 +57,11 @@ async function sendEmail(
   html: string,
   text?: string
 ): Promise<EmailResult> {
-  if (!resend) {
-    console.log('[email] Resend not configured - email would be sent to:', to);
-    console.log('[email] Subject:', subject);
-    return { success: false, error: 'Email service not configured. Set RESEND_API_KEY to enable.' };
-  }
-
   try {
-    const result = await resend.emails.send({
-      from: FROM_EMAIL,
+    const { client, fromEmail } = await getUncachableResendClient();
+    
+    const result = await client.emails.send({
+      from: fromEmail || 'CCC Group <noreply@cccgroup.co.uk>',
       to,
       subject,
       html,
@@ -44,7 +77,13 @@ async function sendEmail(
     return { success: true, messageId: result.data?.id };
   } catch (error) {
     console.error('[email] Exception:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    if (errorMessage.includes('Resend not connected')) {
+      return { success: false, error: 'Email service not configured. Please set up the Resend integration.' };
+    }
+    
+    return { success: false, error: errorMessage };
   }
 }
 
