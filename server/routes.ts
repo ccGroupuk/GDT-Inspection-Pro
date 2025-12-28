@@ -1733,6 +1733,478 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PARTNER PORTAL SURVEYS API ====================
+
+  // Get surveys assigned to this partner
+  app.get("/api/partner-portal/surveys", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const surveys = await storage.getJobSurveysByPartner(access.partnerId);
+      const surveysWithDetails = await Promise.all(
+        surveys.map(async (survey) => {
+          const job = await storage.getJob(survey.jobId);
+          const contact = job?.contactId ? await storage.getContact(job.contactId) : null;
+          return { ...survey, job, contact };
+        })
+      );
+      
+      res.json(surveysWithDetails);
+    } catch (error) {
+      console.error("Partner portal get surveys error:", error);
+      res.status(500).json({ message: "Failed to load surveys" });
+    }
+  });
+
+  // Get a specific survey (partner portal)
+  app.get("/api/partner-portal/surveys/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey || survey.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      const job = await storage.getJob(survey.jobId);
+      const contact = job?.contactId ? await storage.getContact(job.contactId) : null;
+      
+      res.json({ ...survey, job, contact });
+    } catch (error) {
+      console.error("Partner portal get survey error:", error);
+      res.status(500).json({ message: "Failed to load survey" });
+    }
+  });
+
+  // Accept a survey request (partner portal)
+  app.post("/api/partner-portal/surveys/:id/accept", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey || survey.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      if (survey.status !== "requested") {
+        return res.status(400).json({ message: "Survey cannot be accepted in current status" });
+      }
+      
+      const updated = await storage.updateJobSurvey(req.params.id, {
+        status: "accepted",
+        acceptedAt: new Date(),
+        partnerNotes: req.body.notes,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner portal accept survey error:", error);
+      res.status(500).json({ message: "Failed to accept survey" });
+    }
+  });
+
+  // Decline a survey request (partner portal)
+  app.post("/api/partner-portal/surveys/:id/decline", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey || survey.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      if (survey.status !== "requested") {
+        return res.status(400).json({ message: "Survey cannot be declined in current status" });
+      }
+      
+      const updated = await storage.updateJobSurvey(req.params.id, {
+        status: "declined",
+        declinedAt: new Date(),
+        declineReason: req.body.reason,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner portal decline survey error:", error);
+      res.status(500).json({ message: "Failed to decline survey" });
+    }
+  });
+
+  // Schedule a survey (partner portal)
+  app.post("/api/partner-portal/surveys/:id/schedule", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey || survey.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      if (survey.status !== "accepted" && survey.status !== "scheduled") {
+        return res.status(400).json({ message: "Survey must be accepted before scheduling" });
+      }
+      
+      const { scheduledDate, scheduledTime, notes } = req.body;
+      
+      if (!scheduledDate) {
+        return res.status(400).json({ message: "Scheduled date is required" });
+      }
+      
+      const updated = await storage.updateJobSurvey(req.params.id, {
+        status: "scheduled",
+        scheduledDate: new Date(scheduledDate),
+        scheduledTime,
+        scheduledAt: new Date(),
+        partnerNotes: notes || survey.partnerNotes,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner portal schedule survey error:", error);
+      res.status(500).json({ message: "Failed to schedule survey" });
+    }
+  });
+
+  // Complete a survey (partner portal)
+  app.post("/api/partner-portal/surveys/:id/complete", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey || survey.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      if (survey.status !== "scheduled" && survey.status !== "accepted") {
+        return res.status(400).json({ message: "Survey must be scheduled or accepted before completing" });
+      }
+      
+      const { surveyDetails, notes } = req.body;
+      
+      const updated = await storage.updateJobSurvey(req.params.id, {
+        status: "completed",
+        completedAt: new Date(),
+        surveyDetails: surveyDetails || "",
+        partnerNotes: notes || survey.partnerNotes,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner portal complete survey error:", error);
+      res.status(500).json({ message: "Failed to complete survey" });
+    }
+  });
+
+  // ==================== PARTNER PORTAL QUOTES API ====================
+
+  // Get quotes by this partner
+  app.get("/api/partner-portal/quotes", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const quotes = await storage.getPartnerQuotesByPartner(access.partnerId);
+      const quotesWithDetails = await Promise.all(
+        quotes.map(async (quote) => {
+          const items = await storage.getPartnerQuoteItems(quote.id);
+          const job = await storage.getJob(quote.jobId);
+          return { ...quote, items, job };
+        })
+      );
+      
+      res.json(quotesWithDetails);
+    } catch (error) {
+      console.error("Partner portal get quotes error:", error);
+      res.status(500).json({ message: "Failed to load quotes" });
+    }
+  });
+
+  // Get a specific quote (partner portal)
+  app.get("/api/partner-portal/quotes/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const quote = await storage.getPartnerQuote(req.params.id);
+      if (!quote || quote.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+      
+      const items = await storage.getPartnerQuoteItems(quote.id);
+      const job = await storage.getJob(quote.jobId);
+      const survey = quote.surveyId ? await storage.getJobSurvey(quote.surveyId) : null;
+      
+      res.json({ ...quote, items, job, survey });
+    } catch (error) {
+      console.error("Partner portal get quote error:", error);
+      res.status(500).json({ message: "Failed to load quote" });
+    }
+  });
+
+  // Create a quote (partner portal)
+  app.post("/api/partner-portal/quotes", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { jobId, surveyId, items, notes, taxEnabled, taxRate } = req.body;
+      
+      if (!jobId) {
+        return res.status(400).json({ message: "Job ID is required" });
+      }
+      
+      // Calculate totals
+      let subtotal = 0;
+      if (items && items.length > 0) {
+        subtotal = items.reduce((sum: number, item: any) => sum + (parseFloat(item.quantity) * parseFloat(item.unitPrice)), 0);
+      }
+      
+      const taxAmount = taxEnabled ? subtotal * (parseFloat(taxRate || 20) / 100) : 0;
+      const total = subtotal + taxAmount;
+      
+      const quote = await storage.createPartnerQuote({
+        jobId,
+        partnerId: access.partnerId,
+        surveyId: surveyId || null,
+        status: "draft",
+        subtotal: subtotal.toFixed(2),
+        taxEnabled: taxEnabled || false,
+        taxRate: taxRate || "20",
+        taxAmount: taxAmount.toFixed(2),
+        total: total.toFixed(2),
+        notes,
+      });
+      
+      // Create line items
+      if (items && items.length > 0) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const lineTotal = parseFloat(item.quantity) * parseFloat(item.unitPrice);
+          await storage.createPartnerQuoteItem({
+            quoteId: quote.id,
+            description: item.description,
+            quantity: item.quantity.toString(),
+            unitPrice: item.unitPrice.toString(),
+            lineTotal: lineTotal.toFixed(2),
+            sortOrder: i,
+          });
+        }
+      }
+      
+      const createdItems = await storage.getPartnerQuoteItems(quote.id);
+      res.status(201).json({ ...quote, items: createdItems });
+    } catch (error) {
+      console.error("Partner portal create quote error:", error);
+      res.status(500).json({ message: "Failed to create quote" });
+    }
+  });
+
+  // Update a quote (partner portal)
+  app.patch("/api/partner-portal/quotes/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const quote = await storage.getPartnerQuote(req.params.id);
+      if (!quote || quote.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+      
+      if (quote.status !== "draft") {
+        return res.status(400).json({ message: "Only draft quotes can be edited" });
+      }
+      
+      const { items, notes, taxEnabled, taxRate } = req.body;
+      
+      // Calculate totals
+      let subtotal = 0;
+      if (items && items.length > 0) {
+        subtotal = items.reduce((sum: number, item: any) => sum + (parseFloat(item.quantity) * parseFloat(item.unitPrice)), 0);
+      }
+      
+      const taxAmount = taxEnabled ? subtotal * (parseFloat(taxRate || 20) / 100) : 0;
+      const total = subtotal + taxAmount;
+      
+      const updated = await storage.updatePartnerQuote(req.params.id, {
+        subtotal: subtotal.toFixed(2),
+        taxEnabled: taxEnabled || false,
+        taxRate: taxRate || "20",
+        taxAmount: taxAmount.toFixed(2),
+        total: total.toFixed(2),
+        notes,
+      });
+      
+      // Delete existing items and recreate
+      await storage.deletePartnerQuoteItemsByQuote(req.params.id);
+      
+      if (items && items.length > 0) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const lineTotal = parseFloat(item.quantity) * parseFloat(item.unitPrice);
+          await storage.createPartnerQuoteItem({
+            quoteId: quote.id,
+            description: item.description,
+            quantity: item.quantity.toString(),
+            unitPrice: item.unitPrice.toString(),
+            lineTotal: lineTotal.toFixed(2),
+            sortOrder: i,
+          });
+        }
+      }
+      
+      const updatedItems = await storage.getPartnerQuoteItems(quote.id);
+      res.json({ ...updated, items: updatedItems });
+    } catch (error) {
+      console.error("Partner portal update quote error:", error);
+      res.status(500).json({ message: "Failed to update quote" });
+    }
+  });
+
+  // Submit a quote (partner portal)
+  app.post("/api/partner-portal/quotes/:id/submit", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const quote = await storage.getPartnerQuote(req.params.id);
+      if (!quote || quote.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+      
+      if (quote.status !== "draft") {
+        return res.status(400).json({ message: "Only draft quotes can be submitted" });
+      }
+      
+      const items = await storage.getPartnerQuoteItems(quote.id);
+      if (items.length === 0) {
+        return res.status(400).json({ message: "Quote must have at least one line item" });
+      }
+      
+      const updated = await storage.updatePartnerQuote(req.params.id, {
+        status: "submitted",
+        submittedAt: new Date(),
+      });
+      
+      res.json({ ...updated, items });
+    } catch (error) {
+      console.error("Partner portal submit quote error:", error);
+      res.status(500).json({ message: "Failed to submit quote" });
+    }
+  });
+
+  // Delete a quote (partner portal - only drafts)
+  app.delete("/api/partner-portal/quotes/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const quote = await storage.getPartnerQuote(req.params.id);
+      if (!quote || quote.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+      
+      if (quote.status !== "draft") {
+        return res.status(400).json({ message: "Only draft quotes can be deleted" });
+      }
+      
+      await storage.deletePartnerQuote(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Partner portal delete quote error:", error);
+      res.status(500).json({ message: "Failed to delete quote" });
+    }
+  });
+
   // Set password for partner portal (optional security)
   app.post("/api/partner-portal/set-password", async (req, res) => {
     try {
