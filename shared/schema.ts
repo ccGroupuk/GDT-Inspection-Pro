@@ -1498,7 +1498,18 @@ export const jobSurveys = pgTable("job_surveys", {
   status: text("status").notNull().default("requested"), // requested, accepted, declined, scheduled, completed, cancelled
   assignedBy: varchar("assigned_by"), // Employee ID who assigned
   
-  // Scheduling
+  // Partner proposed scheduling (for client approval)
+  proposedDate: timestamp("proposed_date"), // Date partner proposes for site visit
+  proposedTime: text("proposed_time"), // Time partner proposes e.g., "10:00 AM"
+  bookingStatus: text("booking_status"), // pending_client, client_accepted, client_declined, client_counter, confirmed
+  
+  // Client response to proposed date
+  clientProposedDate: timestamp("client_proposed_date"), // Alternative date client proposes
+  clientProposedTime: text("client_proposed_time"), // Alternative time client proposes
+  clientNotes: text("client_notes"), // Notes from client when responding
+  clientRespondedAt: timestamp("client_responded_at"), // When client responded
+  
+  // Confirmed scheduling (after client approval)
   scheduledDate: timestamp("scheduled_date"),
   scheduledTime: text("scheduled_time"), // e.g., "10:00 AM"
   
@@ -1514,6 +1525,7 @@ export const jobSurveys = pgTable("job_surveys", {
   requestedAt: timestamp("requested_at").defaultNow(),
   acceptedAt: timestamp("accepted_at"),
   declinedAt: timestamp("declined_at"),
+  proposedAt: timestamp("proposed_at"), // When partner proposed date
   scheduledAt: timestamp("scheduled_at"),
   completedAt: timestamp("completed_at"),
   

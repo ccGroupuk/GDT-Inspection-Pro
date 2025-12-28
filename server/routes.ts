@@ -1481,6 +1481,111 @@ export async function registerRoutes(
     }
   });
 
+  // Client Portal: Get pending survey appointments
+  app.get("/api/portal/surveys", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Get all jobs for this contact
+      const jobs = await storage.getJobsByContact(access.contactId);
+      
+      // Get surveys for those jobs that need client response
+      const surveyPromises = jobs.map((job: any) => storage.getJobSurveysByJob(job.id));
+      const surveysArrays = await Promise.all(surveyPromises);
+      const allSurveys = surveysArrays.flat();
+      
+      // Filter to surveys awaiting client response
+      const pendingSurveys = allSurveys.filter((s: any) => 
+        s.bookingStatus === "pending_client" && 
+        s.status === "accepted"
+      );
+      
+      // Add job and partner info to surveys
+      const surveysWithDetails = await Promise.all(pendingSurveys.map(async (survey: any) => {
+        const job = jobs.find((j: any) => j.id === survey.jobId);
+        const partner = survey.partnerId ? await storage.getTradePartner(survey.partnerId) : null;
+        return {
+          ...survey,
+          job,
+          partner: partner ? { businessName: partner.businessName, tradeCategory: partner.tradeCategory } : null,
+        };
+      }));
+      
+      res.json(surveysWithDetails);
+    } catch (error) {
+      console.error("Get client surveys error:", error);
+      res.status(500).json({ message: "Failed to load surveys" });
+    }
+  });
+
+  // Client Portal: Respond to survey date proposal
+  app.post("/api/portal/surveys/:id/respond", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      // Verify this survey belongs to a job owned by this contact
+      const job = await storage.getJob(survey.jobId);
+      if (!job || job.contactId !== access.contactId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      if (survey.bookingStatus !== "pending_client") {
+        return res.status(400).json({ message: "Survey is not awaiting your response" });
+      }
+      
+      const { response, proposedDate, proposedTime, notes } = req.body;
+      
+      if (!response || !["accept", "decline", "counter"].includes(response)) {
+        return res.status(400).json({ message: "Invalid response type" });
+      }
+      
+      let updateData: any = {
+        clientRespondedAt: new Date(),
+        clientNotes: notes || null,
+      };
+      
+      if (response === "accept") {
+        updateData.bookingStatus = "client_accepted";
+      } else if (response === "decline") {
+        updateData.bookingStatus = "client_declined";
+      } else if (response === "counter") {
+        if (!proposedDate) {
+          return res.status(400).json({ message: "Alternative date is required" });
+        }
+        updateData.bookingStatus = "client_counter";
+        updateData.clientProposedDate = new Date(proposedDate);
+        updateData.clientProposedTime = proposedTime || null;
+      }
+      
+      const updated = await storage.updateJobSurvey(req.params.id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Client respond to survey error:", error);
+      res.status(500).json({ message: "Failed to respond to survey" });
+    }
+  });
+
   // ==================== PARTNER PORTAL ADMIN ENDPOINTS ====================
 
   // Send partner portal invite
@@ -1862,7 +1967,98 @@ export async function registerRoutes(
     }
   });
 
-  // Schedule a survey (partner portal)
+  // Partner proposes a date for client approval
+  app.post("/api/partner-portal/surveys/:id/propose", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey || survey.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      if (survey.status !== "accepted" && survey.bookingStatus !== "client_counter") {
+        return res.status(400).json({ message: "Survey must be accepted before proposing a date" });
+      }
+      
+      const { proposedDate, proposedTime, notes } = req.body;
+      
+      if (!proposedDate) {
+        return res.status(400).json({ message: "Proposed date is required" });
+      }
+      
+      const updated = await storage.updateJobSurvey(req.params.id, {
+        proposedDate: new Date(proposedDate),
+        proposedTime,
+        proposedAt: new Date(),
+        bookingStatus: "pending_client",
+        partnerNotes: notes || survey.partnerNotes,
+        clientProposedDate: null,
+        clientProposedTime: null,
+        clientNotes: null,
+        clientRespondedAt: null,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner portal propose survey date error:", error);
+      res.status(500).json({ message: "Failed to propose date" });
+    }
+  });
+
+  // Partner confirms when client accepts or accepts client's counter-proposal  
+  app.post("/api/partner-portal/surveys/:id/confirm", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const survey = await storage.getJobSurvey(req.params.id);
+      if (!survey || survey.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Survey not found" });
+      }
+      
+      if (survey.bookingStatus !== "client_accepted" && survey.bookingStatus !== "client_counter") {
+        return res.status(400).json({ message: "Cannot confirm at this stage" });
+      }
+      
+      const finalDate = survey.bookingStatus === "client_counter" && survey.clientProposedDate 
+        ? survey.clientProposedDate 
+        : survey.proposedDate;
+      const finalTime = survey.bookingStatus === "client_counter" && survey.clientProposedTime
+        ? survey.clientProposedTime
+        : survey.proposedTime;
+      
+      const updated = await storage.updateJobSurvey(req.params.id, {
+        status: "scheduled",
+        scheduledDate: finalDate,
+        scheduledTime: finalTime,
+        scheduledAt: new Date(),
+        bookingStatus: "confirmed",
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner portal confirm survey error:", error);
+      res.status(500).json({ message: "Failed to confirm survey" });
+    }
+  });
+  
+  // Legacy schedule route (for direct scheduling without client approval - backwards compatibility)
   app.post("/api/partner-portal/surveys/:id/schedule", async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
