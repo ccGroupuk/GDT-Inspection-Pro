@@ -3,30 +3,52 @@ import { useParams, useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, ArrowLeft, Calendar, FileText, User } from "lucide-react";
+import { Clock, ArrowLeft, User, Loader2 } from "lucide-react";
 import { format, formatDistanceToNow, startOfWeek, endOfWeek, parseISO } from "date-fns";
 import type { TimeEntry, Employee } from "@shared/schema";
-import { useRequireAdminAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth";
+import { useEffect } from "react";
 
 export default function EmployeePortalAdminView() {
   const { employeeId } = useParams<{ employeeId: string }>();
   const [, setLocation] = useLocation();
-  useRequireAdminAuth();
+  const { isLoading: authLoading, isAuthenticated, hasAdminAccess } = useAuth();
 
-  const { data: employee, isLoading: loadingEmployee } = useQuery<Employee>({
+  useEffect(() => {
+    if (!authLoading) {
+      if (!isAuthenticated) {
+        setLocation("/landing");
+      } else if (!hasAdminAccess) {
+        setLocation("/employee-portal/home");
+      }
+    }
+  }, [authLoading, isAuthenticated, hasAdminAccess, setLocation]);
+
+  const { data: employee, isLoading: loadingEmployee, error: employeeError } = useQuery<Employee>({
     queryKey: ["/api/employees", employeeId],
-    enabled: !!employeeId
+    queryFn: async () => {
+      const res = await fetch(`/api/employees/${employeeId}`, { credentials: "include" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to fetch employee");
+      }
+      return res.json();
+    },
+    enabled: !!employeeId && isAuthenticated && hasAdminAccess
   });
 
-  const { data: timeEntries = [], isLoading: loadingEntries } = useQuery<TimeEntry[]>({
+  const { data: timeEntries = [], isLoading: loadingEntries, error: entriesError } = useQuery<TimeEntry[]>({
     queryKey: ["/api/time-entries", employeeId],
     queryFn: async () => {
       if (!employeeId) return [];
       const res = await fetch(`/api/time-entries?employeeId=${employeeId}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch");
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to fetch time entries");
+      }
       return res.json();
     },
-    enabled: !!employeeId
+    enabled: !!employeeId && isAuthenticated && hasAdminAccess
   });
 
   const activeEntry = timeEntries.find(e => !e.clockOut);
@@ -39,18 +61,42 @@ export default function EmployeePortalAdminView() {
   });
   const weekHours = weekEntries.reduce((sum, e) => sum + parseFloat(e.totalHours || "0"), 0);
 
-  if (loadingEmployee || loadingEntries) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading employee portal...</div>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  if (!employee) {
+  if (!isAuthenticated || !hasAdminAccess) {
+    return null;
+  }
+
+  if (loadingEmployee || loadingEntries) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Employee not found</div>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">Loading employee portal...</span>
+      </div>
+    );
+  }
+
+  if (employeeError || !employee) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card sticky top-0 z-50">
+          <div className="container mx-auto px-4 py-3">
+            <Button variant="ghost" size="icon" onClick={() => setLocation("/employees")} data-testid="button-back">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </div>
+        </header>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-muted-foreground">
+            {employeeError ? (employeeError as Error).message : "Employee not found"}
+          </div>
+        </div>
       </div>
     );
   }
@@ -121,7 +167,7 @@ export default function EmployeePortalAdminView() {
           <CardContent>
             {activeEntry ? (
               <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-md">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                   <Badge variant="secondary" className="bg-green-500/20 text-green-700 dark:text-green-400">
                     Currently Clocked In
                   </Badge>
@@ -167,11 +213,11 @@ export default function EmployeePortalAdminView() {
                 {timeEntries.slice(0, 10).map((entry) => (
                   <div 
                     key={entry.id} 
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+                    className="flex items-center justify-between p-3 bg-muted/50 rounded-md gap-2"
                     data-testid={`time-entry-${entry.id}`}
                   >
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="outline" className="text-xs">{entry.entryType}</Badge>
                         {!entry.clockOut && (
                           <Badge variant="secondary" className="text-xs bg-green-500/20">Active</Badge>
