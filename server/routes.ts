@@ -1637,6 +1637,93 @@ export async function registerRoutes(
     }
   });
 
+  // Receipt Scanning - Extract data from receipt images using AI
+  app.post("/api/scan-receipt", async (req, res) => {
+    try {
+      const { imageBase64 } = req.body;
+      
+      if (!imageBase64) {
+        return res.status(400).json({ message: "No image provided" });
+      }
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Analyze this receipt image and extract the following information in JSON format:
+{
+  "vendor": "store/company name",
+  "date": "YYYY-MM-DD format or null if not readable",
+  "amount": number (total amount paid, just the number),
+  "description": "brief description of purchase (max 50 chars)",
+  "items": ["list of main items if visible"],
+  "category": "Materials & Supplies" or "Vehicle & Fuel" or "Tools & Equipment" or "Overheads" or "Other Expenses"
+}
+
+If you cannot read certain fields, use null for that field. Always try to extract at least the amount.`
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 500
+      });
+
+      const content = response.choices[0]?.message?.content || "";
+      
+      // Parse the JSON from the response
+      let receiptData;
+      try {
+        // Extract JSON from response (may be wrapped in markdown code blocks)
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          receiptData = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error("No JSON found in response");
+        }
+      } catch (parseError) {
+        console.error("Failed to parse receipt data:", parseError, content);
+        return res.status(422).json({ 
+          message: "Could not extract data from receipt. Please try a clearer photo or enter manually.",
+          raw: content
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          vendor: receiptData.vendor || "Unknown Vendor",
+          date: receiptData.date || new Date().toISOString().split("T")[0],
+          amount: typeof receiptData.amount === "number" ? receiptData.amount : parseFloat(receiptData.amount) || 0,
+          description: receiptData.description || "Receipt expense",
+          items: receiptData.items || [],
+          category: receiptData.category || "Materials & Supplies"
+        }
+      });
+    } catch (error: any) {
+      console.error("Receipt scan error:", error);
+      res.status(500).json({ 
+        message: "Failed to scan receipt",
+        error: error.message 
+      });
+    }
+  });
+
   // Financial Summary
   app.get("/api/financial-summary", async (req, res) => {
     try {
