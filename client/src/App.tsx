@@ -70,6 +70,7 @@ function EmployeePortalRouter() {
   return (
     <Switch>
       <Route path="/employee-portal" component={EmployeePortalLogin} />
+      <Route path="/employee-portal/login" component={EmployeePortalLogin} />
       <Route path="/employee-portal/home" component={EmployeePortalHome} />
       <Route path="/employee-portal/change-password" component={EmployeePortalChangePassword} />
       <Route component={NotFound} />
