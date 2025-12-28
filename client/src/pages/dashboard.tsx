@@ -167,7 +167,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-4">
-              <CardTitle className="text-base font-semibold">Recent Jobs</CardTitle>
+              <CardTitle className="text-base font-semibold">Job Pipeline</CardTitle>
               <Link href="/jobs" className="text-sm text-primary hover:underline" data-testid="link-view-all-jobs">
                 View All
               </Link>
