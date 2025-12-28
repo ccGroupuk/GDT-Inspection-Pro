@@ -120,13 +120,17 @@ function BusinessProfileSection() {
   const [formData, setFormData] = useState({
     businessName: "CCC Group",
     tradeType: "Carpentry & Home Improvements",
-    servicesOffered: ["Bespoke Carpentry", "Under-Stairs Storage", "Media Walls", "Fitted Wardrobes", "Kitchens", "Bathrooms"],
-    serviceLocations: ["Cardiff", "Caerphilly", "Newport", "Vale of Glamorgan"],
     brandTone: "professional",
-    primaryGoals: ["Generate leads", "Showcase work", "Build local trust"],
     contactPhone: "",
     contactEmail: "",
     websiteUrl: "",
+  });
+  
+  // Store raw text for comma-separated fields to allow typing commas
+  const [rawInputs, setRawInputs] = useState({
+    servicesOffered: "Bespoke Carpentry, Under-Stairs Storage, Media Walls, Fitted Wardrobes, Kitchens, Bathrooms",
+    serviceLocations: "Cardiff, Caerphilly, Newport, Vale of Glamorgan",
+    primaryGoals: "Generate leads, Showcase work, Build local trust",
   });
 
   const { data: profile, isLoading } = useQuery<SeoBusinessProfile | null>({
@@ -134,7 +138,7 @@ function BusinessProfileSection() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
+    mutationFn: async (data: typeof formData & { servicesOffered: string[]; serviceLocations: string[]; primaryGoals: string[] }) => {
       const res = await apiRequest("POST", "/api/seo/business-profile", data);
       return res.json();
     },
@@ -152,22 +156,34 @@ function BusinessProfileSection() {
       setFormData({
         businessName: profile.businessName || "CCC Group",
         tradeType: profile.tradeType || "Carpentry & Home Improvements",
-        servicesOffered: profile.servicesOffered || [],
-        serviceLocations: profile.serviceLocations || [],
         brandTone: profile.brandTone || "professional",
-        primaryGoals: profile.primaryGoals || [],
         contactPhone: profile.contactPhone || "",
         contactEmail: profile.contactEmail || "",
         websiteUrl: profile.websiteUrl || "",
       });
+      setRawInputs({
+        servicesOffered: (profile.servicesOffered || []).join(", "),
+        serviceLocations: (profile.serviceLocations || []).join(", "),
+        primaryGoals: (profile.primaryGoals || []).join(", "),
+      });
     }
   }, [profile]);
 
-  const handleArrayChange = (field: keyof typeof formData, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value.split(",").map(s => s.trim()).filter(Boolean),
-    }));
+  const handleRawInputChange = (field: keyof typeof rawInputs, value: string) => {
+    setRawInputs(prev => ({ ...prev, [field]: value }));
+  };
+  
+  const parseArrayField = (value: string): string[] => {
+    return value.split(",").map(s => s.trim()).filter(Boolean);
+  };
+  
+  const handleSave = () => {
+    saveMutation.mutate({
+      ...formData,
+      servicesOffered: parseArrayField(rawInputs.servicesOffered),
+      serviceLocations: parseArrayField(rawInputs.serviceLocations),
+      primaryGoals: parseArrayField(rawInputs.primaryGoals),
+    });
   };
 
   if (isLoading) {
@@ -220,8 +236,8 @@ function BusinessProfileSection() {
           <Textarea
             id="servicesOffered"
             data-testid="input-services"
-            value={formData.servicesOffered.join(", ")}
-            onChange={(e) => handleArrayChange("servicesOffered", e.target.value)}
+            value={rawInputs.servicesOffered}
+            onChange={(e) => handleRawInputChange("servicesOffered", e.target.value)}
             placeholder="Bespoke Carpentry, Media Walls, Fitted Wardrobes..."
           />
         </div>
@@ -231,8 +247,8 @@ function BusinessProfileSection() {
           <Textarea
             id="serviceLocations"
             data-testid="input-locations"
-            value={formData.serviceLocations.join(", ")}
-            onChange={(e) => handleArrayChange("serviceLocations", e.target.value)}
+            value={rawInputs.serviceLocations}
+            onChange={(e) => handleRawInputChange("serviceLocations", e.target.value)}
             placeholder="Cardiff, Caerphilly, Newport..."
           />
         </div>
@@ -260,8 +276,8 @@ function BusinessProfileSection() {
           <Textarea
             id="primaryGoals"
             data-testid="input-goals"
-            value={formData.primaryGoals.join(", ")}
-            onChange={(e) => handleArrayChange("primaryGoals", e.target.value)}
+            value={rawInputs.primaryGoals}
+            onChange={(e) => handleRawInputChange("primaryGoals", e.target.value)}
             placeholder="Generate leads, Showcase work, Build local trust..."
           />
         </div>
@@ -302,7 +318,7 @@ function BusinessProfileSection() {
         </div>
 
         <Button
-          onClick={() => saveMutation.mutate(formData)}
+          onClick={handleSave}
           disabled={saveMutation.isPending}
           data-testid="button-save-profile"
         >
@@ -321,12 +337,16 @@ function BusinessProfileSection() {
 function BrandVoiceSection() {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
-    customPhrases: ["Quality craftsmanship", "Local experts", "Trusted since"],
-    blacklistedPhrases: ["Cheap", "Budget", "Discount"],
-    preferredCtas: ["Get in touch today", "Call for a free quote", "Transform your space"],
     emojiStyle: "moderate",
-    hashtagPreferences: ["#CardiffCarpentry", "#CCCGroup", "#BespokeStorage"],
-    locationKeywords: ["Cardiff", "Caerphilly", "South Wales", "local"],
+  });
+  
+  // Store raw text for comma-separated fields
+  const [rawInputs, setRawInputs] = useState({
+    customPhrases: "Quality craftsmanship, Local experts, Trusted since",
+    blacklistedPhrases: "Cheap, Budget, Discount",
+    preferredCtas: "Get in touch today, Call for a free quote, Transform your space",
+    hashtagPreferences: "#CardiffCarpentry, #CCCGroup, #BespokeStorage",
+    locationKeywords: "Cardiff, Caerphilly, South Wales, local",
   });
 
   const { data: voice, isLoading } = useQuery({
@@ -334,7 +354,7 @@ function BrandVoiceSection() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
+    mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/seo/brand-voice", data);
       return res.json();
     },
@@ -351,21 +371,35 @@ function BrandVoiceSection() {
     if (voice) {
       const v = voice as { customPhrases?: string[]; blacklistedPhrases?: string[]; preferredCtas?: string[]; emojiStyle?: string; hashtagPreferences?: string[]; locationKeywords?: string[] };
       setFormData({
-        customPhrases: v.customPhrases || ["Quality craftsmanship", "Local experts", "Trusted since"],
-        blacklistedPhrases: v.blacklistedPhrases || ["Cheap", "Budget", "Discount"],
-        preferredCtas: v.preferredCtas || ["Get in touch today", "Call for a free quote", "Transform your space"],
         emojiStyle: v.emojiStyle || "moderate",
-        hashtagPreferences: v.hashtagPreferences || ["#CardiffCarpentry", "#CCCGroup", "#BespokeStorage"],
-        locationKeywords: v.locationKeywords || ["Cardiff", "Caerphilly", "South Wales", "local"],
+      });
+      setRawInputs({
+        customPhrases: (v.customPhrases || ["Quality craftsmanship", "Local experts", "Trusted since"]).join(", "),
+        blacklistedPhrases: (v.blacklistedPhrases || ["Cheap", "Budget", "Discount"]).join(", "),
+        preferredCtas: (v.preferredCtas || ["Get in touch today", "Call for a free quote", "Transform your space"]).join(", "),
+        hashtagPreferences: (v.hashtagPreferences || ["#CardiffCarpentry", "#CCCGroup", "#BespokeStorage"]).join(", "),
+        locationKeywords: (v.locationKeywords || ["Cardiff", "Caerphilly", "South Wales", "local"]).join(", "),
       });
     }
   }, [voice]);
 
-  const handleArrayChange = (field: keyof typeof formData, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value.split(",").map(s => s.trim()).filter(Boolean),
-    }));
+  const handleRawInputChange = (field: keyof typeof rawInputs, value: string) => {
+    setRawInputs(prev => ({ ...prev, [field]: value }));
+  };
+  
+  const parseArrayField = (value: string): string[] => {
+    return value.split(",").map(s => s.trim()).filter(Boolean);
+  };
+  
+  const handleSave = () => {
+    saveMutation.mutate({
+      ...formData,
+      customPhrases: parseArrayField(rawInputs.customPhrases),
+      blacklistedPhrases: parseArrayField(rawInputs.blacklistedPhrases),
+      preferredCtas: parseArrayField(rawInputs.preferredCtas),
+      hashtagPreferences: parseArrayField(rawInputs.hashtagPreferences),
+      locationKeywords: parseArrayField(rawInputs.locationKeywords),
+    });
   };
 
   if (isLoading) {
@@ -394,8 +428,8 @@ function BrandVoiceSection() {
           <Label>Custom Phrases to Use (comma-separated)</Label>
           <Textarea
             data-testid="input-custom-phrases"
-            value={formData.customPhrases.join(", ")}
-            onChange={(e) => handleArrayChange("customPhrases", e.target.value)}
+            value={rawInputs.customPhrases}
+            onChange={(e) => handleRawInputChange("customPhrases", e.target.value)}
             placeholder="Quality craftsmanship, Local experts..."
           />
           <p className="text-xs text-muted-foreground">Phrases the AI will try to incorporate</p>
@@ -405,8 +439,8 @@ function BrandVoiceSection() {
           <Label>Blacklisted Phrases (comma-separated)</Label>
           <Textarea
             data-testid="input-blacklisted-phrases"
-            value={formData.blacklistedPhrases.join(", ")}
-            onChange={(e) => handleArrayChange("blacklistedPhrases", e.target.value)}
+            value={rawInputs.blacklistedPhrases}
+            onChange={(e) => handleRawInputChange("blacklistedPhrases", e.target.value)}
             placeholder="Cheap, Budget, Discount..."
           />
           <p className="text-xs text-muted-foreground">Words the AI should never use</p>
@@ -416,8 +450,8 @@ function BrandVoiceSection() {
           <Label>Preferred Calls-to-Action (comma-separated)</Label>
           <Textarea
             data-testid="input-ctas"
-            value={formData.preferredCtas.join(", ")}
-            onChange={(e) => handleArrayChange("preferredCtas", e.target.value)}
+            value={rawInputs.preferredCtas}
+            onChange={(e) => handleRawInputChange("preferredCtas", e.target.value)}
             placeholder="Get in touch today, Call for a free quote..."
           />
         </div>
@@ -444,8 +478,8 @@ function BrandVoiceSection() {
           <Label>Hashtag Preferences (comma-separated)</Label>
           <Textarea
             data-testid="input-hashtags"
-            value={formData.hashtagPreferences.join(", ")}
-            onChange={(e) => handleArrayChange("hashtagPreferences", e.target.value)}
+            value={rawInputs.hashtagPreferences}
+            onChange={(e) => handleRawInputChange("hashtagPreferences", e.target.value)}
             placeholder="#CardiffCarpentry, #CCCGroup..."
           />
         </div>
@@ -454,14 +488,14 @@ function BrandVoiceSection() {
           <Label>Location Keywords (comma-separated)</Label>
           <Textarea
             data-testid="input-location-keywords"
-            value={formData.locationKeywords.join(", ")}
-            onChange={(e) => handleArrayChange("locationKeywords", e.target.value)}
+            value={rawInputs.locationKeywords}
+            onChange={(e) => handleRawInputChange("locationKeywords", e.target.value)}
             placeholder="Cardiff, Caerphilly, South Wales..."
           />
         </div>
 
         <Button
-          onClick={() => saveMutation.mutate(formData)}
+          onClick={handleSave}
           disabled={saveMutation.isPending}
           data-testid="button-save-voice"
         >
