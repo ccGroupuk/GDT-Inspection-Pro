@@ -2663,6 +2663,417 @@ export async function registerRoutes(
     }
   });
 
+  // === SEO Autopilot Routes ===
+
+  // Get autopilot settings
+  app.get("/api/seo/autopilot/settings", async (req, res) => {
+    try {
+      const settings = await storage.getSeoAutopilotSettings();
+      res.json(settings || null);
+    } catch (error) {
+      console.error("Get autopilot settings error:", error);
+      res.status(500).json({ message: "Failed to get autopilot settings" });
+    }
+  });
+
+  // Upsert autopilot settings
+  app.post("/api/seo/autopilot/settings", async (req, res) => {
+    try {
+      const settings = await storage.upsertSeoAutopilotSettings(req.body);
+      res.json(settings);
+    } catch (error) {
+      console.error("Update autopilot settings error:", error);
+      res.status(500).json({ message: "Failed to update autopilot settings" });
+    }
+  });
+
+  // Get all autopilot slots
+  app.get("/api/seo/autopilot/slots", async (req, res) => {
+    try {
+      const { startDate, endDate, status } = req.query;
+      let slots;
+      
+      if (startDate && endDate) {
+        slots = await storage.getSeoAutopilotSlotsByDateRange(
+          new Date(startDate as string),
+          new Date(endDate as string)
+        );
+      } else if (status) {
+        slots = await storage.getSeoAutopilotSlotsByStatus(status as string);
+      } else {
+        slots = await storage.getSeoAutopilotSlots();
+      }
+      
+      res.json(slots);
+    } catch (error) {
+      console.error("Get autopilot slots error:", error);
+      res.status(500).json({ message: "Failed to get autopilot slots" });
+    }
+  });
+
+  // Get single slot
+  app.get("/api/seo/autopilot/slots/:id", async (req, res) => {
+    try {
+      const slot = await storage.getSeoAutopilotSlot(req.params.id);
+      if (!slot) {
+        return res.status(404).json({ message: "Slot not found" });
+      }
+      res.json(slot);
+    } catch (error) {
+      console.error("Get autopilot slot error:", error);
+      res.status(500).json({ message: "Failed to get autopilot slot" });
+    }
+  });
+
+  // Create autopilot slot
+  app.post("/api/seo/autopilot/slots", async (req, res) => {
+    try {
+      const slot = await storage.createSeoAutopilotSlot(req.body);
+      res.json(slot);
+    } catch (error) {
+      console.error("Create autopilot slot error:", error);
+      res.status(500).json({ message: "Failed to create autopilot slot" });
+    }
+  });
+
+  // Update autopilot slot
+  app.patch("/api/seo/autopilot/slots/:id", async (req, res) => {
+    try {
+      const slot = await storage.updateSeoAutopilotSlot(req.params.id, req.body);
+      if (!slot) {
+        return res.status(404).json({ message: "Slot not found" });
+      }
+      res.json(slot);
+    } catch (error) {
+      console.error("Update autopilot slot error:", error);
+      res.status(500).json({ message: "Failed to update autopilot slot" });
+    }
+  });
+
+  // Delete autopilot slot
+  app.delete("/api/seo/autopilot/slots/:id", async (req, res) => {
+    try {
+      await storage.deleteSeoAutopilotSlot(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete autopilot slot error:", error);
+      res.status(500).json({ message: "Failed to delete autopilot slot" });
+    }
+  });
+
+  // Approve slot (move to approved status and optionally create post)
+  app.post("/api/seo/autopilot/slots/:id/approve", async (req, res) => {
+    try {
+      const slot = await storage.getSeoAutopilotSlot(req.params.id);
+      if (!slot) {
+        return res.status(404).json({ message: "Slot not found" });
+      }
+      
+      // Update slot status
+      const updated = await storage.updateSeoAutopilotSlot(req.params.id, {
+        status: "approved",
+        approvedAt: new Date(),
+        approvedBy: "admin",
+      });
+      
+      // If there's an associated content post, update its status too
+      if (slot.contentPostId) {
+        await storage.updateSeoContentPost(slot.contentPostId, {
+          status: "approved",
+          reviewedAt: new Date(),
+          reviewedBy: "admin",
+        });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Approve autopilot slot error:", error);
+      res.status(500).json({ message: "Failed to approve slot" });
+    }
+  });
+
+  // Bulk approve slots
+  app.post("/api/seo/autopilot/slots/bulk-approve", async (req, res) => {
+    try {
+      const { slotIds } = req.body;
+      const results = [];
+      
+      for (const slotId of slotIds) {
+        const slot = await storage.getSeoAutopilotSlot(slotId);
+        if (slot) {
+          const updated = await storage.updateSeoAutopilotSlot(slotId, {
+            status: "approved",
+            approvedAt: new Date(),
+            approvedBy: "admin",
+          });
+          
+          if (slot.contentPostId) {
+            await storage.updateSeoContentPost(slot.contentPostId, {
+              status: "approved",
+              reviewedAt: new Date(),
+              reviewedBy: "admin",
+            });
+          }
+          
+          results.push(updated);
+        }
+      }
+      
+      res.json({ approved: results.length, slots: results });
+    } catch (error) {
+      console.error("Bulk approve slots error:", error);
+      res.status(500).json({ message: "Failed to bulk approve slots" });
+    }
+  });
+
+  // Mark slot as posted (manual confirmation)
+  app.post("/api/seo/autopilot/slots/:id/mark-posted", async (req, res) => {
+    try {
+      const updated = await storage.updateSeoAutopilotSlot(req.params.id, {
+        status: "posted",
+        postedAt: new Date(),
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Slot not found" });
+      }
+      
+      // Update associated content post if exists
+      const slot = await storage.getSeoAutopilotSlot(req.params.id);
+      if (slot?.contentPostId) {
+        await storage.updateSeoContentPost(slot.contentPostId, {
+          status: "published",
+          publishedAt: new Date(),
+        });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Mark slot posted error:", error);
+      res.status(500).json({ message: "Failed to mark slot as posted" });
+    }
+  });
+
+  // Get autopilot runs (audit log)
+  app.get("/api/seo/autopilot/runs", async (req, res) => {
+    try {
+      const runs = await storage.getSeoAutopilotRuns();
+      res.json(runs);
+    } catch (error) {
+      console.error("Get autopilot runs error:", error);
+      res.status(500).json({ message: "Failed to get autopilot runs" });
+    }
+  });
+
+  // Trigger autopilot generation manually
+  app.post("/api/seo/autopilot/generate", async (req, res) => {
+    try {
+      const settings = await storage.getSeoAutopilotSettings();
+      if (!settings || !settings.enabled) {
+        return res.status(400).json({ message: "Autopilot is not enabled" });
+      }
+
+      const businessProfile = await storage.getSeoBusinessProfile();
+      const brandVoice = await storage.getSeoBrandVoice();
+      const focusList = await storage.getSeoWeeklyFocusList();
+      const activeFocus = focusList.find(f => f.status === "active");
+
+      // Calculate slots to generate for the next X days
+      const daysAhead = settings.autoGenerateAhead || 7;
+      const slotsCreated: any[] = [];
+      const postsCreated: any[] = [];
+
+      // Platform configurations based on settings
+      const platforms = [
+        {
+          name: "facebook",
+          enabled: settings.facebookEnabled,
+          postsPerWeek: settings.facebookPostsPerWeek || 3,
+          preferredDays: settings.facebookPreferredDays || ["monday", "wednesday", "friday"],
+          preferredTime: settings.facebookPreferredTime || "09:00",
+        },
+        {
+          name: "instagram",
+          enabled: settings.instagramEnabled,
+          postsPerWeek: settings.instagramPostsPerWeek || 3,
+          preferredDays: settings.instagramPreferredDays || ["tuesday", "thursday", "saturday"],
+          preferredTime: settings.instagramPreferredTime || "18:00",
+        },
+        {
+          name: "google_business",
+          enabled: settings.googleEnabled,
+          postsPerWeek: settings.googlePostsPerWeek || 2,
+          preferredDays: settings.googlePreferredDays || ["monday", "thursday"],
+          preferredTime: settings.googlePreferredTime || "12:00",
+        },
+      ];
+
+      // Content type weights
+      const weights = [
+        { type: "project_showcase", weight: settings.projectShowcaseWeight || 40 },
+        { type: "before_after", weight: settings.beforeAfterWeight || 20 },
+        { type: "tip", weight: settings.tipsWeight || 15 },
+        { type: "testimonial", weight: settings.testimonialWeight || 15 },
+        { type: "seasonal", weight: settings.seasonalWeight || 10 },
+      ];
+
+      // Helper to select content type based on weights
+      const selectContentType = () => {
+        const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
+        let random = Math.random() * totalWeight;
+        for (const w of weights) {
+          random -= w.weight;
+          if (random <= 0) return w.type;
+        }
+        return "project_showcase";
+      };
+
+      // Helper to get day number (0=sunday, 1=monday, etc.)
+      const dayNameToNumber = (name: string): number => {
+        const days: Record<string, number> = {
+          sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+          thursday: 4, friday: 5, saturday: 6,
+        };
+        return days[name.toLowerCase()] ?? 1;
+      };
+
+      // Generate slots for each platform
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      for (const platform of platforms) {
+        if (!platform.enabled) continue;
+
+        // Find the next occurrence of each preferred day within the next X days
+        for (let dayOffset = 0; dayOffset < daysAhead; dayOffset++) {
+          const checkDate = new Date(today);
+          checkDate.setDate(checkDate.getDate() + dayOffset);
+          const dayOfWeek = checkDate.getDay();
+          
+          const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+          const currentDayName = dayNames[dayOfWeek];
+
+          if (platform.preferredDays.includes(currentDayName)) {
+            // Parse preferred time
+            const [hours, minutes] = (platform.preferredTime || "09:00").split(":").map(Number);
+            const scheduledFor = new Date(checkDate);
+            scheduledFor.setHours(hours, minutes, 0, 0);
+
+            // Check if slot already exists for this time
+            const existingSlots = await storage.getSeoAutopilotSlotsByDateRange(
+              new Date(scheduledFor.getTime() - 60000), // 1 minute before
+              new Date(scheduledFor.getTime() + 60000)  // 1 minute after
+            );
+            
+            const hasExisting = existingSlots.some(s => s.platform === platform.name);
+            if (hasExisting) continue;
+
+            const contentType = selectContentType();
+
+            // Create the slot
+            const slot = await storage.createSeoAutopilotSlot({
+              platform: platform.name,
+              scheduledFor,
+              contentType,
+              status: "pending",
+              weeklyFocusId: activeFocus?.id,
+            });
+            slotsCreated.push(slot);
+
+            // Generate content for this slot using OpenAI
+            try {
+              const OpenAI = (await import("openai")).default;
+              const client = new OpenAI({
+                apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+                baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+              });
+
+              const service = activeFocus?.primaryService || businessProfile?.servicesOffered?.[0] || "Bespoke Carpentry";
+              const location = activeFocus?.primaryLocation || businessProfile?.serviceLocations?.[0] || "Cardiff";
+
+              const prompt = buildContentPrompt({
+                platform: platform.name,
+                postType: contentType,
+                service,
+                location,
+                tone: brandVoice?.emojiStyle || "professional",
+                keywords: [],
+                businessName: businessProfile?.businessName || "CCC Group",
+                tradeType: businessProfile?.tradeType || "Carpentry & Home Improvements",
+                customPhrases: brandVoice?.customPhrases || [],
+                blacklistedPhrases: brandVoice?.blacklistedPhrases || [],
+                preferredCtas: brandVoice?.preferredCTAs || [],
+                hashtags: brandVoice?.hashtagPreferences || [],
+                locationKeywords: brandVoice?.locationKeywords || [],
+                mediaContext: activeFocus?.focusImageCaption || undefined,
+              });
+
+              const completion = await client.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                  { role: "system", content: "You are a social media content creator for a local trade business. Write engaging, professional posts that highlight quality work and build local community trust." },
+                  { role: "user", content: prompt },
+                ],
+                max_completion_tokens: 500,
+              });
+
+              const generatedContent = completion.choices[0]?.message?.content || "";
+
+              // Create content post
+              const post = await storage.createSeoContentPost({
+                platform: platform.name,
+                postType: contentType,
+                content: generatedContent,
+                status: settings.requireApproval ? "pending_review" : "approved",
+                source: "autopilot",
+                scheduledFor,
+                weeklyFocusId: activeFocus?.id,
+                mediaUrls: activeFocus?.focusImageUrl ? [activeFocus.focusImageUrl] : undefined,
+              });
+              postsCreated.push(post);
+
+              // Link post to slot
+              await storage.updateSeoAutopilotSlot(slot.id, {
+                contentPostId: post.id,
+                status: "generated",
+              });
+            } catch (aiError) {
+              console.error("AI generation error for slot:", slot.id, aiError);
+            }
+          }
+        }
+      }
+
+      // Log the run
+      await storage.createSeoAutopilotRun({
+        slotsGenerated: slotsCreated.length,
+        postsCreated: postsCreated.length,
+        status: "success",
+        details: JSON.stringify({
+          daysAhead,
+          platforms: platforms.filter(p => p.enabled).map(p => p.name),
+        }),
+      });
+
+      res.json({
+        success: true,
+        slotsCreated: slotsCreated.length,
+        postsCreated: postsCreated.length,
+        slots: slotsCreated,
+      });
+    } catch (error) {
+      console.error("Autopilot generation error:", error);
+      
+      // Log failed run
+      await storage.createSeoAutopilotRun({
+        status: "failed",
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      });
+      
+      res.status(500).json({ message: "Failed to generate autopilot content" });
+    }
+  });
+
   // Register object storage routes
   registerObjectStorageRoutes(app);
 

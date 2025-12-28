@@ -25,6 +25,9 @@ import {
   seoWeeklyFocus, type SeoWeeklyFocus, type InsertSeoWeeklyFocus,
   seoJobMedia, type SeoJobMedia, type InsertSeoJobMedia,
   seoContentPosts, type SeoContentPost, type InsertSeoContentPost,
+  seoAutopilotSettings, type SeoAutopilotSettings, type InsertSeoAutopilotSettings,
+  seoAutopilotSlots, type SeoAutopilotSlot, type InsertSeoAutopilotSlot,
+  seoAutopilotRuns, type SeoAutopilotRun, type InsertSeoAutopilotRun,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -198,6 +201,23 @@ export interface IStorage {
   createSeoContentPost(post: InsertSeoContentPost): Promise<SeoContentPost>;
   updateSeoContentPost(id: string, post: Partial<InsertSeoContentPost>): Promise<SeoContentPost | undefined>;
   deleteSeoContentPost(id: string): Promise<boolean>;
+
+  // SEO Autopilot Settings
+  getSeoAutopilotSettings(): Promise<SeoAutopilotSettings | undefined>;
+  upsertSeoAutopilotSettings(settings: InsertSeoAutopilotSettings): Promise<SeoAutopilotSettings>;
+
+  // SEO Autopilot Slots
+  getSeoAutopilotSlots(): Promise<SeoAutopilotSlot[]>;
+  getSeoAutopilotSlotsByDateRange(startDate: Date, endDate: Date): Promise<SeoAutopilotSlot[]>;
+  getSeoAutopilotSlotsByStatus(status: string): Promise<SeoAutopilotSlot[]>;
+  getSeoAutopilotSlot(id: string): Promise<SeoAutopilotSlot | undefined>;
+  createSeoAutopilotSlot(slot: InsertSeoAutopilotSlot): Promise<SeoAutopilotSlot>;
+  updateSeoAutopilotSlot(id: string, slot: Partial<InsertSeoAutopilotSlot>): Promise<SeoAutopilotSlot | undefined>;
+  deleteSeoAutopilotSlot(id: string): Promise<boolean>;
+
+  // SEO Autopilot Runs
+  getSeoAutopilotRuns(): Promise<SeoAutopilotRun[]>;
+  createSeoAutopilotRun(run: InsertSeoAutopilotRun): Promise<SeoAutopilotRun>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -944,6 +964,80 @@ export class DatabaseStorage implements IStorage {
   async deleteSeoContentPost(id: string): Promise<boolean> {
     await db.delete(seoContentPosts).where(eq(seoContentPosts.id, id));
     return true;
+  }
+
+  // SEO Autopilot Settings Methods
+  async getSeoAutopilotSettings(): Promise<SeoAutopilotSettings | undefined> {
+    const [settings] = await db.select().from(seoAutopilotSettings).limit(1);
+    return settings || undefined;
+  }
+
+  async upsertSeoAutopilotSettings(settings: InsertSeoAutopilotSettings): Promise<SeoAutopilotSettings> {
+    const existing = await this.getSeoAutopilotSettings();
+    if (existing) {
+      const [updated] = await db.update(seoAutopilotSettings)
+        .set({ ...settings, updatedAt: new Date() })
+        .where(eq(seoAutopilotSettings.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(seoAutopilotSettings).values(settings).returning();
+    return created;
+  }
+
+  // SEO Autopilot Slots Methods
+  async getSeoAutopilotSlots(): Promise<SeoAutopilotSlot[]> {
+    return db.select().from(seoAutopilotSlots).orderBy(asc(seoAutopilotSlots.scheduledFor));
+  }
+
+  async getSeoAutopilotSlotsByDateRange(startDate: Date, endDate: Date): Promise<SeoAutopilotSlot[]> {
+    return db.select()
+      .from(seoAutopilotSlots)
+      .where(and(
+        gte(seoAutopilotSlots.scheduledFor, startDate),
+        lte(seoAutopilotSlots.scheduledFor, endDate)
+      ))
+      .orderBy(asc(seoAutopilotSlots.scheduledFor));
+  }
+
+  async getSeoAutopilotSlotsByStatus(status: string): Promise<SeoAutopilotSlot[]> {
+    return db.select()
+      .from(seoAutopilotSlots)
+      .where(eq(seoAutopilotSlots.status, status))
+      .orderBy(asc(seoAutopilotSlots.scheduledFor));
+  }
+
+  async getSeoAutopilotSlot(id: string): Promise<SeoAutopilotSlot | undefined> {
+    const [slot] = await db.select().from(seoAutopilotSlots).where(eq(seoAutopilotSlots.id, id));
+    return slot || undefined;
+  }
+
+  async createSeoAutopilotSlot(slot: InsertSeoAutopilotSlot): Promise<SeoAutopilotSlot> {
+    const [created] = await db.insert(seoAutopilotSlots).values(slot).returning();
+    return created;
+  }
+
+  async updateSeoAutopilotSlot(id: string, slot: Partial<InsertSeoAutopilotSlot>): Promise<SeoAutopilotSlot | undefined> {
+    const [updated] = await db.update(seoAutopilotSlots)
+      .set(slot)
+      .where(eq(seoAutopilotSlots.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteSeoAutopilotSlot(id: string): Promise<boolean> {
+    await db.delete(seoAutopilotSlots).where(eq(seoAutopilotSlots.id, id));
+    return true;
+  }
+
+  // SEO Autopilot Runs Methods
+  async getSeoAutopilotRuns(): Promise<SeoAutopilotRun[]> {
+    return db.select().from(seoAutopilotRuns).orderBy(desc(seoAutopilotRuns.ranAt));
+  }
+
+  async createSeoAutopilotRun(run: InsertSeoAutopilotRun): Promise<SeoAutopilotRun> {
+    const [created] = await db.insert(seoAutopilotRuns).values(run).returning();
+    return created;
   }
 }
 

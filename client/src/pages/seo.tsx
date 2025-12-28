@@ -32,9 +32,17 @@ import {
   XCircle,
   Upload,
   X,
+  Zap,
+  Play,
+  Pause,
+  Check,
+  CalendarDays,
 } from "lucide-react";
 import { SiGoogle, SiInstagram, SiFacebook } from "react-icons/si";
-import type { SeoBusinessProfile, SeoContentPost, SeoWeeklyFocus } from "@shared/schema";
+import type { SeoBusinessProfile, SeoContentPost, SeoWeeklyFocus, SeoAutopilotSettings, SeoAutopilotSlot } from "@shared/schema";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function SEOPowerHouse() {
   const { toast } = useToast();
@@ -50,7 +58,7 @@ export default function SEOPowerHouse() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:grid-cols-6">
           <TabsTrigger value="profile" className="gap-2" data-testid="tab-profile">
             <Building2 className="w-4 h-4" />
             <span className="hidden sm:inline">Profile</span>
@@ -62,6 +70,10 @@ export default function SEOPowerHouse() {
           <TabsTrigger value="focus" className="gap-2" data-testid="tab-focus">
             <Target className="w-4 h-4" />
             <span className="hidden sm:inline">Weekly Focus</span>
+          </TabsTrigger>
+          <TabsTrigger value="autopilot" className="gap-2" data-testid="tab-autopilot">
+            <Zap className="w-4 h-4" />
+            <span className="hidden sm:inline">Autopilot</span>
           </TabsTrigger>
           <TabsTrigger value="create" className="gap-2" data-testid="tab-create">
             <Sparkles className="w-4 h-4" />
@@ -83,6 +95,10 @@ export default function SEOPowerHouse() {
         
         <TabsContent value="focus">
           <WeeklyFocusSection />
+        </TabsContent>
+        
+        <TabsContent value="autopilot">
+          <AutopilotSection />
         </TabsContent>
         
         <TabsContent value="create">
@@ -1197,5 +1213,535 @@ function PostsSection() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function AutopilotSection() {
+  const { toast } = useToast();
+  const [settings, setSettings] = useState<Partial<SeoAutopilotSettings>>({
+    enabled: false,
+    facebookEnabled: true,
+    facebookPostsPerWeek: 3,
+    facebookPreferredDays: ["monday", "wednesday", "friday"],
+    facebookPreferredTime: "09:00",
+    instagramEnabled: true,
+    instagramPostsPerWeek: 3,
+    instagramPreferredDays: ["tuesday", "thursday", "saturday"],
+    instagramPreferredTime: "18:00",
+    googleEnabled: true,
+    googlePostsPerWeek: 2,
+    googlePreferredDays: ["monday", "thursday"],
+    googlePreferredTime: "12:00",
+    projectShowcaseWeight: 40,
+    beforeAfterWeight: 20,
+    tipsWeight: 15,
+    testimonialWeight: 15,
+    seasonalWeight: 10,
+    autoGenerateAhead: 7,
+    requireApproval: true,
+    useWeeklyFocusImages: true,
+  });
+
+  const { data: existingSettings, isLoading: isLoadingSettings } = useQuery<SeoAutopilotSettings | null>({
+    queryKey: ["/api/seo/autopilot/settings"],
+  });
+
+  const { data: slots = [], isLoading: isLoadingSlots } = useQuery<SeoAutopilotSlot[]>({
+    queryKey: ["/api/seo/autopilot/slots"],
+  });
+
+  const { data: posts = [] } = useQuery<SeoContentPost[]>({
+    queryKey: ["/api/seo/content-posts"],
+  });
+
+  useEffect(() => {
+    if (existingSettings) {
+      setSettings(existingSettings);
+    }
+  }, [existingSettings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/seo/autopilot/settings", settings);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/autopilot/settings"] });
+      toast({ title: "Settings saved", description: "Autopilot settings have been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
+    },
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/seo/autopilot/generate", {});
+      return res.json();
+    },
+    onSuccess: (data: { slotsCreated: number; postsCreated: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/autopilot/slots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/content-posts"] });
+      toast({ 
+        title: "Content generated", 
+        description: `Created ${data.slotsCreated} scheduled slots and ${data.postsCreated} posts.`
+      });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Autopilot must be enabled first.", variant: "destructive" });
+    },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async (slotId: string) => {
+      const res = await apiRequest("POST", `/api/seo/autopilot/slots/${slotId}/approve`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/autopilot/slots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/content-posts"] });
+      toast({ title: "Approved", description: "Post has been approved for publishing." });
+    },
+  });
+
+  const markPostedMutation = useMutation({
+    mutationFn: async (slotId: string) => {
+      const res = await apiRequest("POST", `/api/seo/autopilot/slots/${slotId}/mark-posted`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/autopilot/slots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/content-posts"] });
+      toast({ title: "Posted", description: "Slot marked as posted." });
+    },
+  });
+
+  const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+  const toggleDay = (platform: "facebook" | "instagram" | "google", day: string) => {
+    const key = `${platform}PreferredDays` as keyof SeoAutopilotSettings;
+    const currentDays = (settings[key] as string[]) || [];
+    if (currentDays.includes(day)) {
+      setSettings({ ...settings, [key]: currentDays.filter((d: string) => d !== day) });
+    } else {
+      setSettings({ ...settings, [key]: [...currentDays, day] });
+    }
+  };
+
+  const pendingSlots = slots.filter(s => s.status === "pending" || s.status === "generated");
+  const approvedSlots = slots.filter(s => s.status === "approved");
+  const postedSlots = slots.filter(s => s.status === "posted");
+
+  const getPostForSlot = (slot: SeoAutopilotSlot) => {
+    return posts.find(p => p.id === slot.contentPostId);
+  };
+
+  const getPlatformIcon = (platform: string) => {
+    switch (platform) {
+      case "facebook": return <SiFacebook className="w-4 h-4 text-blue-600" />;
+      case "instagram": return <SiInstagram className="w-4 h-4 text-pink-500" />;
+      case "google_business": return <SiGoogle className="w-4 h-4 text-red-500" />;
+      default: return null;
+    }
+  };
+
+  if (isLoadingSettings) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="w-5 h-5" />
+                Autopilot Mode
+              </CardTitle>
+              <CardDescription>
+                Let AI automatically create and schedule content for you
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="autopilot-toggle">Enable Autopilot</Label>
+                <Switch
+                  id="autopilot-toggle"
+                  checked={settings.enabled || false}
+                  onCheckedChange={(checked) => setSettings({ ...settings, enabled: checked })}
+                  data-testid="switch-autopilot-enable"
+                />
+              </div>
+              <Button 
+                onClick={() => saveMutation.mutate()} 
+                disabled={saveMutation.isPending}
+                data-testid="button-save-autopilot"
+              >
+                {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                Save Settings
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-3">
+            <Card className={`border-2 ${settings.facebookEnabled ? "border-blue-500" : "border-muted"}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <SiFacebook className="w-5 h-5 text-blue-600" />
+                    <CardTitle className="text-base">Facebook</CardTitle>
+                  </div>
+                  <Switch
+                    checked={settings.facebookEnabled || false}
+                    onCheckedChange={(checked) => setSettings({ ...settings, facebookEnabled: checked })}
+                    data-testid="switch-facebook-enable"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="text-sm">Posts per week: {settings.facebookPostsPerWeek}</Label>
+                  <Slider
+                    value={[settings.facebookPostsPerWeek || 3]}
+                    onValueChange={([val]) => setSettings({ ...settings, facebookPostsPerWeek: val })}
+                    min={1}
+                    max={7}
+                    step={1}
+                    className="mt-2"
+                    data-testid="slider-facebook-posts"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Posting Days</Label>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {days.map(day => (
+                      <Badge
+                        key={day}
+                        variant={(settings.facebookPreferredDays || []).includes(day) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleDay("facebook", day)}
+                        data-testid={`badge-facebook-day-${day}`}
+                      >
+                        {day.slice(0, 3)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm">Post Time</Label>
+                  <Input
+                    type="time"
+                    value={settings.facebookPreferredTime || "09:00"}
+                    onChange={(e) => setSettings({ ...settings, facebookPreferredTime: e.target.value })}
+                    className="mt-1"
+                    data-testid="input-facebook-time"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={`border-2 ${settings.instagramEnabled ? "border-pink-500" : "border-muted"}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <SiInstagram className="w-5 h-5 text-pink-500" />
+                    <CardTitle className="text-base">Instagram</CardTitle>
+                  </div>
+                  <Switch
+                    checked={settings.instagramEnabled || false}
+                    onCheckedChange={(checked) => setSettings({ ...settings, instagramEnabled: checked })}
+                    data-testid="switch-instagram-enable"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="text-sm">Posts per week: {settings.instagramPostsPerWeek}</Label>
+                  <Slider
+                    value={[settings.instagramPostsPerWeek || 3]}
+                    onValueChange={([val]) => setSettings({ ...settings, instagramPostsPerWeek: val })}
+                    min={1}
+                    max={7}
+                    step={1}
+                    className="mt-2"
+                    data-testid="slider-instagram-posts"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Posting Days</Label>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {days.map(day => (
+                      <Badge
+                        key={day}
+                        variant={(settings.instagramPreferredDays || []).includes(day) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleDay("instagram", day)}
+                        data-testid={`badge-instagram-day-${day}`}
+                      >
+                        {day.slice(0, 3)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm">Post Time</Label>
+                  <Input
+                    type="time"
+                    value={settings.instagramPreferredTime || "18:00"}
+                    onChange={(e) => setSettings({ ...settings, instagramPreferredTime: e.target.value })}
+                    className="mt-1"
+                    data-testid="input-instagram-time"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={`border-2 ${settings.googleEnabled ? "border-red-500" : "border-muted"}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <SiGoogle className="w-5 h-5 text-red-500" />
+                    <CardTitle className="text-base">Google Business</CardTitle>
+                  </div>
+                  <Switch
+                    checked={settings.googleEnabled || false}
+                    onCheckedChange={(checked) => setSettings({ ...settings, googleEnabled: checked })}
+                    data-testid="switch-google-enable"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="text-sm">Posts per week: {settings.googlePostsPerWeek}</Label>
+                  <Slider
+                    value={[settings.googlePostsPerWeek || 2]}
+                    onValueChange={([val]) => setSettings({ ...settings, googlePostsPerWeek: val })}
+                    min={1}
+                    max={7}
+                    step={1}
+                    className="mt-2"
+                    data-testid="slider-google-posts"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Posting Days</Label>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {days.map(day => (
+                      <Badge
+                        key={day}
+                        variant={(settings.googlePreferredDays || []).includes(day) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleDay("google", day)}
+                        data-testid={`badge-google-day-${day}`}
+                      >
+                        {day.slice(0, 3)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm">Post Time</Label>
+                  <Input
+                    type="time"
+                    value={settings.googlePreferredTime || "12:00"}
+                    onChange={(e) => setSettings({ ...settings, googlePreferredTime: e.target.value })}
+                    className="mt-1"
+                    data-testid="input-google-time"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Separator />
+
+          <div>
+            <h3 className="font-semibold mb-4">Content Mix</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Adjust how often each type of content should appear (percentages should total 100%)
+            </p>
+            <div className="grid gap-4 md:grid-cols-5">
+              {[
+                { key: "projectShowcaseWeight", label: "Project Showcase" },
+                { key: "beforeAfterWeight", label: "Before & After" },
+                { key: "tipsWeight", label: "Tips & Advice" },
+                { key: "testimonialWeight", label: "Testimonials" },
+                { key: "seasonalWeight", label: "Seasonal" },
+              ].map(({ key, label }) => (
+                <div key={key}>
+                  <Label className="text-sm">{label}: {settings[key as keyof SeoAutopilotSettings] as number}%</Label>
+                  <Slider
+                    value={[(settings[key as keyof SeoAutopilotSettings] as number) || 20]}
+                    onValueChange={([val]) => setSettings({ ...settings, [key]: val })}
+                    min={0}
+                    max={100}
+                    step={5}
+                    className="mt-2"
+                    data-testid={`slider-${key}`}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="require-approval"
+                  checked={settings.requireApproval || false}
+                  onCheckedChange={(checked) => setSettings({ ...settings, requireApproval: checked as boolean })}
+                  data-testid="checkbox-require-approval"
+                />
+                <Label htmlFor="require-approval">Require approval before posting</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="use-images"
+                  checked={settings.useWeeklyFocusImages || false}
+                  onCheckedChange={(checked) => setSettings({ ...settings, useWeeklyFocusImages: checked as boolean })}
+                  data-testid="checkbox-use-images"
+                />
+                <Label htmlFor="use-images">Use weekly focus images when available</Label>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label>Generate ahead:</Label>
+              <Select 
+                value={String(settings.autoGenerateAhead || 7)} 
+                onValueChange={(val) => setSettings({ ...settings, autoGenerateAhead: parseInt(val) })}
+              >
+                <SelectTrigger className="w-32" data-testid="select-generate-ahead">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 days</SelectItem>
+                  <SelectItem value="7">7 days</SelectItem>
+                  <SelectItem value="14">14 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="w-5 h-5" />
+                Scheduled Content Queue
+              </CardTitle>
+              <CardDescription>
+                {pendingSlots.length} pending approval, {approvedSlots.length} ready to post, {postedSlots.length} posted
+              </CardDescription>
+            </div>
+            <Button 
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending || !settings.enabled}
+              data-testid="button-generate-content"
+            >
+              {generateMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Play className="w-4 h-4 mr-2" />
+              )}
+              Generate Content
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoadingSlots ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : slots.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+              <CalendarDays className="w-10 h-10 mb-4" />
+              <p>No scheduled content yet</p>
+              <p className="text-sm">Enable autopilot and click Generate Content to start</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {slots.slice(0, 10).map((slot) => {
+                const post = getPostForSlot(slot);
+                return (
+                  <Card key={slot.id} className="bg-muted/30">
+                    <CardContent className="pt-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            {getPlatformIcon(slot.platform)}
+                            <span className="text-sm font-medium capitalize">
+                              {slot.platform.replace("_", " ")}
+                            </span>
+                            <Badge variant="outline">{slot.contentType.replace("_", " ")}</Badge>
+                            <Badge 
+                              variant={
+                                slot.status === "approved" ? "default" : 
+                                slot.status === "posted" ? "secondary" : 
+                                "outline"
+                              }
+                            >
+                              {slot.status}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(slot.scheduledFor).toLocaleDateString()} at {new Date(slot.scheduledFor).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          {post && (
+                            <p className="text-sm line-clamp-2">{post.content}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {(slot.status === "pending" || slot.status === "generated") && (
+                            <Button
+                              size="sm"
+                              onClick={() => approveMutation.mutate(slot.id)}
+                              disabled={approveMutation.isPending}
+                              data-testid={`button-approve-${slot.id}`}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Approve
+                            </Button>
+                          )}
+                          {slot.status === "approved" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => markPostedMutation.mutate(slot.id)}
+                              disabled={markPostedMutation.isPending}
+                              data-testid={`button-mark-posted-${slot.id}`}
+                            >
+                              <Send className="w-4 h-4 mr-1" />
+                              Mark Posted
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              {slots.length > 10 && (
+                <p className="text-sm text-muted-foreground text-center">
+                  Showing 10 of {slots.length} scheduled items
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
