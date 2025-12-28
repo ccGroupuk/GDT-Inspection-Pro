@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
+import { PortalMessagesDisplay } from "@/components/portal-messages-display";
 import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight } from "lucide-react";
 import type { Job, Contact } from "@shared/schema";
 
@@ -92,6 +93,8 @@ export default function PartnerPortalJobs() {
       </header>
 
       <main className="container mx-auto px-4 py-6">
+        <PortalMessagesDisplay portalType="partner" accessToken={token || ""} />
+        
         <div className="mb-6">
           <h2 className="text-2xl font-semibold mb-1">Your Assigned Jobs</h2>
           <p className="text-muted-foreground">

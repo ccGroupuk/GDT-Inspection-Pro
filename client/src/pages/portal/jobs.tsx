@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PortalLayout } from "@/components/portal-layout";
 import { usePortalAuth, portalApiRequest } from "@/hooks/use-portal-auth";
 import { StatusBadge } from "@/components/status-badge";
+import { PortalMessagesDisplay } from "@/components/portal-messages-display";
 import { ChevronRight, Briefcase, MapPin } from "lucide-react";
 import { useEffect } from "react";
 
@@ -53,6 +54,8 @@ export default function PortalJobs() {
   return (
     <PortalLayout>
       <div className="space-y-6">
+        <PortalMessagesDisplay portalType="client" accessToken={token || ""} />
+        
         <div>
           <h1 className="text-2xl font-semibold" data-testid="text-jobs-title">My Jobs</h1>
           <p className="text-sm text-muted-foreground mt-1">
