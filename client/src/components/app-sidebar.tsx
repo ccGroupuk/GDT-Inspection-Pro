@@ -13,6 +13,7 @@ import {
   Megaphone,
   HelpCircle,
   UserCog,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -135,13 +136,26 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
+      <SidebarFooter className="p-4 border-t border-sidebar-border space-y-2">
         <Link href="/jobs/new">
           <Button className="w-full gap-2" data-testid="button-new-job">
             <Plus className="w-4 h-4" />
             New Job
           </Button>
         </Link>
+        <Button 
+          variant="outline" 
+          className="w-full gap-2" 
+          data-testid="button-logout"
+          onClick={() => {
+            localStorage.removeItem("employeeToken");
+            localStorage.removeItem("employeeData");
+            window.location.href = "/api/logout";
+          }}
+        >
+          <LogOut className="w-4 h-4" />
+          Log Out
+        </Button>
       </SidebarFooter>
     </Sidebar>
   );
