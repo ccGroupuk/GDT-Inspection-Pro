@@ -4712,7 +4712,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
       const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
       const result = await sendClientPortalAccess(
-        contact.email,
+        contact.email!,
         contact.name,
         portalUrl,
         portalAccess.accessToken
@@ -4753,7 +4753,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
       const portalUrl = `${req.protocol}://${req.get('host')}/partner-portal`;
       const result = await sendPartnerPortalAccess(
-        partner.email,
+        partner.email!,
         partner.contactName || partner.businessName,
         portalUrl,
         portalAccess.accessToken
@@ -4828,7 +4828,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
       const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
       const result = await sendQuoteNotification(
-        contact.email,
+        contact.email!,
         contact.name,
         job.serviceType,
         quoteAmount,
