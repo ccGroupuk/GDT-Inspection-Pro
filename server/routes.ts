@@ -32,6 +32,53 @@ export async function registerRoutes(
     }
   });
 
+  // Global Search
+  app.get("/api/search", async (req, res) => {
+    try {
+      const query = (req.query.q as string || "").trim().toLowerCase();
+      if (!query || query.length < 2) {
+        return res.json({ contacts: [], jobs: [], partners: [] });
+      }
+
+      const [contacts, jobs, partners] = await Promise.all([
+        storage.getContacts(),
+        storage.getJobs(),
+        storage.getTradePartners(),
+      ]);
+
+      const matchedContacts = contacts.filter(c => 
+        c.name.toLowerCase().includes(query) ||
+        c.email?.toLowerCase().includes(query) ||
+        c.phone?.toLowerCase().includes(query) ||
+        c.postcode?.toLowerCase().includes(query)
+      ).slice(0, 5);
+
+      const matchedJobs = jobs.filter(j => 
+        j.jobNumber?.toLowerCase().includes(query) ||
+        j.serviceType?.toLowerCase().includes(query) ||
+        j.description?.toLowerCase().includes(query) ||
+        j.jobPostcode?.toLowerCase().includes(query) ||
+        j.jobAddress?.toLowerCase().includes(query)
+      ).slice(0, 5);
+
+      const matchedPartners = partners.filter(p => 
+        p.businessName.toLowerCase().includes(query) ||
+        p.contactName?.toLowerCase().includes(query) ||
+        p.email?.toLowerCase().includes(query) ||
+        p.tradeCategory?.toLowerCase().includes(query)
+      ).slice(0, 5);
+
+      res.json({
+        contacts: matchedContacts,
+        jobs: matchedJobs,
+        partners: matchedPartners,
+      });
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ message: "Search failed" });
+    }
+  });
+
   // Contacts
   app.get("/api/contacts", async (req, res) => {
     try {

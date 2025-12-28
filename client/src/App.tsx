@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { GlobalSearch } from "@/components/global-search";
 import Dashboard from "@/pages/dashboard";
 import Jobs from "@/pages/jobs";
 import JobForm from "@/pages/job-form";
@@ -91,6 +92,7 @@ function AdminLayout() {
         <div className="flex flex-col flex-1 overflow-hidden">
           <header className="flex items-center justify-between gap-4 px-4 h-14 border-b border-border shrink-0">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <GlobalSearch />
             <ThemeToggle />
           </header>
           <main className="flex-1 overflow-auto bg-background">
