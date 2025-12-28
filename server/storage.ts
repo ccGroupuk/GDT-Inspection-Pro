@@ -82,6 +82,8 @@ export interface IStorage {
   getClientPortalAccess(contactId: string): Promise<ClientPortalAccess | undefined>;
   getClientPortalAccessByToken(token: string): Promise<ClientPortalAccess | undefined>;
   createClientPortalAccess(access: InsertClientPortalAccess): Promise<ClientPortalAccess>;
+  updateClientPortalAccessPassword(accessId: string, passwordHash: string): Promise<void>;
+  updateClientPortalAccessLastLogin(accessId: string): Promise<void>;
 
   getClientInviteByToken(token: string): Promise<ClientInvite | undefined>;
   getClientInviteByContact(contactId: string): Promise<ClientInvite | undefined>;
@@ -118,6 +120,7 @@ export interface IStorage {
   getPartnerPortalAccessByToken(token: string): Promise<PartnerPortalAccess | undefined>;
   createPartnerPortalAccess(access: InsertPartnerPortalAccess): Promise<PartnerPortalAccess>;
   updatePartnerPortalAccessLastLogin(partnerId: string): Promise<void>;
+  updatePartnerPortalAccessPassword(accessId: string, passwordHash: string): Promise<void>;
   
   getPartnerInviteByToken(token: string): Promise<PartnerInvite | undefined>;
   getPartnerInviteByPartner(partnerId: string): Promise<PartnerInvite | undefined>;
@@ -427,6 +430,18 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async updateClientPortalAccessPassword(accessId: string, passwordHash: string): Promise<void> {
+    await db.update(clientPortalAccess)
+      .set({ passwordHash })
+      .where(eq(clientPortalAccess.id, accessId));
+  }
+
+  async updateClientPortalAccessLastLogin(accessId: string): Promise<void> {
+    await db.update(clientPortalAccess)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(clientPortalAccess.id, accessId));
+  }
+
   async getClientInviteByToken(token: string): Promise<ClientInvite | undefined> {
     const [invite] = await db.select().from(clientInvites).where(eq(clientInvites.inviteToken, token));
     return invite || undefined;
@@ -593,6 +608,12 @@ export class DatabaseStorage implements IStorage {
     await db.update(partnerPortalAccess)
       .set({ lastLoginAt: new Date() })
       .where(eq(partnerPortalAccess.partnerId, partnerId));
+  }
+
+  async updatePartnerPortalAccessPassword(accessId: string, passwordHash: string): Promise<void> {
+    await db.update(partnerPortalAccess)
+      .set({ passwordHash })
+      .where(eq(partnerPortalAccess.id, accessId));
   }
 
   async getPartnerInviteByToken(token: string): Promise<PartnerInvite | undefined> {

@@ -334,6 +334,7 @@ export const clientPortalAccess = pgTable("client_portal_access", {
   userId: varchar("user_id").references(() => users.id), // Replit Auth user
   accessToken: text("access_token").unique(), // For magic link login
   tokenExpiry: timestamp("token_expiry"),
+  passwordHash: text("password_hash"), // Optional password for extra security
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   lastLoginAt: timestamp("last_login_at"),
@@ -457,6 +458,7 @@ export const partnerPortalAccess = pgTable("partner_portal_access", {
   partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
   accessToken: text("access_token").unique(),
   tokenExpiry: timestamp("token_expiry"),
+  passwordHash: text("password_hash"), // Optional password for extra security
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   lastLoginAt: timestamp("last_login_at"),

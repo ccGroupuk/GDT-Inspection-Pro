@@ -1350,6 +1350,103 @@ export async function registerRoutes(
     }
   });
 
+  // Set password for client portal (optional security)
+  app.post("/api/portal/set-password", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { password } = req.body;
+      if (!password || password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      
+      const passwordHash = await bcrypt.hash(password, 10);
+      await storage.updateClientPortalAccessPassword(access.id, passwordHash);
+      
+      res.json({ message: "Password set successfully" });
+    } catch (error) {
+      console.error("Client portal set password error:", error);
+      res.status(500).json({ message: "Failed to set password" });
+    }
+  });
+
+  // Login to client portal with email and password
+  app.post("/api/portal/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password required" });
+      }
+      
+      // Find contact by email
+      const contacts = await storage.getContacts();
+      const contact = contacts.find(c => c.email?.toLowerCase() === email.toLowerCase());
+      if (!contact) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Get portal access for this contact
+      const access = await storage.getClientPortalAccess(contact.id);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Portal access not available" });
+      }
+      
+      // Check if password is set
+      if (!access.passwordHash) {
+        return res.status(400).json({ message: "No password set. Please use your access link." });
+      }
+      
+      // Verify password
+      const isValid = await bcrypt.compare(password, access.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Update last login
+      await storage.updateClientPortalAccessLastLogin(access.id);
+      
+      res.json({ 
+        token: access.accessToken,
+        contact: {
+          id: contact.id,
+          name: contact.name,
+          email: contact.email,
+        }
+      });
+    } catch (error) {
+      console.error("Client portal login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Check if client has password set
+  app.get("/api/portal/has-password", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      res.json({ hasPassword: !!access.passwordHash });
+    } catch (error) {
+      console.error("Client portal has-password check error:", error);
+      res.status(500).json({ message: "Failed to check password status" });
+    }
+  });
+
   app.get("/api/portal/review-links", async (req, res) => {
     try {
       const settings = await storage.getCompanySettings();
@@ -1633,6 +1730,104 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Partner portal profile error:", error);
       res.status(500).json({ message: "Failed to load profile" });
+    }
+  });
+
+  // Set password for partner portal (optional security)
+  app.post("/api/partner-portal/set-password", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { password } = req.body;
+      if (!password || password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      
+      const passwordHash = await bcrypt.hash(password, 10);
+      await storage.updatePartnerPortalAccessPassword(access.id, passwordHash);
+      
+      res.json({ message: "Password set successfully" });
+    } catch (error) {
+      console.error("Partner portal set password error:", error);
+      res.status(500).json({ message: "Failed to set password" });
+    }
+  });
+
+  // Login to partner portal with email and password
+  app.post("/api/partner-portal/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password required" });
+      }
+      
+      // Find partner by email
+      const partners = await storage.getTradePartners();
+      const partner = partners.find(p => p.email?.toLowerCase() === email.toLowerCase());
+      if (!partner) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Get portal access for this partner
+      const access = await storage.getPartnerPortalAccess(partner.id);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Portal access not available" });
+      }
+      
+      // Check if password is set
+      if (!access.passwordHash) {
+        return res.status(400).json({ message: "No password set. Please use your invite link." });
+      }
+      
+      // Verify password
+      const isValid = await bcrypt.compare(password, access.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Update last login
+      await storage.updatePartnerPortalAccessLastLogin(access.id);
+      
+      res.json({ 
+        token: access.accessToken,
+        partner: {
+          id: partner.id,
+          businessName: partner.businessName,
+          contactName: partner.contactName,
+          email: partner.email,
+        }
+      });
+    } catch (error) {
+      console.error("Partner portal login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Check if partner has password set
+  app.get("/api/partner-portal/has-password", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      res.json({ hasPassword: !!access.passwordHash });
+    } catch (error) {
+      console.error("Partner portal has-password check error:", error);
+      res.status(500).json({ message: "Failed to check password status" });
     }
   });
 
