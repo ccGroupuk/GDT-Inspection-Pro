@@ -37,6 +37,7 @@ import PartnerPortalHelp from "@/pages/partner-portal/help";
 import Landing from "@/pages/landing";
 import EmployeePortalLogin from "@/pages/employee-portal-login";
 import EmployeePortalHome from "@/pages/employee-portal-home";
+import EmployeePortalChangePassword from "@/pages/employee-portal-change-password";
 import EmployeesAdmin from "@/pages/employees-admin";
 
 function AdminRouter() {
@@ -67,6 +68,7 @@ function EmployeePortalRouter() {
     <Switch>
       <Route path="/employee-portal" component={EmployeePortalLogin} />
       <Route path="/employee-portal/home" component={EmployeePortalHome} />
+      <Route path="/employee-portal/change-password" component={EmployeePortalChangePassword} />
       <Route component={NotFound} />
     </Switch>
   );
