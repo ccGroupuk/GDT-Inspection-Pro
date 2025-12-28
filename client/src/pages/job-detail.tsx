@@ -36,10 +36,16 @@ import {
   X,
   Share2,
   Upload,
+  ClipboardCheck,
+  Clock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal } from "@shared/schema";
-import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES, NOTE_VISIBILITY } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey } from "@shared/schema";
+import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES, NOTE_VISIBILITY, SURVEY_STATUSES } from "@shared/schema";
+
+interface JobSurveyWithPartner extends JobSurvey {
+  partner?: TradePartner | null;
+}
 
 interface JobNoteWithAttachments extends JobNote {
   attachments: JobNoteAttachment[];
@@ -106,6 +112,23 @@ export default function JobDetail() {
     enabled: Boolean(id),
   });
 
+  // Fetch job surveys
+  const { data: jobSurveys } = useQuery<JobSurveyWithPartner[]>({
+    queryKey: ["/api/jobs", id, "surveys"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/surveys`);
+      if (!response.ok) throw new Error("Failed to fetch surveys");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
+  // Fetch all trade partners (for survey assignment)
+  const { data: allPartners } = useQuery<TradePartner[]>({
+    queryKey: ["/api/partners"],
+    enabled: Boolean(id),
+  });
+
   // Schedule proposal dialog state
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [proposedStartDate, setProposedStartDate] = useState("");
@@ -119,6 +142,13 @@ export default function JobDetail() {
   const [noteVisibility, setNoteVisibility] = useState<string>("internal");
   const [pendingAttachments, setPendingAttachments] = useState<Array<{ fileName: string; fileUrl: string; mimeType?: string; fileSize?: number }>>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  // Survey dialog state
+  const [surveyDialogOpen, setSurveyDialogOpen] = useState(false);
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
+  const [surveyNotes, setSurveyNotes] = useState("");
+  const [surveyDate, setSurveyDate] = useState("");
+  const [surveyTime, setSurveyTime] = useState("");
 
   const { uploadFile } = useUpload({
     onSuccess: (response) => {
@@ -346,6 +376,55 @@ export default function JobDetail() {
       toast({ title: "Error updating share settings", variant: "destructive" });
     },
   });
+
+  // Survey mutations
+  const createSurveyMutation = useMutation({
+    mutationFn: async (data: { partnerId: string; adminNotes?: string; scheduledDate?: string; scheduledTime?: string }) => {
+      return apiRequest("POST", `/api/jobs/${id}/surveys`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "surveys"] });
+      toast({ title: "Survey request sent" });
+      resetSurveyDialog();
+    },
+    onError: () => {
+      toast({ title: "Error creating survey request", variant: "destructive" });
+    },
+  });
+
+  const cancelSurveyMutation = useMutation({
+    mutationFn: async (surveyId: string) => {
+      return apiRequest("POST", `/api/surveys/${surveyId}/cancel`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "surveys"] });
+      toast({ title: "Survey cancelled" });
+    },
+    onError: () => {
+      toast({ title: "Error cancelling survey", variant: "destructive" });
+    },
+  });
+
+  const deleteSurveyMutation = useMutation({
+    mutationFn: async (surveyId: string) => {
+      return apiRequest("DELETE", `/api/surveys/${surveyId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "surveys"] });
+      toast({ title: "Survey deleted" });
+    },
+    onError: () => {
+      toast({ title: "Error deleting survey", variant: "destructive" });
+    },
+  });
+
+  const resetSurveyDialog = () => {
+    setSurveyDialogOpen(false);
+    setSelectedPartnerId("");
+    setSurveyNotes("");
+    setSurveyDate("");
+    setSurveyTime("");
+  };
 
   const resetNoteDialog = () => {
     setNoteDialogOpen(false);
@@ -1069,8 +1148,172 @@ export default function JobDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* Partner Surveys Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck className="w-4 h-4" />
+                  Partner Surveys
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSurveyDialogOpen(true)}
+                  data-testid="button-add-survey"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(!jobSurveys || jobSurveys.length === 0) ? (
+                <p className="text-sm text-muted-foreground">No surveys requested yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {jobSurveys.map((survey) => (
+                    <div key={survey.id} className="p-3 rounded-md bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-sm font-medium">
+                          {survey.partner?.businessName || "Unknown Partner"}
+                        </span>
+                        <Badge variant={
+                          survey.status === "completed" ? "default" :
+                          survey.status === "accepted" || survey.status === "scheduled" ? "secondary" :
+                          survey.status === "declined" || survey.status === "cancelled" ? "destructive" :
+                          "outline"
+                        }>
+                          {survey.status.charAt(0).toUpperCase() + survey.status.slice(1)}
+                        </Badge>
+                      </div>
+                      {survey.partner?.tradeCategory && (
+                        <p className="text-xs text-muted-foreground">{survey.partner.tradeCategory}</p>
+                      )}
+                      {survey.scheduledDate && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="w-3 h-3" />
+                          {new Date(survey.scheduledDate).toLocaleDateString()}
+                          {survey.scheduledTime && ` at ${survey.scheduledTime}`}
+                        </div>
+                      )}
+                      {survey.surveyDetails && (
+                        <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
+                          {survey.surveyDetails}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 pt-1">
+                        {survey.status === "requested" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs"
+                            onClick={() => cancelSurveyMutation.mutate(survey.id)}
+                            data-testid={`button-cancel-survey-${survey.id}`}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                        {(survey.status === "cancelled" || survey.status === "declined") && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs text-destructive"
+                            onClick={() => deleteSurveyMutation.mutate(survey.id)}
+                            data-testid={`button-delete-survey-${survey.id}`}
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
+
+      {/* Survey Assignment Dialog */}
+      <Dialog open={surveyDialogOpen} onOpenChange={setSurveyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Partner Survey</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Trade Partner</Label>
+              <Select value={selectedPartnerId} onValueChange={setSelectedPartnerId}>
+                <SelectTrigger data-testid="select-survey-partner">
+                  <SelectValue placeholder="Choose a partner..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {allPartners?.filter(p => p.isActive !== false).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.businessName} - {p.tradeCategory}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Preferred Date (Optional)</Label>
+                <Input
+                  type="date"
+                  value={surveyDate}
+                  onChange={(e) => setSurveyDate(e.target.value)}
+                  data-testid="input-survey-date"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Preferred Time (Optional)</Label>
+                <Input
+                  type="time"
+                  value={surveyTime}
+                  onChange={(e) => setSurveyTime(e.target.value)}
+                  data-testid="input-survey-time"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Notes for Partner (Optional)</Label>
+              <Textarea
+                value={surveyNotes}
+                onChange={(e) => setSurveyNotes(e.target.value)}
+                placeholder="Any special instructions or details..."
+                className="min-h-[80px]"
+                data-testid="textarea-survey-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetSurveyDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!selectedPartnerId) {
+                  toast({ title: "Please select a partner", variant: "destructive" });
+                  return;
+                }
+                createSurveyMutation.mutate({
+                  partnerId: selectedPartnerId,
+                  adminNotes: surveyNotes || undefined,
+                  scheduledDate: surveyDate || undefined,
+                  scheduledTime: surveyTime || undefined,
+                });
+              }}
+              disabled={createSurveyMutation.isPending}
+              data-testid="button-submit-survey"
+            >
+              {createSurveyMutation.isPending ? "Sending..." : "Send Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Schedule Proposal Dialog */}
       <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>

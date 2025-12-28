@@ -38,6 +38,8 @@ import PartnerPortalJobDetail from "@/pages/partner-portal/job-detail";
 import PartnerPortalCalendar from "@/pages/partner-portal/calendar";
 import PartnerPortalHelp from "@/pages/partner-portal/help";
 import PartnerPortalProfile from "@/pages/partner-portal/profile";
+import PartnerPortalSurveys from "@/pages/partner-portal/surveys";
+import PartnerPortalQuotes from "@/pages/partner-portal/quotes";
 import Landing from "@/pages/landing";
 import EmployeePortalLogin from "@/pages/employee-portal-login";
 import EmployeePortalHome from "@/pages/employee-portal-home";
@@ -103,6 +105,9 @@ function PartnerPortalRouter() {
       <Route path="/partner-portal/invite/:token" component={PartnerPortalInvite} />
       <Route path="/partner-portal/jobs/:jobId" component={PartnerPortalJobDetail} />
       <Route path="/partner-portal/jobs" component={PartnerPortalJobs} />
+      <Route path="/partner-portal/surveys" component={PartnerPortalSurveys} />
+      <Route path="/partner-portal/quotes/new" component={PartnerPortalQuotes} />
+      <Route path="/partner-portal/quotes" component={PartnerPortalQuotes} />
       <Route path="/partner-portal/calendar" component={PartnerPortalCalendar} />
       <Route path="/partner-portal/help" component={PartnerPortalHelp} />
       <Route path="/partner-portal/profile" component={PartnerPortalProfile} />

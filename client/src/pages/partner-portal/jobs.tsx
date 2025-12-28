@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
 import { PortalMessagesDisplay } from "@/components/portal-messages-display";
 import { useTabNotification } from "@/hooks/use-tab-notification";
-import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight, Calendar, HelpCircle, Settings } from "lucide-react";
+import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight, Calendar, HelpCircle, Settings, ClipboardCheck, FileText } from "lucide-react";
 import type { Job, Contact } from "@shared/schema";
 
 type JobWithContact = Job & { contact?: Contact };
@@ -107,6 +107,28 @@ export default function PartnerPortalJobs() {
               <Briefcase className="w-4 h-4 mr-2" />
               Jobs
             </Button>
+            <Link href="/partner-portal/surveys">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-surveys"
+              >
+                <ClipboardCheck className="w-4 h-4 mr-2" />
+                Surveys
+              </Button>
+            </Link>
+            <Link href="/partner-portal/quotes">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-quotes"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Quotes
+              </Button>
+            </Link>
             <Link href="/partner-portal/calendar">
               <Button
                 variant="ghost"
