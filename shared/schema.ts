@@ -1210,3 +1210,328 @@ export const HELP_AUDIENCES = [
   { value: "client", label: "Clients Only" },
   { value: "partner", label: "Partners Only" },
 ] as const;
+
+// ==================== EMPLOYEE MANAGEMENT ====================
+
+// Employees
+export const employees = pgTable("employees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Personal info
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull().unique(),
+  phone: text("phone"),
+  address: text("address"),
+  postcode: text("postcode"),
+  dateOfBirth: timestamp("date_of_birth"),
+  
+  // Employment details
+  role: text("role").notNull().default("fitting"), // admin, accounting, fitting, sales
+  employmentType: text("employment_type").default("full_time"), // full_time, part_time, contractor
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"), // If terminated
+  
+  // Pay information
+  hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }).notNull().default("0"),
+  paySchedule: text("pay_schedule").default("weekly"), // weekly, monthly
+  nationalInsurance: text("national_insurance"),
+  taxCode: text("tax_code"),
+  bankAccountName: text("bank_account_name"),
+  bankSortCode: text("bank_sort_code"),
+  bankAccountNumber: text("bank_account_number"),
+  
+  // Access control
+  isActive: boolean("is_active").default(true),
+  accessAreas: text("access_areas").array(), // Array of areas they can access
+  
+  // Emergency contact
+  emergencyContactName: text("emergency_contact_name"),
+  emergencyContactPhone: text("emergency_contact_phone"),
+  
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const employeesRelations = relations(employees, ({ one, many }) => ({
+  credential: one(employeeCredentials),
+  sessions: many(employeeSessions),
+  timeEntries: many(timeEntries),
+  documents: many(employeeDocuments),
+}));
+
+export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+export type Employee = typeof employees.$inferSelect;
+
+// Employee Credentials (separate table for security)
+export const employeeCredentials = pgTable("employee_credentials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }).unique(),
+  passwordHash: text("password_hash").notNull(),
+  mustChangePassword: boolean("must_change_password").default(true),
+  lastPasswordChange: timestamp("last_password_change"),
+  failedLoginAttempts: integer("failed_login_attempts").default(0),
+  lockedUntil: timestamp("locked_until"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const employeeCredentialsRelations = relations(employeeCredentials, ({ one }) => ({
+  employee: one(employees, {
+    fields: [employeeCredentials.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertEmployeeCredentialSchema = createInsertSchema(employeeCredentials).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEmployeeCredential = z.infer<typeof insertEmployeeCredentialSchema>;
+export type EmployeeCredential = typeof employeeCredentials.$inferSelect;
+
+// Employee Sessions (for login tokens)
+export const employeeSessions = pgTable("employee_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  sessionToken: text("session_token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastActiveAt: timestamp("last_active_at").defaultNow(),
+});
+
+export const employeeSessionsRelations = relations(employeeSessions, ({ one }) => ({
+  employee: one(employees, {
+    fields: [employeeSessions.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertEmployeeSessionSchema = createInsertSchema(employeeSessions).omit({ id: true, createdAt: true, lastActiveAt: true });
+export type InsertEmployeeSession = z.infer<typeof insertEmployeeSessionSchema>;
+export type EmployeeSession = typeof employeeSessions.$inferSelect;
+
+// Time Entries (clock in/out tracking)
+export const timeEntries = pgTable("time_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  // Time tracking
+  clockIn: timestamp("clock_in").notNull(),
+  clockOut: timestamp("clock_out"),
+  breakMinutes: integer("break_minutes").default(0),
+  
+  // Work type
+  entryType: text("entry_type").notNull().default("work"), // work, project, quoting, fitting, training, admin
+  
+  // Optional job link
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: "set null" }),
+  
+  // Location/notes
+  location: text("location"),
+  notes: text("notes"),
+  
+  // Calculated hours (stored for reporting)
+  totalHours: decimal("total_hours", { precision: 10, scale: 2 }),
+  
+  // Approval
+  status: text("status").default("pending"), // pending, approved, rejected
+  approvedBy: varchar("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const timeEntriesRelations = relations(timeEntries, ({ one }) => ({
+  employee: one(employees, {
+    fields: [timeEntries.employeeId],
+    references: [employees.id],
+  }),
+  job: one(jobs, {
+    fields: [timeEntries.jobId],
+    references: [jobs.id],
+  }),
+}));
+
+export const insertTimeEntrySchema = createInsertSchema(timeEntries).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTimeEntry = z.infer<typeof insertTimeEntrySchema>;
+export type TimeEntry = typeof timeEntries.$inferSelect;
+
+// Pay Periods
+export const payPeriods = pgTable("pay_periods", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  payDate: timestamp("pay_date").notNull(),
+  periodType: text("period_type").notNull(), // weekly, monthly
+  status: text("status").default("open"), // open, processing, closed
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const payPeriodsRelations = relations(payPeriods, ({ many }) => ({
+  payrollRuns: many(payrollRuns),
+}));
+
+export const insertPayPeriodSchema = createInsertSchema(payPeriods).omit({ id: true, createdAt: true });
+export type InsertPayPeriod = z.infer<typeof insertPayPeriodSchema>;
+export type PayPeriod = typeof payPeriods.$inferSelect;
+
+// Payroll Runs (individual employee payslips)
+export const payrollRuns = pgTable("payroll_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  payPeriodId: varchar("pay_period_id").notNull().references(() => payPeriods.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  // Hours worked
+  regularHours: decimal("regular_hours", { precision: 10, scale: 2 }).default("0"),
+  overtimeHours: decimal("overtime_hours", { precision: 10, scale: 2 }).default("0"),
+  
+  // Rates at time of payroll
+  hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }).notNull(),
+  overtimeRate: decimal("overtime_rate", { precision: 10, scale: 2 }),
+  
+  // Calculations
+  grossPay: decimal("gross_pay", { precision: 10, scale: 2 }).notNull(),
+  totalBonuses: decimal("total_bonuses", { precision: 10, scale: 2 }).default("0"),
+  totalDeductions: decimal("total_deductions", { precision: 10, scale: 2 }).default("0"),
+  netPay: decimal("net_pay", { precision: 10, scale: 2 }).notNull(),
+  
+  // Status
+  status: text("status").default("draft"), // draft, approved, paid
+  paidAt: timestamp("paid_at"),
+  
+  // Notes
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const payrollRunsRelations = relations(payrollRuns, ({ one, many }) => ({
+  payPeriod: one(payPeriods, {
+    fields: [payrollRuns.payPeriodId],
+    references: [payPeriods.id],
+  }),
+  employee: one(employees, {
+    fields: [payrollRuns.employeeId],
+    references: [employees.id],
+  }),
+  adjustments: many(payrollAdjustments),
+}));
+
+export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
+export type PayrollRun = typeof payrollRuns.$inferSelect;
+
+// Payroll Adjustments (bonuses and deductions)
+export const payrollAdjustments = pgTable("payroll_adjustments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  payrollRunId: varchar("payroll_run_id").notNull().references(() => payrollRuns.id, { onDelete: "cascade" }),
+  
+  type: text("type").notNull(), // bonus, deduction
+  category: text("category").notNull(), // performance_bonus, overtime_bonus, advance, tax, insurance, equipment, etc.
+  description: text("description").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const payrollAdjustmentsRelations = relations(payrollAdjustments, ({ one }) => ({
+  payrollRun: one(payrollRuns, {
+    fields: [payrollAdjustments.payrollRunId],
+    references: [payrollRuns.id],
+  }),
+}));
+
+export const insertPayrollAdjustmentSchema = createInsertSchema(payrollAdjustments).omit({ id: true, createdAt: true });
+export type InsertPayrollAdjustment = z.infer<typeof insertPayrollAdjustmentSchema>;
+export type PayrollAdjustment = typeof payrollAdjustments.$inferSelect;
+
+// Employee Documents
+export const employeeDocuments = pgTable("employee_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  documentType: text("document_type").notNull(), // contract, id, certification, other
+  title: text("title").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  mimeType: text("mime_type"),
+  fileSize: integer("file_size"),
+  
+  // Expiry tracking for certifications
+  expiryDate: timestamp("expiry_date"),
+  
+  notes: text("notes"),
+  uploadedBy: text("uploaded_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const employeeDocumentsRelations = relations(employeeDocuments, ({ one }) => ({
+  employee: one(employees, {
+    fields: [employeeDocuments.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertEmployeeDocumentSchema = createInsertSchema(employeeDocuments).omit({ id: true, createdAt: true });
+export type InsertEmployeeDocument = z.infer<typeof insertEmployeeDocumentSchema>;
+export type EmployeeDocument = typeof employeeDocuments.$inferSelect;
+
+// Employee Roles
+export const EMPLOYEE_ROLES = [
+  { value: "admin", label: "Admin", description: "Full system access" },
+  { value: "accounting", label: "Accounting", description: "Financial and payroll access" },
+  { value: "fitting", label: "Fitting", description: "Field work and job access" },
+  { value: "sales", label: "Sales", description: "Contacts, jobs, and quotes" },
+] as const;
+
+// Employment Types
+export const EMPLOYMENT_TYPES = [
+  { value: "full_time", label: "Full Time" },
+  { value: "part_time", label: "Part Time" },
+  { value: "contractor", label: "Contractor" },
+] as const;
+
+// Time Entry Types
+export const TIME_ENTRY_TYPES = [
+  { value: "work", label: "General Work", color: "bg-blue-500" },
+  { value: "project", label: "Project Work", color: "bg-green-500" },
+  { value: "quoting", label: "Quoting", color: "bg-purple-500" },
+  { value: "fitting", label: "Fitting", color: "bg-orange-500" },
+  { value: "training", label: "Training", color: "bg-cyan-500" },
+  { value: "admin", label: "Admin Tasks", color: "bg-gray-500" },
+] as const;
+
+// Pay Schedules
+export const PAY_SCHEDULES = [
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+] as const;
+
+// Document Types
+export const DOCUMENT_TYPES = [
+  { value: "contract", label: "Employment Contract" },
+  { value: "id", label: "ID Document" },
+  { value: "certification", label: "Certification" },
+  { value: "training", label: "Training Record" },
+  { value: "other", label: "Other" },
+] as const;
+
+// Access Areas (for role-based access control)
+export const ACCESS_AREAS = [
+  { value: "dashboard", label: "Dashboard" },
+  { value: "jobs", label: "Jobs & Pipeline" },
+  { value: "contacts", label: "Contacts" },
+  { value: "partners", label: "Trade Partners" },
+  { value: "tasks", label: "Tasks" },
+  { value: "finance", label: "Finance" },
+  { value: "calendar", label: "Calendar" },
+  { value: "seo", label: "SEO Power House" },
+  { value: "settings", label: "Settings" },
+  { value: "employees", label: "Employee Management" },
+  { value: "payroll", label: "Payroll" },
+  { value: "help_center", label: "Help Center Admin" },
+] as const;
