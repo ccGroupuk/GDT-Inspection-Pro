@@ -611,6 +611,41 @@ export async function registerRoutes(
     }
   });
 
+  // Get job stage readiness - shows what's needed for each pipeline stage
+  app.get("/api/jobs/:id/stage-readiness", async (req, res) => {
+    try {
+      const { getJobStageReadiness } = await import("./stage-validation");
+      const readiness = await getJobStageReadiness(req.params.id);
+      
+      if (!readiness) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      res.json(readiness);
+    } catch (error) {
+      console.error("Get job stage readiness error:", error);
+      res.status(500).json({ message: "Failed to get stage readiness" });
+    }
+  });
+
+  // Validate a proposed stage transition (without making the change)
+  app.post("/api/jobs/:id/validate-stage", async (req, res) => {
+    try {
+      const { targetStage } = req.body;
+      if (!targetStage) {
+        return res.status(400).json({ message: "targetStage is required" });
+      }
+      
+      const { validateStageTransition } = await import("./stage-validation");
+      const validation = await validateStageTransition(req.params.id, targetStage);
+      
+      res.json(validation);
+    } catch (error) {
+      console.error("Validate stage transition error:", error);
+      res.status(500).json({ message: "Failed to validate stage transition" });
+    }
+  });
+
   app.post("/api/jobs", async (req, res) => {
     try {
       const data = insertJobSchema.parse(req.body);
@@ -633,6 +668,21 @@ export async function registerRoutes(
       const currentJob = await storage.getJob(req.params.id);
       if (!currentJob) {
         return res.status(404).json({ message: "Job not found" });
+      }
+      
+      // Validate stage transition if status is changing
+      if (data.status && data.status !== currentJob.status) {
+        const { validateStageTransition } = await import("./stage-validation");
+        const validation = await validateStageTransition(req.params.id, data.status);
+        
+        if (!validation.allowed) {
+          return res.status(409).json({
+            message: "Cannot move to this stage - requirements not met",
+            currentStage: validation.currentStage,
+            targetStage: validation.targetStage,
+            unmetPrerequisites: validation.unmetPrerequisites,
+          });
+        }
       }
       
       const job = await storage.updateJob(req.params.id, data);

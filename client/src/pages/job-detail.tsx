@@ -199,6 +199,35 @@ export default function JobDetail() {
     },
   });
 
+  // Fetch stage readiness for pipeline progression
+  interface StagePrerequisiteResult {
+    field: string;
+    passed: boolean;
+    message: string;
+  }
+  interface StageReadiness {
+    stage: string;
+    label: string;
+    isCurrentStage: boolean;
+    canProgress: boolean;
+    prerequisites: StagePrerequisiteResult[];
+    canSkip?: boolean;
+  }
+  interface JobStageReadiness {
+    jobId: string;
+    currentStage: string;
+    stages: StageReadiness[];
+  }
+  const { data: stageReadiness } = useQuery<JobStageReadiness>({
+    queryKey: ["/api/jobs", id, "stage-readiness"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/stage-readiness`);
+      if (!response.ok) throw new Error("Failed to fetch stage readiness");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
   // Schedule proposal dialog state
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [proposedStartDate, setProposedStartDate] = useState("");
@@ -300,7 +329,19 @@ export default function JobDetail() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
-      return apiRequest("PATCH", `/api/jobs/${id}`, { status });
+      const response = await fetch(`/api/jobs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw { status: response.status, ...errorData };
+      }
+      
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
@@ -308,8 +349,18 @@ export default function JobDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       toast({ title: "Status updated" });
     },
-    onError: () => {
-      toast({ title: "Error updating status", variant: "destructive" });
+    onError: (error: { status?: number; message?: string; unmetPrerequisites?: Array<{ message: string }> }) => {
+      if (error.status === 409 && error.unmetPrerequisites?.length) {
+        const prereqMessages = error.unmetPrerequisites.map(p => p.message).join("\n");
+        toast({ 
+          title: "Cannot change status",
+          description: prereqMessages,
+          variant: "destructive",
+          duration: 8000,
+        });
+      } else {
+        toast({ title: error.message || "Error updating status", variant: "destructive" });
+      }
     },
   });
 
@@ -826,6 +877,56 @@ export default function JobDetail() {
                 <div className="mt-3">
                   <PendingChecklistsWarning jobId={id!} />
                 </div>
+                
+                {/* Stage Requirements - show what's needed for next stages */}
+                {stageReadiness && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <ClipboardCheck className="w-4 h-4" />
+                      Stage Requirements
+                    </p>
+                    <div className="space-y-2">
+                      {stageReadiness.stages
+                        .filter(s => !s.isCurrentStage && s.prerequisites.length > 0)
+                        .slice(0, 4)
+                        .map(stage => {
+                          const allMet = stage.prerequisites.every(p => p.passed);
+                          const unmetCount = stage.prerequisites.filter(p => !p.passed).length;
+                          return (
+                            <div key={stage.stage} className="text-sm">
+                              <div className="flex items-center gap-2">
+                                {allMet || stage.canSkip ? (
+                                  <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                                ) : (
+                                  <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                                )}
+                                <span className={allMet || stage.canSkip ? "text-muted-foreground" : ""}>
+                                  {stage.label}
+                                </span>
+                                {!allMet && !stage.canSkip && (
+                                  <span className="text-xs text-muted-foreground">
+                                    ({unmetCount} requirement{unmetCount > 1 ? "s" : ""})
+                                  </span>
+                                )}
+                                {stage.canSkip && !allMet && (
+                                  <Badge variant="outline" className="text-xs">Optional</Badge>
+                                )}
+                              </div>
+                              {!allMet && !stage.canSkip && (
+                                <ul className="ml-6 mt-1 space-y-0.5">
+                                  {stage.prerequisites.filter(p => !p.passed).map((prereq, i) => (
+                                    <li key={i} className="text-xs text-muted-foreground">
+                                      {prereq.message}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
