@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Clock, ArrowLeft, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { queryClient } from "@/lib/queryClient";
 
 function generateMathChallenge() {
   const num1 = Math.floor(Math.random() * 10) + 1;
@@ -60,6 +61,9 @@ export default function EmployeePortalLogin() {
         throw new Error(data.message || "Login failed");
       }
 
+      // Invalidate auth cache so the app knows we're logged in
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      
       if (data.mustChangePassword) {
         toast({
           title: "Password Change Required",
@@ -71,7 +75,7 @@ export default function EmployeePortalLogin() {
           title: "Welcome back!",
           description: `Logged in as ${data.employee.firstName} ${data.employee.lastName} with admin access`
         });
-        setLocation("/");
+        setLocation("/dashboard");
       } else {
         toast({
           title: "Welcome back!",
