@@ -7132,14 +7132,17 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     }
   });
 
-  // Delete connection link
+  // Revoke connection link (soft delete by setting status to revoked)
   app.delete("/api/connection-links/:id", async (req, res) => {
     try {
-      await storage.deleteConnectionLink(req.params.id);
+      const updated = await storage.updateConnectionLink(req.params.id, { status: "revoked" });
+      if (!updated) {
+        return res.status(404).json({ message: "Connection link not found" });
+      }
       res.json({ success: true });
     } catch (error) {
-      console.error("Delete connection link error:", error);
-      res.status(500).json({ message: "Failed to delete connection link" });
+      console.error("Revoke connection link error:", error);
+      res.status(500).json({ message: "Failed to revoke connection link" });
     }
   });
 
@@ -7149,6 +7152,11 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       const link = await storage.getConnectionLinkByToken(req.params.token);
       if (!link) {
         return res.status(404).json({ message: "Invalid or expired link" });
+      }
+
+      // Check if link is revoked
+      if (link.status === "revoked") {
+        return res.status(410).json({ message: "This link has been revoked" });
       }
       
       // Check expiration
@@ -7173,18 +7181,46 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       // Update last accessed
       await storage.updateConnectionLink(link.id, { lastAccessedAt: new Date() });
 
+      // Filter notes based on party type
+      const filteredNotes = notes.filter(n => {
+        if (link.partyType === 'client') return n.visibility === 'client' || n.visibility === 'all';
+        if (link.partyType === 'partner') return n.visibility === 'partner' || n.visibility === 'all';
+        return true; // employees see all
+      });
+
+      // Calculate quote totals
+      let quoteTotals = null;
+      if (quoteItems.length > 0) {
+        const subtotal = quoteItems.reduce((sum, item) => sum + (parseFloat(item.lineTotal) || 0), 0);
+        let discountAmount = 0;
+        if (job.discountType && job.discountValue) {
+          if (job.discountType === "percentage") {
+            discountAmount = subtotal * (parseFloat(job.discountValue) / 100);
+          } else if (job.discountType === "fixed") {
+            discountAmount = parseFloat(job.discountValue) || 0;
+          }
+        }
+        const afterDiscount = subtotal - discountAmount;
+        let taxAmount = 0;
+        if (job.taxType && job.taxValue) {
+          if (job.taxType === "percentage") {
+            taxAmount = afterDiscount * (parseFloat(job.taxValue) / 100);
+          } else if (job.taxType === "fixed") {
+            taxAmount = parseFloat(job.taxValue) || 0;
+          }
+        }
+        const total = afterDiscount + taxAmount;
+        quoteTotals = { subtotal, discountAmount, taxAmount, total };
+      }
+
       res.json({
-        link,
         job,
         contact,
         partner,
-        notes: notes.filter(n => {
-          // Filter notes based on party type
-          if (link.partyType === 'client') return n.visibility === 'client' || n.visibility === 'all';
-          if (link.partyType === 'partner') return n.visibility === 'partner' || n.visibility === 'all';
-          return true; // employees see all
-        }),
+        partyType: link.partyType,
+        notes: filteredNotes,
         quoteItems,
+        quoteTotals,
       });
     } catch (error) {
       console.error("Job hub access error:", error);
@@ -7215,6 +7251,102 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     } catch (error) {
       console.error("Job hub respond error:", error);
       res.status(500).json({ message: "Failed to update status" });
+    }
+  });
+
+  // Accept quote via Job Hub (client only)
+  app.post("/api/job-hub/:token/accept-quote", async (req, res) => {
+    try {
+      const link = await storage.getConnectionLinkByToken(req.params.token);
+      if (!link) {
+        return res.status(404).json({ message: "Invalid or expired link" });
+      }
+
+      if (link.partyType !== "client") {
+        return res.status(403).json({ message: "Only clients can accept quotes" });
+      }
+
+      if (link.status === "revoked") {
+        return res.status(410).json({ message: "This link has been revoked" });
+      }
+
+      const job = await storage.getJob(link.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      await storage.updateJob(link.jobId, {
+        quoteResponse: "accepted",
+        quoteRespondedAt: new Date(),
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Job hub accept quote error:", error);
+      res.status(500).json({ message: "Failed to accept quote" });
+    }
+  });
+
+  // Decline quote via Job Hub (client only)
+  app.post("/api/job-hub/:token/decline-quote", async (req, res) => {
+    try {
+      const link = await storage.getConnectionLinkByToken(req.params.token);
+      if (!link) {
+        return res.status(404).json({ message: "Invalid or expired link" });
+      }
+
+      if (link.partyType !== "client") {
+        return res.status(403).json({ message: "Only clients can decline quotes" });
+      }
+
+      if (link.status === "revoked") {
+        return res.status(410).json({ message: "This link has been revoked" });
+      }
+
+      await storage.updateJob(link.jobId, {
+        quoteResponse: "declined",
+        quoteRespondedAt: new Date(),
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Job hub decline quote error:", error);
+      res.status(500).json({ message: "Failed to decline quote" });
+    }
+  });
+
+  // Send message via Job Hub
+  app.post("/api/job-hub/:token/message", async (req, res) => {
+    try {
+      const link = await storage.getConnectionLinkByToken(req.params.token);
+      if (!link) {
+        return res.status(404).json({ message: "Invalid or expired link" });
+      }
+
+      if (link.status === "revoked") {
+        return res.status(410).json({ message: "This link has been revoked" });
+      }
+
+      const { content } = req.body;
+      if (!content || typeof content !== "string") {
+        return res.status(400).json({ message: "Message content required" });
+      }
+
+      // Create a note with visibility based on party type
+      const visibility = link.partyType === "client" ? "client" : 
+                        link.partyType === "partner" ? "partner" : "internal";
+
+      const note = await storage.createJobNote({
+        jobId: link.jobId,
+        content: `[From ${link.partyType.charAt(0).toUpperCase() + link.partyType.slice(1)}] ${content}`,
+        visibility,
+        createdBy: link.partyType,
+      });
+
+      res.json(note);
+    } catch (error) {
+      console.error("Job hub message error:", error);
+      res.status(500).json({ message: "Failed to send message" });
     }
   });
 

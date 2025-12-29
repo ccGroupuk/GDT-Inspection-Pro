@@ -483,7 +483,7 @@ export default function JobDetail() {
   // Connection link mutations
   const createConnectionLinkMutation = useMutation({
     mutationFn: async (data: { partyType: string }) => {
-      return apiRequest("POST", `/api/jobs/${id}/connection-links`, data);
+      return apiRequest("POST", `/api/connection-links`, { ...data, jobId: id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "connection-links"] });
