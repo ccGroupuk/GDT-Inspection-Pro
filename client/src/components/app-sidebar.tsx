@@ -17,6 +17,7 @@ import {
   Siren,
   Package,
   FileText,
+  Truck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -82,6 +83,11 @@ const menuItems = [
     title: "Product Catalog",
     url: "/catalog",
     icon: Package,
+  },
+  {
+    title: "Tools & Vehicles",
+    url: "/assets",
+    icon: Truck,
   },
   {
     title: "Quote Templates",

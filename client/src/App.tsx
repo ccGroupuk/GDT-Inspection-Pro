@@ -51,6 +51,7 @@ import EmployeesAdmin from "@/pages/employees-admin";
 import EmergencyCallouts from "@/pages/emergency-callouts";
 import Catalog from "@/pages/catalog";
 import QuoteTemplates from "@/pages/quote-templates";
+import Assets from "@/pages/assets";
 
 function AdminRouter() {
   return (
@@ -71,6 +72,7 @@ function AdminRouter() {
       <Route path="/emergency-callouts" component={EmergencyCallouts} />
       <Route path="/catalog" component={Catalog} />
       <Route path="/templates" component={QuoteTemplates} />
+      <Route path="/assets" component={Assets} />
       <Route path="/seo" component={SEOPowerHouse} />
       <Route path="/help-center" component={HelpCenterAdmin} />
       <Route path="/settings" component={Settings} />
