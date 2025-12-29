@@ -1,14 +1,49 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
 import { PortalMessagesDisplay } from "@/components/portal-messages-display";
 import { useTabNotification } from "@/hooks/use-tab-notification";
-import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight, Calendar, HelpCircle, Settings, ClipboardCheck, FileText, Siren } from "lucide-react";
-import type { Job, Contact } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
+import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight, Calendar, HelpCircle, Settings, ClipboardCheck, FileText, Siren, Phone, Clock, AlertTriangle, CheckCircle, X } from "lucide-react";
+import type { Job, Contact, EmergencyCallout, EmergencyCalloutResponse } from "@shared/schema";
+import { EMERGENCY_INCIDENT_TYPES, EMERGENCY_PRIORITIES } from "@shared/schema";
+
+interface EmergencyResponseWithDetails extends EmergencyCalloutResponse {
+  callout: EmergencyCallout & {
+    job?: Job;
+    contact?: Contact | null;
+  };
+}
+
+async function partnerApiRequest(method: string, url: string, data?: unknown, token?: string | null): Promise<Response> {
+  const headers: HeadersInit = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  if (data) {
+    headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: data ? JSON.stringify(data) : undefined,
+  });
+  if (!res.ok) {
+    const text = (await res.text()) || res.statusText;
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return res;
+}
 
 type JobWithContact = Job & { contact?: Contact };
 
@@ -36,6 +71,14 @@ function getStageColor(status: string) {
 export default function PartnerPortalJobs() {
   const { token, isAuthenticated, logout } = usePartnerPortalAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  
+  const [selectedEmergency, setSelectedEmergency] = useState<EmergencyResponseWithDetails | null>(null);
+  const [respondDialogOpen, setRespondDialogOpen] = useState(false);
+  const [proposedMinutes, setProposedMinutes] = useState("");
+  const [responseNotes, setResponseNotes] = useState("");
+  const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
   
   useTabNotification({ portalType: "partner", accessToken: token });
 
@@ -66,6 +109,74 @@ export default function PartnerPortalJobs() {
       });
       if (!res.ok) throw new Error("Failed to load profile");
       return res.json();
+    },
+  });
+
+  const { data: emergencyCallouts } = useQuery<EmergencyResponseWithDetails[]>({
+    queryKey: ["/api/partner-portal/emergency-callouts"],
+    enabled: isAuthenticated,
+    queryFn: async () => {
+      const response = await fetch("/api/partner-portal/emergency-callouts", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Failed to fetch emergency callouts");
+      return response.json();
+    },
+    refetchInterval: 10000,
+  });
+
+  const pendingEmergencies = emergencyCallouts?.filter(r => 
+    r.status === "pending" || r.status === "acknowledged"
+  ) || [];
+
+  const acknowledgeMutation = useMutation({
+    mutationFn: async (responseId: string) => {
+      return partnerApiRequest("POST", `/api/partner-portal/emergency-callouts/${responseId}/acknowledge`, {}, token);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/emergency-callouts"] });
+      toast({ title: "Callout acknowledged" });
+    },
+    onError: () => {
+      toast({ title: "Error acknowledging callout", variant: "destructive" });
+    },
+  });
+
+  const respondMutation = useMutation({
+    mutationFn: async (data: { responseId: string; proposedArrivalMinutes: number; responseNotes?: string }) => {
+      return partnerApiRequest("POST", `/api/partner-portal/emergency-callouts/${data.responseId}/respond`, {
+        proposedArrivalMinutes: data.proposedArrivalMinutes,
+        responseNotes: data.responseNotes,
+      }, token);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/emergency-callouts"] });
+      toast({ title: "Response submitted" });
+      setRespondDialogOpen(false);
+      setSelectedEmergency(null);
+      setProposedMinutes("");
+      setResponseNotes("");
+    },
+    onError: () => {
+      toast({ title: "Error submitting response", variant: "destructive" });
+    },
+  });
+
+  const declineMutation = useMutation({
+    mutationFn: async (data: { responseId: string; declineReason?: string }) => {
+      return partnerApiRequest("POST", `/api/partner-portal/emergency-callouts/${data.responseId}/decline`, {
+        declineReason: data.declineReason,
+      }, token);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/emergency-callouts"] });
+      toast({ title: "Callout declined" });
+      setDeclineDialogOpen(false);
+      setSelectedEmergency(null);
+      setDeclineReason("");
+    },
+    onError: () => {
+      toast({ title: "Error declining callout", variant: "destructive" });
     },
   });
 
@@ -178,6 +289,115 @@ export default function PartnerPortalJobs() {
       </nav>
 
       <main className="container mx-auto px-4 py-6">
+        {pendingEmergencies.length > 0 && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-950 border-2 border-red-500 rounded-lg animate-pulse">
+            <div className="flex items-center gap-3 mb-3">
+              <Siren className="w-6 h-6 text-red-600 dark:text-red-400" />
+              <h2 className="text-lg font-bold text-red-700 dark:text-red-300">
+                URGENT: Emergency Callout{pendingEmergencies.length > 1 ? "s" : ""} Awaiting Response
+              </h2>
+            </div>
+            <div className="space-y-3">
+              {pendingEmergencies.map((emergency) => {
+                const { callout } = emergency;
+                const incidentType = EMERGENCY_INCIDENT_TYPES.find(t => t.value === callout.incidentType);
+                const priority = EMERGENCY_PRIORITIES.find(p => p.value === callout.priority);
+                return (
+                  <Card key={emergency.id} className="border-red-300 dark:border-red-700">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold">{incidentType?.label || callout.incidentType}</span>
+                            <Badge variant="destructive">{priority?.label || callout.priority}</Badge>
+                            <Badge variant="outline">{emergency.status}</Badge>
+                          </div>
+                          {callout.description && (
+                            <p className="text-sm text-muted-foreground">{callout.description}</p>
+                          )}
+                          {callout.job ? (
+                            <div className="text-sm space-y-1">
+                              <div className="flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-muted-foreground" />
+                                <span>{callout.job.jobAddress || "Address not provided"}</span>
+                              </div>
+                              {callout.contact && (
+                                <div className="flex items-center gap-2">
+                                  <Phone className="w-4 h-4 text-muted-foreground" />
+                                  <span>{callout.contact.phone || callout.contact.email}</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-sm space-y-1">
+                              {callout.clientName && <span className="font-medium">{callout.clientName}</span>}
+                              {callout.clientAddress && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="w-4 h-4 text-muted-foreground" />
+                                  <span>{callout.clientAddress} {callout.clientPostcode || ""}</span>
+                                </div>
+                              )}
+                              {callout.clientPhone && (
+                                <div className="flex items-center gap-2">
+                                  <Phone className="w-4 h-4 text-muted-foreground" />
+                                  <span>{callout.clientPhone}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {callout.broadcastAt && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Clock className="w-3 h-3" />
+                              <span>Broadcast: {new Date(callout.broadcastAt).toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {emergency.status === "pending" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => acknowledgeMutation.mutate(emergency.id)}
+                              disabled={acknowledgeMutation.isPending}
+                              data-testid={`button-acknowledge-${emergency.id}`}
+                            >
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Acknowledge
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setSelectedEmergency(emergency);
+                              setRespondDialogOpen(true);
+                            }}
+                            data-testid={`button-respond-${emergency.id}`}
+                          >
+                            Respond with ETA
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            onClick={() => {
+                              setSelectedEmergency(emergency);
+                              setDeclineDialogOpen(true);
+                            }}
+                            data-testid={`button-decline-${emergency.id}`}
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            Decline
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        
         <PortalMessagesDisplay portalType="partner" accessToken={token || ""} />
         
         <div className="mb-6">
@@ -244,6 +464,120 @@ export default function PartnerPortalJobs() {
           </div>
         )}
       </main>
+
+      <Dialog open={respondDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setRespondDialogOpen(false);
+          setSelectedEmergency(null);
+          setProposedMinutes("");
+          setResponseNotes("");
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Siren className="w-5 h-5 text-destructive" />
+              Respond to Emergency Callout
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Estimated Arrival Time (minutes)</Label>
+              <Input
+                type="number"
+                placeholder="e.g., 30"
+                value={proposedMinutes}
+                onChange={(e) => setProposedMinutes(e.target.value)}
+                min={1}
+                data-testid="input-eta-minutes"
+              />
+              <p className="text-xs text-muted-foreground">
+                How quickly can you arrive on site?
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Notes (Optional)</Label>
+              <Textarea
+                placeholder="Any additional information..."
+                value={responseNotes}
+                onChange={(e) => setResponseNotes(e.target.value)}
+                className="min-h-[80px]"
+                data-testid="textarea-response-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRespondDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!proposedMinutes || parseInt(proposedMinutes) < 1) {
+                  toast({ title: "Please enter a valid ETA", variant: "destructive" });
+                  return;
+                }
+                if (selectedEmergency) {
+                  respondMutation.mutate({
+                    responseId: selectedEmergency.id,
+                    proposedArrivalMinutes: parseInt(proposedMinutes),
+                    responseNotes: responseNotes || undefined,
+                  });
+                }
+              }}
+              disabled={respondMutation.isPending}
+              data-testid="button-submit-response"
+            >
+              {respondMutation.isPending ? "Submitting..." : "Submit Response"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={declineDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setDeclineDialogOpen(false);
+          setSelectedEmergency(null);
+          setDeclineReason("");
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Decline Emergency Callout</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Reason (Optional)</Label>
+              <Textarea
+                placeholder="e.g., Currently on another job, too far away..."
+                value={declineReason}
+                onChange={(e) => setDeclineReason(e.target.value)}
+                className="min-h-[80px]"
+                data-testid="textarea-decline-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeclineDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (selectedEmergency) {
+                  declineMutation.mutate({
+                    responseId: selectedEmergency.id,
+                    declineReason: declineReason || undefined,
+                  });
+                }
+              }}
+              disabled={declineMutation.isPending}
+              data-testid="button-confirm-decline"
+            >
+              {declineMutation.isPending ? "Declining..." : "Decline Callout"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
