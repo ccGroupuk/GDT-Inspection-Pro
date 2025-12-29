@@ -3512,6 +3512,33 @@ export async function registerRoutes(
     }
   });
 
+  // Partner portal: Get emergency callout for a job (if partner is assigned)
+  app.get("/api/partner-portal/jobs/:jobId/emergency-callout", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Find emergency callout linked to this job where partner is assigned
+      const callout = await storage.getEmergencyCalloutByJobAndPartner(req.params.jobId, access.partnerId);
+      
+      if (!callout) {
+        return res.status(404).json({ message: "No emergency callout found" });
+      }
+      
+      res.json(callout);
+    } catch (error) {
+      console.error("Partner portal emergency callout error:", error);
+      res.status(500).json({ message: "Failed to load emergency callout" });
+    }
+  });
+
   // Financial Categories
   app.get("/api/financial-categories", async (req, res) => {
     try {

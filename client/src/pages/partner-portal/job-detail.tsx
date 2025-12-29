@@ -1,15 +1,22 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useParams, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
 import { 
   Briefcase, MapPin, User, Phone, Mail, LogOut, Loader2, 
-  ArrowLeft, CheckCircle2, Circle, FileText, MessageSquare, Image
+  ArrowLeft, CheckCircle2, Circle, FileText, MessageSquare, Image,
+  Siren, AlertTriangle, CheckCircle
 } from "lucide-react";
-import type { Job, Contact, Task, QuoteItem, JobNote, JobNoteAttachment } from "@shared/schema";
+import type { Job, Contact, Task, QuoteItem, JobNote, JobNoteAttachment, EmergencyCallout } from "@shared/schema";
 import { NOTE_VISIBILITY } from "@shared/schema";
 
 interface JobNoteWithAttachments extends JobNote {
@@ -43,10 +50,26 @@ function getStageColor(status: string) {
   return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
 }
 
+async function partnerApiRequest(method: string, url: string, body: Record<string, unknown>, token: string | null) {
+  return fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 export default function PartnerPortalJobDetail() {
   const { token, isAuthenticated, logout } = usePartnerPortalAuth();
   const [, setLocation] = useLocation();
   const { jobId } = useParams<{ jobId: string }>();
+  const { toast } = useToast();
+  
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [totalCollected, setTotalCollected] = useState<string>("");
+  const [completionNotes, setCompletionNotes] = useState("");
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -99,6 +122,44 @@ export default function PartnerPortalJobDetail() {
       });
       if (!res.ok) throw new Error("Failed to load notes");
       return res.json();
+    },
+  });
+
+  // Query emergency callout linked to this job where partner is assigned
+  const { data: emergencyCallout } = useQuery<EmergencyCallout | null>({
+    queryKey: ["/api/partner-portal/jobs", jobId, "emergency-callout"],
+    enabled: isAuthenticated && !!jobId,
+    queryFn: async () => {
+      const res = await fetch(`/api/partner-portal/jobs/${jobId}/emergency-callout`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: async (data: { calloutId: string; totalCollected: string; completionNotes?: string }) => {
+      const res = await partnerApiRequest("POST", `/api/partner-portal/emergency-callouts/${data.calloutId}/complete`, {
+        totalCollected: data.totalCollected,
+        completionNotes: data.completionNotes,
+      }, token);
+      if (!res.ok) throw new Error("Failed to complete callout");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs", jobId, "emergency-callout"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/emergency-callouts"] });
+      toast({ 
+        title: "Emergency Completed", 
+        description: data.message || `You owe CCC £${data.feeAmount} (${data.feePercent}% callout fee).`
+      });
+      setCompleteDialogOpen(false);
+      setTotalCollected("");
+      setCompletionNotes("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error completing callout", description: error.message, variant: "destructive" });
     },
   });
 
@@ -204,6 +265,59 @@ export default function PartnerPortalJobDetail() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Emergency Callout Section - Show if assigned to this partner and not resolved */}
+            {emergencyCallout && (emergencyCallout.status === "assigned" || emergencyCallout.status === "in_progress") && (
+              <Card className="border-red-500 border-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2 text-destructive">
+                    <Siren className="w-5 h-5" />
+                    Emergency Callout
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="p-3 rounded-md bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-sm">
+                    You have been assigned to this emergency callout.
+                  </div>
+                  <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-sm flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      <strong>Reminder:</strong> Collect full payment from client. You will owe CCC a 20% callout fee surcharge upon completion.
+                    </span>
+                  </div>
+                  <Button
+                    onClick={() => setCompleteDialogOpen(true)}
+                    className="w-full"
+                    data-testid="button-complete-emergency"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Mark Complete & Submit Payment
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Show completed emergency info */}
+            {emergencyCallout && emergencyCallout.status === "resolved" && (
+              <Card className="border-green-500 border-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2 text-green-600 dark:text-green-400">
+                    <CheckCircle className="w-5 h-5" />
+                    Emergency Completed
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-3 rounded-md bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-sm">
+                    This emergency callout has been completed.
+                    {emergencyCallout.totalCollected && (
+                      <div className="mt-2">
+                        <strong>Payment collected:</strong> £{parseFloat(emergencyCallout.totalCollected).toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {job.contact && (
               <Card>
@@ -364,6 +478,94 @@ export default function PartnerPortalJobDetail() {
             )}
           </div>
         )}
+
+        {/* Emergency Complete Dialog */}
+        <Dialog open={completeDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            setCompleteDialogOpen(false);
+            setTotalCollected("");
+            setCompletionNotes("");
+          }
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                Complete Emergency Callout
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="p-3 rounded-md bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm">
+                <strong>Payment Reminder:</strong> You should have collected the full payment from the client before completing this callout.
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Total Amount Collected from Client (£)</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g., 250.00"
+                  value={totalCollected}
+                  onChange={(e) => setTotalCollected(e.target.value)}
+                  min={0}
+                  step="0.01"
+                  data-testid="input-total-collected"
+                />
+              </div>
+              
+              {totalCollected && parseFloat(totalCollected) > 0 && (
+                <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span>Total collected:</span>
+                    <span className="font-medium">£{parseFloat(totalCollected).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>20% Callout Fee (owed to CCC):</span>
+                    <span className="font-bold">£{(parseFloat(totalCollected) * 0.20).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-amber-300 dark:border-amber-700 pt-1 mt-1">
+                    <span>Your Earnings:</span>
+                    <span className="font-medium">£{(parseFloat(totalCollected) * 0.80).toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <Label>Completion Notes (Optional)</Label>
+                <Textarea
+                  placeholder="Any notes about the job..."
+                  value={completionNotes}
+                  onChange={(e) => setCompletionNotes(e.target.value)}
+                  className="min-h-[80px]"
+                  data-testid="textarea-completion-notes"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCompleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!totalCollected || parseFloat(totalCollected) <= 0) {
+                    toast({ title: "Please enter the total amount collected", variant: "destructive" });
+                    return;
+                  }
+                  if (emergencyCallout) {
+                    completeMutation.mutate({
+                      calloutId: emergencyCallout.id,
+                      totalCollected: totalCollected,
+                      completionNotes: completionNotes || undefined,
+                    });
+                  }
+                }}
+                disabled={completeMutation.isPending}
+                data-testid="button-confirm-complete"
+              >
+                {completeMutation.isPending ? "Completing..." : "Complete & Submit"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

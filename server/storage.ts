@@ -342,6 +342,7 @@ export interface IStorage {
   getEmergencyCallouts(): Promise<EmergencyCallout[]>;
   getEmergencyCallout(id: string): Promise<EmergencyCallout | undefined>;
   getEmergencyCalloutsByJob(jobId: string): Promise<EmergencyCallout[]>;
+  getEmergencyCalloutByJobAndPartner(jobId: string, partnerId: string): Promise<EmergencyCallout | undefined>;
   getOpenEmergencyCallouts(): Promise<EmergencyCallout[]>;
   createEmergencyCallout(callout: InsertEmergencyCallout): Promise<EmergencyCallout>;
   updateEmergencyCallout(id: string, callout: Partial<InsertEmergencyCallout>): Promise<EmergencyCallout | undefined>;
@@ -1717,6 +1718,16 @@ export class DatabaseStorage implements IStorage {
 
   async getEmergencyCalloutsByJob(jobId: string): Promise<EmergencyCallout[]> {
     return db.select().from(emergencyCallouts).where(eq(emergencyCallouts.jobId, jobId)).orderBy(desc(emergencyCallouts.createdAt));
+  }
+
+  async getEmergencyCalloutByJobAndPartner(jobId: string, partnerId: string): Promise<EmergencyCallout | undefined> {
+    const [callout] = await db.select().from(emergencyCallouts).where(
+      and(
+        eq(emergencyCallouts.jobId, jobId),
+        eq(emergencyCallouts.assignedPartnerId, partnerId)
+      )
+    );
+    return callout || undefined;
   }
 
   async getOpenEmergencyCallouts(): Promise<EmergencyCallout[]> {
