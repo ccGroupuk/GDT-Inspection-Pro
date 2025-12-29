@@ -2139,6 +2139,146 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PARTNER PORTAL EMERGENCY CALLOUTS API ====================
+
+  // Get pending emergency callouts for partner
+  app.get("/api/partner-portal/emergency-callouts", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Get all responses for this partner
+      const responses = await storage.getEmergencyCalloutResponsesByPartner(access.partnerId);
+      
+      // Get callout and job details for each response
+      const calloutsWithDetails = await Promise.all(
+        responses.map(async (response) => {
+          const callout = await storage.getEmergencyCallout(response.calloutId);
+          if (!callout) return null;
+          const job = await storage.getJob(callout.jobId);
+          const contact = job ? await storage.getContact(job.contactId) : null;
+          return { 
+            ...response, 
+            callout: { ...callout, job, contact }
+          };
+        })
+      );
+      
+      res.json(calloutsWithDetails.filter(c => c !== null));
+    } catch (error) {
+      console.error("Partner portal get emergency callouts error:", error);
+      res.status(500).json({ message: "Failed to load emergency callouts" });
+    }
+  });
+
+  // Acknowledge an emergency callout (partner portal)
+  app.post("/api/partner-portal/emergency-callouts/:id/acknowledge", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const response = await storage.getEmergencyCalloutResponse(req.params.id);
+      if (!response || response.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Callout not found" });
+      }
+      
+      const updated = await storage.updateEmergencyCalloutResponse(req.params.id, {
+        status: "acknowledged",
+        acknowledgedAt: new Date(),
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner portal acknowledge callout error:", error);
+      res.status(500).json({ message: "Failed to acknowledge callout" });
+    }
+  });
+
+  // Respond to emergency callout with ETA (partner portal)
+  app.post("/api/partner-portal/emergency-callouts/:id/respond", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const response = await storage.getEmergencyCalloutResponse(req.params.id);
+      if (!response || response.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Callout not found" });
+      }
+      
+      const { proposedArrivalMinutes, responseNotes } = req.body;
+      
+      if (!proposedArrivalMinutes) {
+        return res.status(400).json({ message: "Proposed arrival time is required" });
+      }
+      
+      const updated = await storage.updateEmergencyCalloutResponse(req.params.id, {
+        status: "responded",
+        respondedAt: new Date(),
+        proposedArrivalMinutes: parseInt(proposedArrivalMinutes),
+        responseNotes,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner portal respond to callout error:", error);
+      res.status(500).json({ message: "Failed to respond to callout" });
+    }
+  });
+
+  // Decline emergency callout (partner portal)
+  app.post("/api/partner-portal/emergency-callouts/:id/decline", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const response = await storage.getEmergencyCalloutResponse(req.params.id);
+      if (!response || response.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Callout not found" });
+      }
+      
+      const { declineReason } = req.body;
+      
+      const updated = await storage.updateEmergencyCalloutResponse(req.params.id, {
+        status: "declined",
+        declinedAt: new Date(),
+        declineReason,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Partner portal decline callout error:", error);
+      res.status(500).json({ message: "Failed to decline callout" });
+    }
+  });
+
   // ==================== PARTNER PORTAL QUOTES API ====================
 
   // Get quotes by this partner
@@ -2753,6 +2893,175 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Decline partner quote error:", error);
       res.status(500).json({ message: "Failed to decline quote" });
+    }
+  });
+
+  // ==================== EMERGENCY CALLOUTS API ====================
+
+  // Get all emergency callouts
+  app.get("/api/emergency-callouts", async (req, res) => {
+    try {
+      const callouts = await storage.getEmergencyCallouts();
+      res.json(callouts);
+    } catch (error) {
+      console.error("Get emergency callouts error:", error);
+      res.status(500).json({ message: "Failed to load emergency callouts" });
+    }
+  });
+
+  // Get emergency callouts for a job
+  app.get("/api/jobs/:jobId/emergency-callouts", async (req, res) => {
+    try {
+      const callouts = await storage.getEmergencyCalloutsByJob(req.params.jobId);
+      res.json(callouts);
+    } catch (error) {
+      console.error("Get job emergency callouts error:", error);
+      res.status(500).json({ message: "Failed to load emergency callouts" });
+    }
+  });
+
+  // Get a specific emergency callout with responses
+  app.get("/api/emergency-callouts/:id", async (req, res) => {
+    try {
+      const callout = await storage.getEmergencyCallout(req.params.id);
+      if (!callout) {
+        return res.status(404).json({ message: "Emergency callout not found" });
+      }
+      
+      // Get responses with partner info
+      const responses = await storage.getEmergencyCalloutResponses(req.params.id);
+      const responsesWithPartners = await Promise.all(
+        responses.map(async (response) => {
+          const partner = await storage.getTradePartner(response.partnerId);
+          return { ...response, partner };
+        })
+      );
+      
+      // Get job info
+      const job = await storage.getJob(callout.jobId);
+      
+      res.json({ ...callout, responses: responsesWithPartners, job });
+    } catch (error) {
+      console.error("Get emergency callout error:", error);
+      res.status(500).json({ message: "Failed to load emergency callout" });
+    }
+  });
+
+  // Create emergency callout and broadcast to partners
+  app.post("/api/emergency-callouts", async (req, res) => {
+    try {
+      const { jobId, incidentType, priority, description, partnerIds } = req.body;
+      
+      if (!jobId || !incidentType) {
+        return res.status(400).json({ message: "jobId and incidentType are required" });
+      }
+      
+      // Create the emergency callout
+      const callout = await storage.createEmergencyCallout({
+        jobId,
+        incidentType,
+        priority: priority || "high",
+        description,
+        status: "open",
+        broadcastAt: new Date(),
+      });
+      
+      // Create response records for each partner (broadcasting to them)
+      const partnerIdsArray = partnerIds || [];
+      for (const partnerId of partnerIdsArray) {
+        await storage.createEmergencyCalloutResponse({
+          calloutId: callout.id,
+          partnerId,
+          status: "pending",
+        });
+      }
+      
+      res.status(201).json(callout);
+    } catch (error) {
+      console.error("Create emergency callout error:", error);
+      res.status(500).json({ message: "Failed to create emergency callout" });
+    }
+  });
+
+  // Assign a partner to an emergency callout
+  app.post("/api/emergency-callouts/:id/assign", async (req, res) => {
+    try {
+      const { responseId } = req.body;
+      
+      if (!responseId) {
+        return res.status(400).json({ message: "responseId is required" });
+      }
+      
+      const response = await storage.getEmergencyCalloutResponse(responseId);
+      if (!response) {
+        return res.status(404).json({ message: "Response not found" });
+      }
+      
+      // Update the selected response
+      await storage.updateEmergencyCalloutResponse(responseId, {
+        status: "selected",
+        selectedAt: new Date(),
+      });
+      
+      // Update other responses to not_selected
+      const allResponses = await storage.getEmergencyCalloutResponses(req.params.id);
+      for (const r of allResponses) {
+        if (r.id !== responseId && r.status !== "declined") {
+          await storage.updateEmergencyCalloutResponse(r.id, { status: "not_selected" });
+        }
+      }
+      
+      // Update the callout
+      const callout = await storage.updateEmergencyCallout(req.params.id, {
+        status: "assigned",
+        assignedPartnerId: response.partnerId,
+        assignedAt: new Date(),
+      });
+      
+      // Update the job with the assigned partner
+      const existingCallout = await storage.getEmergencyCallout(req.params.id);
+      if (existingCallout?.jobId) {
+        await storage.updateJob(existingCallout.jobId, {
+          partnerId: response.partnerId,
+          partnerStatus: "accepted",
+        });
+      }
+      
+      res.json(callout);
+    } catch (error) {
+      console.error("Assign emergency callout error:", error);
+      res.status(500).json({ message: "Failed to assign partner" });
+    }
+  });
+
+  // Resolve/cancel an emergency callout
+  app.post("/api/emergency-callouts/:id/resolve", async (req, res) => {
+    try {
+      const { status, resolutionNotes } = req.body;
+      
+      const callout = await storage.updateEmergencyCallout(req.params.id, {
+        status: status || "resolved",
+        resolvedAt: new Date(),
+        resolutionNotes,
+      });
+      
+      res.json(callout);
+    } catch (error) {
+      console.error("Resolve emergency callout error:", error);
+      res.status(500).json({ message: "Failed to resolve callout" });
+    }
+  });
+
+  // Get emergency-ready partners (for broadcasting)
+  app.get("/api/emergency-ready-partners", async (req, res) => {
+    try {
+      const allPartners = await storage.getTradePartners();
+      // Filter to active partners marked as emergency available
+      const emergencyPartners = allPartners.filter(p => p.isActive && p.emergencyAvailable);
+      res.json(emergencyPartners);
+    } catch (error) {
+      console.error("Get emergency partners error:", error);
+      res.status(500).json({ message: "Failed to load emergency partners" });
     }
   });
 

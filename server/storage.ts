@@ -43,6 +43,8 @@ import {
   jobSurveys, type JobSurvey, type InsertJobSurvey,
   partnerQuotes, type PartnerQuote, type InsertPartnerQuote,
   partnerQuoteItems, type PartnerQuoteItem, type InsertPartnerQuoteItem,
+  emergencyCallouts, type EmergencyCallout, type InsertEmergencyCallout,
+  emergencyCalloutResponses, type EmergencyCalloutResponse, type InsertEmergencyCalloutResponse,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -331,6 +333,22 @@ export interface IStorage {
   updatePartnerQuoteItem(id: string, item: Partial<InsertPartnerQuoteItem>): Promise<PartnerQuoteItem | undefined>;
   deletePartnerQuoteItem(id: string): Promise<boolean>;
   deletePartnerQuoteItemsByQuote(quoteId: string): Promise<boolean>;
+
+  // Emergency Callouts
+  getEmergencyCallouts(): Promise<EmergencyCallout[]>;
+  getEmergencyCallout(id: string): Promise<EmergencyCallout | undefined>;
+  getEmergencyCalloutsByJob(jobId: string): Promise<EmergencyCallout[]>;
+  getOpenEmergencyCallouts(): Promise<EmergencyCallout[]>;
+  createEmergencyCallout(callout: InsertEmergencyCallout): Promise<EmergencyCallout>;
+  updateEmergencyCallout(id: string, callout: Partial<InsertEmergencyCallout>): Promise<EmergencyCallout | undefined>;
+
+  // Emergency Callout Responses
+  getEmergencyCalloutResponses(calloutId: string): Promise<EmergencyCalloutResponse[]>;
+  getEmergencyCalloutResponse(id: string): Promise<EmergencyCalloutResponse | undefined>;
+  getEmergencyCalloutResponsesByPartner(partnerId: string): Promise<EmergencyCalloutResponse[]>;
+  getPendingEmergencyCalloutsByPartner(partnerId: string): Promise<EmergencyCalloutResponse[]>;
+  createEmergencyCalloutResponse(response: InsertEmergencyCalloutResponse): Promise<EmergencyCalloutResponse>;
+  updateEmergencyCalloutResponse(id: string, response: Partial<InsertEmergencyCalloutResponse>): Promise<EmergencyCalloutResponse | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1651,6 +1669,67 @@ export class DatabaseStorage implements IStorage {
   async deletePartnerQuoteItemsByQuote(quoteId: string): Promise<boolean> {
     await db.delete(partnerQuoteItems).where(eq(partnerQuoteItems.quoteId, quoteId));
     return true;
+  }
+
+  // Emergency Callouts
+  async getEmergencyCallouts(): Promise<EmergencyCallout[]> {
+    return db.select().from(emergencyCallouts).orderBy(desc(emergencyCallouts.createdAt));
+  }
+
+  async getEmergencyCallout(id: string): Promise<EmergencyCallout | undefined> {
+    const [callout] = await db.select().from(emergencyCallouts).where(eq(emergencyCallouts.id, id));
+    return callout || undefined;
+  }
+
+  async getEmergencyCalloutsByJob(jobId: string): Promise<EmergencyCallout[]> {
+    return db.select().from(emergencyCallouts).where(eq(emergencyCallouts.jobId, jobId)).orderBy(desc(emergencyCallouts.createdAt));
+  }
+
+  async getOpenEmergencyCallouts(): Promise<EmergencyCallout[]> {
+    return db.select().from(emergencyCallouts).where(eq(emergencyCallouts.status, "open")).orderBy(desc(emergencyCallouts.createdAt));
+  }
+
+  async createEmergencyCallout(callout: InsertEmergencyCallout): Promise<EmergencyCallout> {
+    const [created] = await db.insert(emergencyCallouts).values(callout).returning();
+    return created;
+  }
+
+  async updateEmergencyCallout(id: string, callout: Partial<InsertEmergencyCallout>): Promise<EmergencyCallout | undefined> {
+    const [updated] = await db.update(emergencyCallouts).set(callout).where(eq(emergencyCallouts.id, id)).returning();
+    return updated || undefined;
+  }
+
+  // Emergency Callout Responses
+  async getEmergencyCalloutResponses(calloutId: string): Promise<EmergencyCalloutResponse[]> {
+    return db.select().from(emergencyCalloutResponses).where(eq(emergencyCalloutResponses.calloutId, calloutId)).orderBy(asc(emergencyCalloutResponses.proposedArrivalMinutes));
+  }
+
+  async getEmergencyCalloutResponse(id: string): Promise<EmergencyCalloutResponse | undefined> {
+    const [response] = await db.select().from(emergencyCalloutResponses).where(eq(emergencyCalloutResponses.id, id));
+    return response || undefined;
+  }
+
+  async getEmergencyCalloutResponsesByPartner(partnerId: string): Promise<EmergencyCalloutResponse[]> {
+    return db.select().from(emergencyCalloutResponses).where(eq(emergencyCalloutResponses.partnerId, partnerId)).orderBy(desc(emergencyCalloutResponses.createdAt));
+  }
+
+  async getPendingEmergencyCalloutsByPartner(partnerId: string): Promise<EmergencyCalloutResponse[]> {
+    return db.select().from(emergencyCalloutResponses).where(
+      and(
+        eq(emergencyCalloutResponses.partnerId, partnerId),
+        eq(emergencyCalloutResponses.status, "pending")
+      )
+    ).orderBy(desc(emergencyCalloutResponses.createdAt));
+  }
+
+  async createEmergencyCalloutResponse(response: InsertEmergencyCalloutResponse): Promise<EmergencyCalloutResponse> {
+    const [created] = await db.insert(emergencyCalloutResponses).values(response).returning();
+    return created;
+  }
+
+  async updateEmergencyCalloutResponse(id: string, response: Partial<InsertEmergencyCalloutResponse>): Promise<EmergencyCalloutResponse | undefined> {
+    const [updated] = await db.update(emergencyCalloutResponses).set(response).where(eq(emergencyCalloutResponses.id, id)).returning();
+    return updated || undefined;
   }
 }
 
