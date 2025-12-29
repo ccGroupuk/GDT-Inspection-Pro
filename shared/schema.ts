@@ -1951,3 +1951,201 @@ export const UNITS_OF_MEASURE = [
   { value: "pack", label: "Pack" },
   { value: "fixed", label: "Fixed Price" },
 ] as const;
+
+// Connection Links (unified job hub access for clients, partners, internal team)
+export const connectionLinks = pgTable("connection_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(), // Unique access token
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  partyType: text("party_type").notNull(), // client, partner, employee
+  partyId: varchar("party_id").notNull(), // ID of the contact, tradePartner, or employee
+  status: text("status").notNull().default("pending"), // pending, connected, declined
+  connectedAt: timestamp("connected_at"),
+  declinedAt: timestamp("declined_at"),
+  lastAccessedAt: timestamp("last_accessed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at"), // Optional expiration
+});
+
+export const connectionLinksRelations = relations(connectionLinks, ({ one }) => ({
+  job: one(jobs, {
+    fields: [connectionLinks.jobId],
+    references: [jobs.id],
+  }),
+}));
+
+export const insertConnectionLinkSchema = createInsertSchema(connectionLinks).omit({ id: true, createdAt: true });
+export type InsertConnectionLink = z.infer<typeof insertConnectionLinkSchema>;
+export type ConnectionLink = typeof connectionLinks.$inferSelect;
+
+// Assets (tools, vehicles, equipment)
+export const assets = pgTable("assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetNumber: text("asset_number").notNull().unique(), // Unique identifier like TOOL-001, VAN-001
+  name: text("name").notNull(),
+  type: text("type").notNull(), // tool, vehicle, equipment
+  description: text("description"),
+  serialNumber: text("serial_number"),
+  
+  // Ownership
+  owner: text("owner").notNull().default("company"), // company, individual
+  assignedToId: varchar("assigned_to_id").references(() => employees.id), // Assigned team member
+  
+  // Purchase info
+  purchaseDate: timestamp("purchase_date"),
+  purchasePrice: decimal("purchase_price", { precision: 10, scale: 2 }),
+  supplier: text("supplier"),
+  
+  // Warranty
+  warrantyExpiry: timestamp("warranty_expiry"),
+  warrantyNotes: text("warranty_notes"),
+  
+  // Service
+  lastServiceDate: timestamp("last_service_date"),
+  nextServiceDate: timestamp("next_service_date"),
+  serviceIntervalDays: integer("service_interval_days"), // Days between services
+  
+  // Vehicle-specific fields (stored for type=vehicle)
+  motDate: timestamp("mot_date"), // MOT expiry date
+  insuranceExpiry: timestamp("insurance_expiry"),
+  currentMileage: integer("current_mileage"),
+  registrationNumber: text("registration_number"),
+  
+  // Status
+  status: text("status").notNull().default("active"), // active, in_repair, retired, disposed
+  location: text("location"), // Where the asset is stored/based
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const assetsRelations = relations(assets, ({ one, many }) => ({
+  assignedTo: one(employees, {
+    fields: [assets.assignedToId],
+    references: [employees.id],
+  }),
+  faults: many(assetFaults),
+  reminders: many(assetReminders),
+}));
+
+export const insertAssetSchema = createInsertSchema(assets).omit({ id: true, createdAt: true, updatedAt: true, assetNumber: true });
+export type InsertAsset = z.infer<typeof insertAssetSchema>;
+export type Asset = typeof assets.$inferSelect;
+
+// Asset Faults (fault reporting system)
+export const assetFaults = pgTable("asset_faults", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetId: varchar("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
+  reportedById: varchar("reported_by_id").notNull().references(() => employees.id),
+  assignedToId: varchar("assigned_to_id").references(() => employees.id),
+  
+  // Fault details
+  title: text("title").notNull(),
+  description: text("description"),
+  priority: text("priority").notNull().default("medium"), // low, medium, high, critical
+  status: text("status").notNull().default("open"), // open, in_progress, completed, cleared
+  
+  // Linked task (auto-created in Task Manager)
+  taskId: varchar("task_id").references(() => tasks.id),
+  
+  // Resolution
+  resolution: text("resolution"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedById: varchar("resolved_by_id").references(() => employees.id),
+  clearedAt: timestamp("cleared_at"),
+  clearedById: varchar("cleared_by_id").references(() => employees.id),
+  
+  // Cost tracking
+  repairCost: decimal("repair_cost", { precision: 10, scale: 2 }),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const assetFaultsRelations = relations(assetFaults, ({ one }) => ({
+  asset: one(assets, {
+    fields: [assetFaults.assetId],
+    references: [assets.id],
+  }),
+  reportedBy: one(employees, {
+    fields: [assetFaults.reportedById],
+    references: [employees.id],
+    relationName: "reportedFaults",
+  }),
+  assignedTo: one(employees, {
+    fields: [assetFaults.assignedToId],
+    references: [employees.id],
+    relationName: "assignedFaults",
+  }),
+  task: one(tasks, {
+    fields: [assetFaults.taskId],
+    references: [tasks.id],
+  }),
+}));
+
+export const insertAssetFaultSchema = createInsertSchema(assetFaults).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAssetFault = z.infer<typeof insertAssetFaultSchema>;
+export type AssetFault = typeof assetFaults.$inferSelect;
+
+// Asset Reminders (automated notifications for MOT, service, warranty)
+export const assetReminders = pgTable("asset_reminders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetId: varchar("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
+  
+  reminderType: text("reminder_type").notNull(), // mot_due, service_due, warranty_expiring, insurance_expiring
+  dueDate: timestamp("due_date").notNull(),
+  
+  // Notification tracking
+  notified: boolean("notified").default(false),
+  notifiedAt: timestamp("notified_at"),
+  
+  // Who to notify
+  notifyOwner: boolean("notify_owner").default(true),
+  notifyAdmin: boolean("notify_admin").default(true),
+  notifyAssignee: boolean("notify_assignee").default(true),
+  
+  // Status
+  acknowledged: boolean("acknowledged").default(false),
+  acknowledgedById: varchar("acknowledged_by_id").references(() => employees.id),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const assetRemindersRelations = relations(assetReminders, ({ one }) => ({
+  asset: one(assets, {
+    fields: [assetReminders.assetId],
+    references: [assets.id],
+  }),
+  acknowledgedBy: one(employees, {
+    fields: [assetReminders.acknowledgedById],
+    references: [employees.id],
+  }),
+}));
+
+export const insertAssetReminderSchema = createInsertSchema(assetReminders).omit({ id: true, createdAt: true });
+export type InsertAssetReminder = z.infer<typeof insertAssetReminderSchema>;
+export type AssetReminder = typeof assetReminders.$inferSelect;
+
+// Asset type constants
+export const ASSET_TYPES = [
+  { value: "tool", label: "Tool" },
+  { value: "vehicle", label: "Vehicle" },
+  { value: "equipment", label: "Equipment" },
+] as const;
+
+export const ASSET_STATUSES = [
+  { value: "active", label: "Active" },
+  { value: "in_repair", label: "In Repair" },
+  { value: "retired", label: "Retired" },
+  { value: "disposed", label: "Disposed" },
+] as const;
+
+export const REMINDER_TYPES = [
+  { value: "mot_due", label: "MOT Due" },
+  { value: "service_due", label: "Service Due" },
+  { value: "warranty_expiring", label: "Warranty Expiring" },
+  { value: "insurance_expiring", label: "Insurance Expiring" },
+] as const;

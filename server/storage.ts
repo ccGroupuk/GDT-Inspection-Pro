@@ -49,6 +49,10 @@ import {
   catalogItems, type CatalogItem, type InsertCatalogItem,
   quoteTemplates, type QuoteTemplate, type InsertQuoteTemplate,
   quoteTemplateItems, type QuoteTemplateItem, type InsertQuoteTemplateItem,
+  connectionLinks, type ConnectionLink, type InsertConnectionLink,
+  assets, type Asset, type InsertAsset,
+  assetFaults, type AssetFault, type InsertAssetFault,
+  assetReminders, type AssetReminder, type InsertAssetReminder,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -384,6 +388,45 @@ export interface IStorage {
   updateQuoteTemplateItem(id: string, item: Partial<InsertQuoteTemplateItem>): Promise<QuoteTemplateItem | undefined>;
   deleteQuoteTemplateItem(id: string): Promise<boolean>;
   deleteQuoteTemplateItemsByTemplate(templateId: string): Promise<boolean>;
+
+  // Connection Links
+  getConnectionLinks(): Promise<ConnectionLink[]>;
+  getConnectionLink(id: string): Promise<ConnectionLink | undefined>;
+  getConnectionLinkByToken(token: string): Promise<ConnectionLink | undefined>;
+  getConnectionLinksByJob(jobId: string): Promise<ConnectionLink[]>;
+  getConnectionLinksByParty(partyType: string, partyId: string): Promise<ConnectionLink[]>;
+  createConnectionLink(link: InsertConnectionLink): Promise<ConnectionLink>;
+  updateConnectionLink(id: string, link: Partial<InsertConnectionLink>): Promise<ConnectionLink | undefined>;
+  deleteConnectionLink(id: string): Promise<boolean>;
+
+  // Assets
+  getAssets(): Promise<Asset[]>;
+  getAsset(id: string): Promise<Asset | undefined>;
+  getAssetsByType(type: string): Promise<Asset[]>;
+  getAssetsByAssignee(employeeId: string): Promise<Asset[]>;
+  createAsset(asset: InsertAsset): Promise<Asset>;
+  updateAsset(id: string, asset: Partial<InsertAsset>): Promise<Asset | undefined>;
+  deleteAsset(id: string): Promise<boolean>;
+  getNextAssetNumber(type: string): Promise<string>;
+
+  // Asset Faults
+  getAssetFaults(): Promise<AssetFault[]>;
+  getAssetFault(id: string): Promise<AssetFault | undefined>;
+  getAssetFaultsByAsset(assetId: string): Promise<AssetFault[]>;
+  getOpenAssetFaults(): Promise<AssetFault[]>;
+  createAssetFault(fault: InsertAssetFault): Promise<AssetFault>;
+  updateAssetFault(id: string, fault: Partial<InsertAssetFault>): Promise<AssetFault | undefined>;
+  deleteAssetFault(id: string): Promise<boolean>;
+
+  // Asset Reminders
+  getAssetReminders(): Promise<AssetReminder[]>;
+  getAssetReminder(id: string): Promise<AssetReminder | undefined>;
+  getAssetRemindersByAsset(assetId: string): Promise<AssetReminder[]>;
+  getPendingAssetReminders(): Promise<AssetReminder[]>;
+  getUpcomingAssetReminders(daysAhead: number): Promise<AssetReminder[]>;
+  createAssetReminder(reminder: InsertAssetReminder): Promise<AssetReminder>;
+  updateAssetReminder(id: string, reminder: Partial<InsertAssetReminder>): Promise<AssetReminder | undefined>;
+  deleteAssetReminder(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1882,6 +1925,168 @@ export class DatabaseStorage implements IStorage {
 
   async deleteQuoteTemplateItemsByTemplate(templateId: string): Promise<boolean> {
     await db.delete(quoteTemplateItems).where(eq(quoteTemplateItems.templateId, templateId));
+    return true;
+  }
+
+  // Connection Links
+  async getConnectionLinks(): Promise<ConnectionLink[]> {
+    return db.select().from(connectionLinks).orderBy(desc(connectionLinks.createdAt));
+  }
+
+  async getConnectionLink(id: string): Promise<ConnectionLink | undefined> {
+    const [link] = await db.select().from(connectionLinks).where(eq(connectionLinks.id, id));
+    return link || undefined;
+  }
+
+  async getConnectionLinkByToken(token: string): Promise<ConnectionLink | undefined> {
+    const [link] = await db.select().from(connectionLinks).where(eq(connectionLinks.token, token));
+    return link || undefined;
+  }
+
+  async getConnectionLinksByJob(jobId: string): Promise<ConnectionLink[]> {
+    return db.select().from(connectionLinks).where(eq(connectionLinks.jobId, jobId));
+  }
+
+  async getConnectionLinksByParty(partyType: string, partyId: string): Promise<ConnectionLink[]> {
+    return db.select().from(connectionLinks).where(
+      and(eq(connectionLinks.partyType, partyType), eq(connectionLinks.partyId, partyId))
+    );
+  }
+
+  async createConnectionLink(link: InsertConnectionLink): Promise<ConnectionLink> {
+    const [created] = await db.insert(connectionLinks).values(link).returning();
+    return created;
+  }
+
+  async updateConnectionLink(id: string, link: Partial<InsertConnectionLink>): Promise<ConnectionLink | undefined> {
+    const [updated] = await db.update(connectionLinks).set(link).where(eq(connectionLinks.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteConnectionLink(id: string): Promise<boolean> {
+    await db.delete(connectionLinks).where(eq(connectionLinks.id, id));
+    return true;
+  }
+
+  // Assets
+  async getAssets(): Promise<Asset[]> {
+    return db.select().from(assets).orderBy(asc(assets.name));
+  }
+
+  async getAsset(id: string): Promise<Asset | undefined> {
+    const [asset] = await db.select().from(assets).where(eq(assets.id, id));
+    return asset || undefined;
+  }
+
+  async getAssetsByType(type: string): Promise<Asset[]> {
+    return db.select().from(assets).where(eq(assets.type, type)).orderBy(asc(assets.name));
+  }
+
+  async getAssetsByAssignee(employeeId: string): Promise<Asset[]> {
+    return db.select().from(assets).where(eq(assets.assignedToId, employeeId));
+  }
+
+  async getNextAssetNumber(type: string): Promise<string> {
+    const prefix = type === 'vehicle' ? 'VAN' : type === 'tool' ? 'TOOL' : 'EQUIP';
+    const allAssets = await db.select().from(assets).where(eq(assets.type, type));
+    const count = allAssets.length + 1;
+    return `${prefix}-${count.toString().padStart(3, '0')}`;
+  }
+
+  async createAsset(asset: InsertAsset & { assetNumber?: string }): Promise<Asset> {
+    const assetNumber = asset.assetNumber || await this.getNextAssetNumber(asset.type);
+    const [created] = await db.insert(assets).values({ ...asset, assetNumber }).returning();
+    return created;
+  }
+
+  async updateAsset(id: string, asset: Partial<InsertAsset>): Promise<Asset | undefined> {
+    const [updated] = await db.update(assets).set({ ...asset, updatedAt: new Date() }).where(eq(assets.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteAsset(id: string): Promise<boolean> {
+    await db.delete(assets).where(eq(assets.id, id));
+    return true;
+  }
+
+  // Asset Faults
+  async getAssetFaults(): Promise<AssetFault[]> {
+    return db.select().from(assetFaults).orderBy(desc(assetFaults.createdAt));
+  }
+
+  async getAssetFault(id: string): Promise<AssetFault | undefined> {
+    const [fault] = await db.select().from(assetFaults).where(eq(assetFaults.id, id));
+    return fault || undefined;
+  }
+
+  async getAssetFaultsByAsset(assetId: string): Promise<AssetFault[]> {
+    return db.select().from(assetFaults).where(eq(assetFaults.assetId, assetId)).orderBy(desc(assetFaults.createdAt));
+  }
+
+  async getOpenAssetFaults(): Promise<AssetFault[]> {
+    return db.select().from(assetFaults).where(
+      or(eq(assetFaults.status, 'open'), eq(assetFaults.status, 'in_progress'))
+    ).orderBy(desc(assetFaults.createdAt));
+  }
+
+  async createAssetFault(fault: InsertAssetFault): Promise<AssetFault> {
+    const [created] = await db.insert(assetFaults).values(fault).returning();
+    return created;
+  }
+
+  async updateAssetFault(id: string, fault: Partial<InsertAssetFault>): Promise<AssetFault | undefined> {
+    const [updated] = await db.update(assetFaults).set({ ...fault, updatedAt: new Date() }).where(eq(assetFaults.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteAssetFault(id: string): Promise<boolean> {
+    await db.delete(assetFaults).where(eq(assetFaults.id, id));
+    return true;
+  }
+
+  // Asset Reminders
+  async getAssetReminders(): Promise<AssetReminder[]> {
+    return db.select().from(assetReminders).orderBy(asc(assetReminders.dueDate));
+  }
+
+  async getAssetReminder(id: string): Promise<AssetReminder | undefined> {
+    const [reminder] = await db.select().from(assetReminders).where(eq(assetReminders.id, id));
+    return reminder || undefined;
+  }
+
+  async getAssetRemindersByAsset(assetId: string): Promise<AssetReminder[]> {
+    return db.select().from(assetReminders).where(eq(assetReminders.assetId, assetId)).orderBy(asc(assetReminders.dueDate));
+  }
+
+  async getPendingAssetReminders(): Promise<AssetReminder[]> {
+    return db.select().from(assetReminders).where(
+      and(eq(assetReminders.notified, false), eq(assetReminders.acknowledged, false))
+    ).orderBy(asc(assetReminders.dueDate));
+  }
+
+  async getUpcomingAssetReminders(daysAhead: number): Promise<AssetReminder[]> {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + daysAhead);
+    return db.select().from(assetReminders).where(
+      and(
+        eq(assetReminders.acknowledged, false),
+        lte(assetReminders.dueDate, futureDate)
+      )
+    ).orderBy(asc(assetReminders.dueDate));
+  }
+
+  async createAssetReminder(reminder: InsertAssetReminder): Promise<AssetReminder> {
+    const [created] = await db.insert(assetReminders).values(reminder).returning();
+    return created;
+  }
+
+  async updateAssetReminder(id: string, reminder: Partial<InsertAssetReminder>): Promise<AssetReminder | undefined> {
+    const [updated] = await db.update(assetReminders).set(reminder).where(eq(assetReminders.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteAssetReminder(id: string): Promise<boolean> {
+    await db.delete(assetReminders).where(eq(assetReminders.id, id));
     return true;
   }
 }

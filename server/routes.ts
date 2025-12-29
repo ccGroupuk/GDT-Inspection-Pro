@@ -7084,6 +7084,462 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     }
   });
 
+  // =====================
+  // CONNECTION LINKS
+  // =====================
+
+  // Create connection link for a job
+  app.post("/api/connection-links", async (req, res) => {
+    try {
+      const { jobId, partyType, partyId } = req.body;
+      const token = crypto.randomBytes(32).toString('hex');
+      const link = await storage.createConnectionLink({
+        token,
+        jobId,
+        partyType,
+        partyId,
+        status: "pending",
+      });
+      res.status(201).json(link);
+    } catch (error) {
+      console.error("Create connection link error:", error);
+      res.status(500).json({ message: "Failed to create connection link" });
+    }
+  });
+
+  // Get connection links by job
+  app.get("/api/jobs/:jobId/connection-links", async (req, res) => {
+    try {
+      const links = await storage.getConnectionLinksByJob(req.params.jobId);
+      res.json(links);
+    } catch (error) {
+      console.error("Get connection links error:", error);
+      res.status(500).json({ message: "Failed to get connection links" });
+    }
+  });
+
+  // Update connection link status
+  app.patch("/api/connection-links/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateConnectionLink(req.params.id, req.body);
+      if (!updated) {
+        return res.status(404).json({ message: "Connection link not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Update connection link error:", error);
+      res.status(500).json({ message: "Failed to update connection link" });
+    }
+  });
+
+  // Delete connection link
+  app.delete("/api/connection-links/:id", async (req, res) => {
+    try {
+      await storage.deleteConnectionLink(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete connection link error:", error);
+      res.status(500).json({ message: "Failed to delete connection link" });
+    }
+  });
+
+  // Job Hub access (public, token-based)
+  app.get("/api/job-hub/:token", async (req, res) => {
+    try {
+      const link = await storage.getConnectionLinkByToken(req.params.token);
+      if (!link) {
+        return res.status(404).json({ message: "Invalid or expired link" });
+      }
+      
+      // Check expiration
+      if (link.expiresAt && new Date(link.expiresAt) < new Date()) {
+        return res.status(410).json({ message: "This link has expired" });
+      }
+
+      // Get job details
+      const job = await storage.getJob(link.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Get related data
+      const [contact, partner, notes, quoteItems] = await Promise.all([
+        storage.getContact(job.contactId),
+        job.partnerId ? storage.getTradePartner(job.partnerId) : null,
+        storage.getJobNotes(link.jobId),
+        storage.getQuoteItemsByJob(link.jobId),
+      ]);
+
+      // Update last accessed
+      await storage.updateConnectionLink(link.id, { lastAccessedAt: new Date() });
+
+      res.json({
+        link,
+        job,
+        contact,
+        partner,
+        notes: notes.filter(n => {
+          // Filter notes based on party type
+          if (link.partyType === 'client') return n.visibility === 'client' || n.visibility === 'all';
+          if (link.partyType === 'partner') return n.visibility === 'partner' || n.visibility === 'all';
+          return true; // employees see all
+        }),
+        quoteItems,
+      });
+    } catch (error) {
+      console.error("Job hub access error:", error);
+      res.status(500).json({ message: "Failed to access job hub" });
+    }
+  });
+
+  // Update connection status (accept/decline)
+  app.post("/api/job-hub/:token/respond", async (req, res) => {
+    try {
+      const link = await storage.getConnectionLinkByToken(req.params.token);
+      if (!link) {
+        return res.status(404).json({ message: "Invalid or expired link" });
+      }
+
+      const { status } = req.body;
+      if (status !== 'connected' && status !== 'declined') {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      const updated = await storage.updateConnectionLink(link.id, {
+        status,
+        connectedAt: status === 'connected' ? new Date() : undefined,
+        declinedAt: status === 'declined' ? new Date() : undefined,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Job hub respond error:", error);
+      res.status(500).json({ message: "Failed to update status" });
+    }
+  });
+
+  // =====================
+  // ASSETS MANAGEMENT
+  // =====================
+
+  // Get all assets
+  app.get("/api/assets", async (req, res) => {
+    try {
+      const { type } = req.query;
+      let assetsList;
+      if (type && typeof type === 'string') {
+        assetsList = await storage.getAssetsByType(type);
+      } else {
+        assetsList = await storage.getAssets();
+      }
+      res.json(assetsList);
+    } catch (error) {
+      console.error("Get assets error:", error);
+      res.status(500).json({ message: "Failed to get assets" });
+    }
+  });
+
+  // Get single asset
+  app.get("/api/assets/:id", async (req, res) => {
+    try {
+      const asset = await storage.getAsset(req.params.id);
+      if (!asset) {
+        return res.status(404).json({ message: "Asset not found" });
+      }
+      
+      // Include faults and reminders
+      const [faults, reminders] = await Promise.all([
+        storage.getAssetFaultsByAsset(req.params.id),
+        storage.getAssetRemindersByAsset(req.params.id),
+      ]);
+
+      res.json({ ...asset, faults, reminders });
+    } catch (error) {
+      console.error("Get asset error:", error);
+      res.status(500).json({ message: "Failed to get asset" });
+    }
+  });
+
+  // Create asset
+  app.post("/api/assets", async (req, res) => {
+    try {
+      const asset = await storage.createAsset(req.body);
+      
+      // Auto-create reminders for vehicles
+      if (asset.type === 'vehicle') {
+        const remindersToCreate = [];
+        if (asset.motDate) {
+          remindersToCreate.push({
+            assetId: asset.id,
+            reminderType: 'mot_due',
+            dueDate: asset.motDate,
+          });
+        }
+        if (asset.insuranceExpiry) {
+          remindersToCreate.push({
+            assetId: asset.id,
+            reminderType: 'insurance_expiring',
+            dueDate: asset.insuranceExpiry,
+          });
+        }
+        if (asset.nextServiceDate) {
+          remindersToCreate.push({
+            assetId: asset.id,
+            reminderType: 'service_due',
+            dueDate: asset.nextServiceDate,
+          });
+        }
+        if (asset.warrantyExpiry) {
+          remindersToCreate.push({
+            assetId: asset.id,
+            reminderType: 'warranty_expiring',
+            dueDate: asset.warrantyExpiry,
+          });
+        }
+        for (const reminder of remindersToCreate) {
+          await storage.createAssetReminder(reminder);
+        }
+      } else if (asset.warrantyExpiry) {
+        // Tools/equipment - create warranty reminder
+        await storage.createAssetReminder({
+          assetId: asset.id,
+          reminderType: 'warranty_expiring',
+          dueDate: asset.warrantyExpiry,
+        });
+      }
+      
+      res.status(201).json(asset);
+    } catch (error) {
+      console.error("Create asset error:", error);
+      res.status(500).json({ message: "Failed to create asset" });
+    }
+  });
+
+  // Update asset
+  app.patch("/api/assets/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateAsset(req.params.id, req.body);
+      if (!updated) {
+        return res.status(404).json({ message: "Asset not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Update asset error:", error);
+      res.status(500).json({ message: "Failed to update asset" });
+    }
+  });
+
+  // Delete asset
+  app.delete("/api/assets/:id", async (req, res) => {
+    try {
+      await storage.deleteAsset(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete asset error:", error);
+      res.status(500).json({ message: "Failed to delete asset" });
+    }
+  });
+
+  // =====================
+  // ASSET FAULTS
+  // =====================
+
+  // Get all faults (with optional filters)
+  app.get("/api/asset-faults", async (req, res) => {
+    try {
+      const { status } = req.query;
+      let faults;
+      if (status === 'open') {
+        faults = await storage.getOpenAssetFaults();
+      } else {
+        faults = await storage.getAssetFaults();
+      }
+      
+      // Enrich with asset info
+      const enriched = await Promise.all(faults.map(async (fault) => {
+        const asset = await storage.getAsset(fault.assetId);
+        const reportedBy = await storage.getEmployee(fault.reportedById);
+        const assignedTo = fault.assignedToId ? await storage.getEmployee(fault.assignedToId) : null;
+        return { ...fault, asset, reportedBy, assignedTo };
+      }));
+      
+      res.json(enriched);
+    } catch (error) {
+      console.error("Get asset faults error:", error);
+      res.status(500).json({ message: "Failed to get asset faults" });
+    }
+  });
+
+  // Get single fault
+  app.get("/api/asset-faults/:id", async (req, res) => {
+    try {
+      const fault = await storage.getAssetFault(req.params.id);
+      if (!fault) {
+        return res.status(404).json({ message: "Fault not found" });
+      }
+      const asset = await storage.getAsset(fault.assetId);
+      res.json({ ...fault, asset });
+    } catch (error) {
+      console.error("Get asset fault error:", error);
+      res.status(500).json({ message: "Failed to get asset fault" });
+    }
+  });
+
+  // Create fault (with auto-task creation)
+  app.post("/api/asset-faults", async (req, res) => {
+    try {
+      const { assetId, reportedById, title, description, priority } = req.body;
+      
+      // Get asset info for task title
+      const asset = await storage.getAsset(assetId);
+      if (!asset) {
+        return res.status(404).json({ message: "Asset not found" });
+      }
+
+      // Create task in Task Manager
+      const task = await storage.createTask({
+        title: `Fault: ${title} - ${asset.name}`,
+        description: `Asset: ${asset.assetNumber}\n\n${description || ''}`,
+        priority: priority || 'medium',
+        status: 'pending',
+      });
+
+      // Create fault linked to task
+      const fault = await storage.createAssetFault({
+        assetId,
+        reportedById,
+        title,
+        description,
+        priority: priority || 'medium',
+        status: 'open',
+        taskId: task.id,
+      });
+
+      res.status(201).json({ fault, task });
+    } catch (error) {
+      console.error("Create asset fault error:", error);
+      res.status(500).json({ message: "Failed to create asset fault" });
+    }
+  });
+
+  // Update fault
+  app.patch("/api/asset-faults/:id", async (req, res) => {
+    try {
+      const existing = await storage.getAssetFault(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Fault not found" });
+      }
+
+      // Handle status transitions
+      const updates = { ...req.body };
+      if (req.body.status === 'completed' && existing.status !== 'completed') {
+        updates.resolvedAt = new Date();
+      }
+      if (req.body.status === 'cleared' && existing.status !== 'cleared') {
+        updates.clearedAt = new Date();
+      }
+
+      const updated = await storage.updateAssetFault(req.params.id, updates);
+
+      // Sync with linked task
+      if (existing.taskId && req.body.status) {
+        const taskStatus = req.body.status === 'open' ? 'pending' : 
+                           req.body.status === 'in_progress' ? 'pending' :
+                           'completed';
+        await storage.updateTask(existing.taskId, { status: taskStatus });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update asset fault error:", error);
+      res.status(500).json({ message: "Failed to update asset fault" });
+    }
+  });
+
+  // Delete fault
+  app.delete("/api/asset-faults/:id", async (req, res) => {
+    try {
+      const fault = await storage.getAssetFault(req.params.id);
+      if (fault?.taskId) {
+        await storage.deleteTask(fault.taskId);
+      }
+      await storage.deleteAssetFault(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete asset fault error:", error);
+      res.status(500).json({ message: "Failed to delete asset fault" });
+    }
+  });
+
+  // =====================
+  // ASSET REMINDERS
+  // =====================
+
+  // Get all reminders
+  app.get("/api/asset-reminders", async (req, res) => {
+    try {
+      const { upcoming } = req.query;
+      let reminders;
+      if (upcoming) {
+        reminders = await storage.getUpcomingAssetReminders(parseInt(upcoming as string) || 30);
+      } else {
+        reminders = await storage.getAssetReminders();
+      }
+      
+      // Enrich with asset info
+      const enriched = await Promise.all(reminders.map(async (reminder) => {
+        const asset = await storage.getAsset(reminder.assetId);
+        return { ...reminder, asset };
+      }));
+      
+      res.json(enriched);
+    } catch (error) {
+      console.error("Get asset reminders error:", error);
+      res.status(500).json({ message: "Failed to get asset reminders" });
+    }
+  });
+
+  // Create reminder
+  app.post("/api/asset-reminders", async (req, res) => {
+    try {
+      const reminder = await storage.createAssetReminder(req.body);
+      res.status(201).json(reminder);
+    } catch (error) {
+      console.error("Create asset reminder error:", error);
+      res.status(500).json({ message: "Failed to create asset reminder" });
+    }
+  });
+
+  // Acknowledge reminder
+  app.post("/api/asset-reminders/:id/acknowledge", async (req, res) => {
+    try {
+      const { acknowledgedById } = req.body;
+      const updated = await storage.updateAssetReminder(req.params.id, {
+        acknowledged: true,
+        acknowledgedById,
+        acknowledgedAt: new Date(),
+      });
+      if (!updated) {
+        return res.status(404).json({ message: "Reminder not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Acknowledge reminder error:", error);
+      res.status(500).json({ message: "Failed to acknowledge reminder" });
+    }
+  });
+
+  // Delete reminder
+  app.delete("/api/asset-reminders/:id", async (req, res) => {
+    try {
+      await storage.deleteAssetReminder(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete asset reminder error:", error);
+      res.status(500).json({ message: "Failed to delete asset reminder" });
+    }
+  });
+
   return httpServer;
 }
 
