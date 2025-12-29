@@ -52,6 +52,7 @@ import EmergencyCallouts from "@/pages/emergency-callouts";
 import Catalog from "@/pages/catalog";
 import QuoteTemplates from "@/pages/quote-templates";
 import Assets from "@/pages/assets";
+import JobHub from "@/pages/job-hub";
 
 function AdminRouter() {
   return (
@@ -200,9 +201,11 @@ function App() {
   const isPortalRoute = location.startsWith("/portal");
   const isPartnerPortalRoute = location.startsWith("/partner-portal");
   const isEmployeePortalRoute = location.startsWith("/employee-portal");
+  const isJobHubRoute = location.startsWith("/job-hub");
 
   const getContent = () => {
     if (isLandingPage) return <Landing />;
+    if (isJobHubRoute) return <Route path="/job-hub/:token" component={JobHub} />;
     if (isPartnerPortalRoute) return <PartnerPortalRouter />;
     if (isPortalRoute) return <PortalRouter />;
     if (isEmployeePortalRoute) return <EmployeePortalRouter />;

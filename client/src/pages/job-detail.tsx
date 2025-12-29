@@ -40,9 +40,12 @@ import {
   Clock,
   AlertTriangle,
   Siren,
+  Link2,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse, ConnectionLink } from "@shared/schema";
 import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES, NOTE_VISIBILITY, SURVEY_STATUSES, EMERGENCY_INCIDENT_TYPES, EMERGENCY_PRIORITIES } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -223,6 +226,21 @@ export default function JobDetail() {
   const [emergencyDescription, setEmergencyDescription] = useState("");
   const [selectedEmergencyPartners, setSelectedEmergencyPartners] = useState<string[]>([]);
   const [emergencyCalloutDetailId, setEmergencyCalloutDetailId] = useState<string | null>(null);
+
+  // Connection links state
+  const [connectionLinkDialogOpen, setConnectionLinkDialogOpen] = useState(false);
+  const [connectionLinkType, setConnectionLinkType] = useState<string>("client");
+
+  // Fetch connection links for this job
+  const { data: connectionLinks } = useQuery<ConnectionLink[]>({
+    queryKey: ["/api/jobs", id, "connection-links"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/connection-links`);
+      if (!response.ok) throw new Error("Failed to fetch connection links");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
 
   // Fetch single emergency callout with responses (must be after state declaration)
   const { data: emergencyCalloutDetail } = useQuery<EmergencyCalloutWithDetails>({
@@ -459,6 +477,35 @@ export default function JobDetail() {
     },
     onError: () => {
       toast({ title: "Error updating share settings", variant: "destructive" });
+    },
+  });
+
+  // Connection link mutations
+  const createConnectionLinkMutation = useMutation({
+    mutationFn: async (data: { partyType: string }) => {
+      return apiRequest("POST", `/api/jobs/${id}/connection-links`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "connection-links"] });
+      toast({ title: "Connection link created" });
+      setConnectionLinkDialogOpen(false);
+      setConnectionLinkType("client");
+    },
+    onError: () => {
+      toast({ title: "Error creating connection link", variant: "destructive" });
+    },
+  });
+
+  const revokeConnectionLinkMutation = useMutation({
+    mutationFn: async (linkId: string) => {
+      return apiRequest("DELETE", `/api/connection-links/${linkId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "connection-links"] });
+      toast({ title: "Connection link revoked" });
+    },
+    onError: () => {
+      toast({ title: "Error revoking connection link", variant: "destructive" });
     },
   });
 
@@ -1320,6 +1367,95 @@ export default function JobDetail() {
             </Card>
           )}
 
+          {/* Connection Links Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Link2 className="w-4 h-4" />
+                  Connection Links
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setConnectionLinkDialogOpen(true)}
+                  data-testid="button-add-connection-link"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(!connectionLinks || connectionLinks.length === 0) ? (
+                <p className="text-sm text-muted-foreground">No connection links created. Create a link to share job access with clients, partners, or employees.</p>
+              ) : (
+                <div className="space-y-3">
+                  {connectionLinks.map((link) => (
+                    <div key={link.id} className="p-3 rounded-md bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={
+                            link.partyType === "client" ? "default" :
+                            link.partyType === "partner" ? "secondary" :
+                            "outline"
+                          }>
+                            {link.partyType.charAt(0).toUpperCase() + link.partyType.slice(1)}
+                          </Badge>
+                          {link.status === "active" ? (
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Active</Badge>
+                          ) : link.status === "connected" ? (
+                            <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Connected</Badge>
+                          ) : (
+                            <Badge variant="destructive">{link.status.charAt(0).toUpperCase() + link.status.slice(1)}</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              const url = `${window.location.origin}/job-hub/${link.token}`;
+                              navigator.clipboard.writeText(url);
+                              toast({ title: "Link copied to clipboard" });
+                            }}
+                            disabled={link.status === "revoked" || link.status === "expired"}
+                            data-testid={`button-copy-link-${link.id}`}
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => window.open(`/job-hub/${link.token}`, '_blank')}
+                            disabled={link.status === "revoked" || link.status === "expired"}
+                            data-testid={`button-open-link-${link.id}`}
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                          {(link.status === "active" || link.status === "connected") && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => revokeConnectionLinkMutation.mutate(link.id)}
+                              data-testid={`button-revoke-link-${link.id}`}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Created: {link.createdAt ? new Date(link.createdAt).toLocaleDateString() : "N/A"}
+                        {link.expiresAt && ` | Expires: ${new Date(link.expiresAt).toLocaleDateString()}`}
+                        {link.lastAccessedAt && ` | Last accessed: ${new Date(link.lastAccessedAt).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Partner Surveys Section */}
           <Card>
             <CardHeader className="pb-3">
@@ -2134,6 +2270,52 @@ export default function JobDetail() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Connection Link Dialog */}
+      <Dialog open={connectionLinkDialogOpen} onOpenChange={setConnectionLinkDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Connection Link</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Create a shareable link to give clients, partners, or employees direct access to this job's hub.
+            </p>
+            <div className="space-y-2">
+              <Label>Link Type</Label>
+              <Select value={connectionLinkType} onValueChange={setConnectionLinkType}>
+                <SelectTrigger data-testid="select-connection-link-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">Client - View job details, accept quotes, send messages</SelectItem>
+                  <SelectItem value="partner">Partner - View assigned work, notes, and financials</SelectItem>
+                  <SelectItem value="employee">Employee - Full access to job management</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConnectionLinkDialogOpen(false);
+                setConnectionLinkType("client");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createConnectionLinkMutation.mutate({ partyType: connectionLinkType })}
+              disabled={createConnectionLinkMutation.isPending}
+              data-testid="button-create-connection-link"
+            >
+              <Link2 className="w-4 h-4 mr-2" />
+              Create Link
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
