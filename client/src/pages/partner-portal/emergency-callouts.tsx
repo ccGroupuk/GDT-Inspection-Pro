@@ -68,6 +68,10 @@ export default function PartnerEmergencyCallouts() {
   const [responseNotes, setResponseNotes] = useState("");
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [selectedCalloutForComplete, setSelectedCalloutForComplete] = useState<EmergencyResponseWithDetails | null>(null);
+  const [totalCollected, setTotalCollected] = useState<string>("");
+  const [completionNotes, setCompletionNotes] = useState("");
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -148,6 +152,30 @@ export default function PartnerEmergencyCallouts() {
     },
     onError: () => {
       toast({ title: "Error declining callout", variant: "destructive" });
+    },
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: async (data: { calloutId: string; totalCollected: string; completionNotes?: string }) => {
+      const res = await partnerApiRequest("POST", `/api/partner-portal/emergency-callouts/${data.calloutId}/complete`, {
+        totalCollected: data.totalCollected,
+        completionNotes: data.completionNotes,
+      }, token);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/emergency-callouts"] });
+      toast({ 
+        title: "Emergency Completed", 
+        description: data.message || `You owe CCC £${data.feeAmount} (${data.feePercent}% callout fee).`
+      });
+      setCompleteDialogOpen(false);
+      setSelectedCalloutForComplete(null);
+      setTotalCollected("");
+      setCompletionNotes("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error completing callout", description: error.message, variant: "destructive" });
     },
   });
 
@@ -376,9 +404,34 @@ export default function PartnerEmergencyCallouts() {
             </div>
           )}
           
-          {response.status === "selected" && (
+          {response.status === "selected" && (callout.status === "assigned" || callout.status === "in_progress") && (
+            <div className="space-y-3">
+              <div className="p-2 rounded-md bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-sm">
+                You have been selected for this emergency callout.
+              </div>
+              <div className="p-2 rounded-md bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-sm flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>
+                  <strong>Reminder:</strong> Collect full payment from client. You will owe CCC a 20% callout fee surcharge upon completion.
+                </span>
+              </div>
+              <Button
+                onClick={() => {
+                  setSelectedCalloutForComplete(response);
+                  setCompleteDialogOpen(true);
+                }}
+                className="w-full"
+                data-testid={`button-complete-${callout.id}`}
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Mark Complete & Submit Payment
+              </Button>
+            </div>
+          )}
+          
+          {response.status === "selected" && callout.status === "resolved" && (
             <div className="p-2 rounded-md bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-sm">
-              You have been selected for this emergency callout.
+              This emergency callout has been completed.
             </div>
           )}
           
@@ -496,6 +549,12 @@ export default function PartnerEmergencyCallouts() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-sm flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>
+                <strong>Important:</strong> By accepting this emergency callout, you agree to collect full payment from the client and pay CCC a 20% callout fee surcharge upon job completion.
+              </span>
+            </div>
             <div className="space-y-2">
               <Label>Estimated Arrival Time (minutes)</Label>
               <Input
@@ -589,6 +648,94 @@ export default function PartnerEmergencyCallouts() {
               data-testid="button-confirm-decline"
             >
               {declineMutation.isPending ? "Declining..." : "Decline Callout"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={completeDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setCompleteDialogOpen(false);
+          setSelectedCalloutForComplete(null);
+          setTotalCollected("");
+          setCompletionNotes("");
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              Complete Emergency Callout
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 rounded-md bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm">
+              <strong>Payment Reminder:</strong> You should have collected the full payment from the client before completing this callout.
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Total Amount Collected from Client (£)</Label>
+              <Input
+                type="number"
+                placeholder="e.g., 250.00"
+                value={totalCollected}
+                onChange={(e) => setTotalCollected(e.target.value)}
+                min={0}
+                step="0.01"
+                data-testid="input-total-collected"
+              />
+            </div>
+            
+            {totalCollected && parseFloat(totalCollected) > 0 && (
+              <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span>Total collected:</span>
+                  <span className="font-medium">£{parseFloat(totalCollected).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>20% Callout Fee (owed to CCC):</span>
+                  <span className="font-bold">£{(parseFloat(totalCollected) * 0.20).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between border-t border-amber-300 dark:border-amber-700 pt-1 mt-1">
+                  <span>Your Earnings:</span>
+                  <span className="font-medium">£{(parseFloat(totalCollected) * 0.80).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label>Completion Notes (Optional)</Label>
+              <Textarea
+                placeholder="Any notes about the job..."
+                value={completionNotes}
+                onChange={(e) => setCompletionNotes(e.target.value)}
+                className="min-h-[80px]"
+                data-testid="textarea-completion-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!totalCollected || parseFloat(totalCollected) <= 0) {
+                  toast({ title: "Please enter the total amount collected", variant: "destructive" });
+                  return;
+                }
+                if (selectedCalloutForComplete) {
+                  completeMutation.mutate({
+                    calloutId: selectedCalloutForComplete.callout.id,
+                    totalCollected: totalCollected,
+                    completionNotes: completionNotes || undefined,
+                  });
+                }
+              }}
+              disabled={completeMutation.isPending}
+              data-testid="button-confirm-complete"
+            >
+              {completeMutation.isPending ? "Completing..." : "Complete & Submit"}
             </Button>
           </DialogFooter>
         </DialogContent>
