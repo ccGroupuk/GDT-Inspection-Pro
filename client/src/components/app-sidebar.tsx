@@ -1,4 +1,5 @@
 import { useLocation, Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Briefcase,
@@ -20,7 +21,9 @@ import {
   Truck,
   ClipboardCheck,
   Heart,
+  MessageSquare,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -60,6 +63,11 @@ const menuItems = [
     title: "Tasks",
     url: "/tasks",
     icon: CheckSquare,
+  },
+  {
+    title: "Team Hub",
+    url: "/communications",
+    icon: MessageSquare,
   },
   {
     title: "Calendar",
@@ -130,6 +138,13 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/messages/unread-count"],
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+  
+  const unreadCount = unreadData?.count || 0;
 
   return (
     <Sidebar>
@@ -157,6 +172,7 @@ export function AppSidebar() {
               {menuItems.map((item) => {
                 const isActive = location === item.url || 
                   (item.url !== "/" && location.startsWith(item.url));
+                const showBadge = item.url === "/communications" && unreadCount > 0;
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton 
@@ -166,7 +182,12 @@ export function AppSidebar() {
                     >
                       <Link href={item.url}>
                         <item.icon className="w-4 h-4" />
-                        <span>{item.title}</span>
+                        <span className="flex-1">{item.title}</span>
+                        {showBadge && (
+                          <Badge variant="destructive" className="h-5 px-1.5 text-xs ml-auto">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </Badge>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

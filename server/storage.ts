@@ -66,6 +66,10 @@ import {
   personalTasks, type PersonalTask, type InsertPersonalTask,
   dailyFocusTasks, type DailyFocusTask, type InsertDailyFocusTask,
   wellbeingNudgeLogs, type WellbeingNudgeLog, type InsertWellbeingNudgeLog,
+  internalMessages, type InternalMessage, type InsertInternalMessage,
+  jobChatMessages, type JobChatMessage, type InsertJobChatMessage,
+  jobChatMessageReads, type JobChatMessageRead, type InsertJobChatMessageRead,
+  teamActivityLog, type TeamActivityLog, type InsertTeamActivityLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -536,6 +540,27 @@ export interface IStorage {
   getWellbeingNudgeLogs(employeeId: string, type: string): Promise<WellbeingNudgeLog[]>;
   getLatestNudgeLog(employeeId: string, type: string): Promise<WellbeingNudgeLog | undefined>;
   createWellbeingNudgeLog(log: InsertWellbeingNudgeLog): Promise<WellbeingNudgeLog>;
+
+  // Internal Messages (Direct Messages)
+  getInternalMessages(employeeId: string): Promise<InternalMessage[]>;
+  getConversation(employeeId: string, otherEmployeeId: string): Promise<InternalMessage[]>;
+  getUnreadMessageCount(employeeId: string): Promise<number>;
+  createInternalMessage(message: InsertInternalMessage): Promise<InternalMessage>;
+  markMessagesAsRead(employeeId: string, otherEmployeeId: string): Promise<void>;
+
+  // Job Chat Messages
+  getJobChatMessages(jobId: string): Promise<JobChatMessage[]>;
+  getJobChatMessage(id: string): Promise<JobChatMessage | undefined>;
+  createJobChatMessage(message: InsertJobChatMessage): Promise<JobChatMessage>;
+  updateJobChatMessage(id: string, message: Partial<InsertJobChatMessage>): Promise<JobChatMessage | undefined>;
+  deleteJobChatMessage(id: string): Promise<boolean>;
+  markJobChatAsRead(messageId: string, employeeId: string): Promise<void>;
+  getUnreadJobChatCount(employeeId: string): Promise<number>;
+
+  // Team Activity Log
+  getTeamActivityLog(limit: number): Promise<TeamActivityLog[]>;
+  getTeamActivityLogByEmployee(employeeId: string, limit: number): Promise<TeamActivityLog[]>;
+  createTeamActivityLog(activity: InsertTeamActivityLog): Promise<TeamActivityLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2645,6 +2670,125 @@ export class DatabaseStorage implements IStorage {
 
   async createWellbeingNudgeLog(log: InsertWellbeingNudgeLog): Promise<WellbeingNudgeLog> {
     const [created] = await db.insert(wellbeingNudgeLogs).values(log).returning();
+    return created;
+  }
+
+  // Internal Messages (Direct Messages)
+  async getInternalMessages(employeeId: string): Promise<InternalMessage[]> {
+    return db.select().from(internalMessages)
+      .where(or(
+        eq(internalMessages.senderId, employeeId),
+        eq(internalMessages.recipientId, employeeId)
+      ))
+      .orderBy(desc(internalMessages.createdAt));
+  }
+
+  async getConversation(employeeId: string, otherEmployeeId: string): Promise<InternalMessage[]> {
+    return db.select().from(internalMessages)
+      .where(or(
+        and(
+          eq(internalMessages.senderId, employeeId),
+          eq(internalMessages.recipientId, otherEmployeeId)
+        ),
+        and(
+          eq(internalMessages.senderId, otherEmployeeId),
+          eq(internalMessages.recipientId, employeeId)
+        )
+      ))
+      .orderBy(asc(internalMessages.createdAt));
+  }
+
+  async getUnreadMessageCount(employeeId: string): Promise<number> {
+    const messages = await db.select().from(internalMessages)
+      .where(and(
+        eq(internalMessages.recipientId, employeeId),
+        eq(internalMessages.isRead, false)
+      ));
+    return messages.length;
+  }
+
+  async createInternalMessage(message: InsertInternalMessage): Promise<InternalMessage> {
+    const [created] = await db.insert(internalMessages).values(message).returning();
+    return created;
+  }
+
+  async markMessagesAsRead(employeeId: string, otherEmployeeId: string): Promise<void> {
+    await db.update(internalMessages)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(
+        eq(internalMessages.recipientId, employeeId),
+        eq(internalMessages.senderId, otherEmployeeId),
+        eq(internalMessages.isRead, false)
+      ));
+  }
+
+  // Job Chat Messages
+  async getJobChatMessages(jobId: string): Promise<JobChatMessage[]> {
+    return db.select().from(jobChatMessages)
+      .where(eq(jobChatMessages.jobId, jobId))
+      .orderBy(asc(jobChatMessages.createdAt));
+  }
+
+  async getJobChatMessage(id: string): Promise<JobChatMessage | undefined> {
+    const [message] = await db.select().from(jobChatMessages)
+      .where(eq(jobChatMessages.id, id));
+    return message || undefined;
+  }
+
+  async createJobChatMessage(message: InsertJobChatMessage): Promise<JobChatMessage> {
+    const [created] = await db.insert(jobChatMessages).values(message).returning();
+    return created;
+  }
+
+  async updateJobChatMessage(id: string, message: Partial<InsertJobChatMessage>): Promise<JobChatMessage | undefined> {
+    const [updated] = await db.update(jobChatMessages)
+      .set({ ...message, updatedAt: new Date() })
+      .where(eq(jobChatMessages.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteJobChatMessage(id: string): Promise<boolean> {
+    await db.delete(jobChatMessages).where(eq(jobChatMessages.id, id));
+    return true;
+  }
+
+  async markJobChatAsRead(messageId: string, employeeId: string): Promise<void> {
+    const existing = await db.select().from(jobChatMessageReads)
+      .where(and(
+        eq(jobChatMessageReads.messageId, messageId),
+        eq(jobChatMessageReads.employeeId, employeeId)
+      ));
+    if (existing.length === 0) {
+      await db.insert(jobChatMessageReads).values({ messageId, employeeId });
+    }
+  }
+
+  async getUnreadJobChatCount(employeeId: string): Promise<number> {
+    // Get all job chat messages not read by this employee
+    const allMessages = await db.select().from(jobChatMessages);
+    const reads = await db.select().from(jobChatMessageReads)
+      .where(eq(jobChatMessageReads.employeeId, employeeId));
+    const readMessageIds = new Set(reads.map(r => r.messageId));
+    return allMessages.filter(m => !readMessageIds.has(m.id) && m.employeeId !== employeeId).length;
+  }
+
+  // Team Activity Log
+  async getTeamActivityLog(limit: number): Promise<TeamActivityLog[]> {
+    return db.select().from(teamActivityLog)
+      .orderBy(desc(teamActivityLog.createdAt))
+      .limit(limit);
+  }
+
+  async getTeamActivityLogByEmployee(employeeId: string, limit: number): Promise<TeamActivityLog[]> {
+    return db.select().from(teamActivityLog)
+      .where(eq(teamActivityLog.employeeId, employeeId))
+      .orderBy(desc(teamActivityLog.createdAt))
+      .limit(limit);
+  }
+
+  async createTeamActivityLog(activity: InsertTeamActivityLog): Promise<TeamActivityLog> {
+    const [created] = await db.insert(teamActivityLog).values(activity).returning();
     return created;
   }
 }

@@ -2569,3 +2569,133 @@ export const PERSONAL_TASK_TYPES = [
   { value: "appointment", label: "Appointment" },
   { value: "morning_routine", label: "Morning Routine" },
 ] as const;
+
+// =====================================================
+// INTERNAL MESSAGING / COMMUNICATION HUB
+// =====================================================
+
+// Direct messages between employees
+export const internalMessages = pgTable("internal_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  senderId: varchar("sender_id").notNull().references(() => employees.id),
+  recipientId: varchar("recipient_id").notNull().references(() => employees.id),
+  content: text("content").notNull(),
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at"),
+  jobId: varchar("job_id").references(() => jobs.id), // optional job reference
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const internalMessagesRelations = relations(internalMessages, ({ one }) => ({
+  sender: one(employees, {
+    fields: [internalMessages.senderId],
+    references: [employees.id],
+    relationName: "messageSender",
+  }),
+  recipient: one(employees, {
+    fields: [internalMessages.recipientId],
+    references: [employees.id],
+    relationName: "messageRecipient",
+  }),
+  job: one(jobs, {
+    fields: [internalMessages.jobId],
+    references: [jobs.id],
+  }),
+}));
+
+export const insertInternalMessageSchema = createInsertSchema(internalMessages).omit({ id: true, createdAt: true, isRead: true, readAt: true });
+export type InsertInternalMessage = z.infer<typeof insertInternalMessageSchema>;
+export type InternalMessage = typeof internalMessages.$inferSelect;
+
+// Job chat messages - conversations tied to specific jobs (visible to team)
+export const jobChatMessages = pgTable("job_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  content: text("content").notNull(),
+  messageType: text("message_type").default("message"), // message, update, question, alert
+  isPinned: boolean("is_pinned").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const jobChatMessagesRelations = relations(jobChatMessages, ({ one, many }) => ({
+  job: one(jobs, {
+    fields: [jobChatMessages.jobId],
+    references: [jobs.id],
+  }),
+  employee: one(employees, {
+    fields: [jobChatMessages.employeeId],
+    references: [employees.id],
+  }),
+  reads: many(jobChatMessageReads),
+}));
+
+export const insertJobChatMessageSchema = createInsertSchema(jobChatMessages).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertJobChatMessage = z.infer<typeof insertJobChatMessageSchema>;
+export type JobChatMessage = typeof jobChatMessages.$inferSelect;
+
+// Track which employees have read job chat messages
+export const jobChatMessageReads = pgTable("job_chat_message_reads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => jobChatMessages.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  readAt: timestamp("read_at").defaultNow(),
+});
+
+export const jobChatMessageReadsRelations = relations(jobChatMessageReads, ({ one }) => ({
+  message: one(jobChatMessages, {
+    fields: [jobChatMessageReads.messageId],
+    references: [jobChatMessages.id],
+  }),
+  employee: one(employees, {
+    fields: [jobChatMessageReads.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertJobChatMessageReadSchema = createInsertSchema(jobChatMessageReads).omit({ id: true, readAt: true });
+export type InsertJobChatMessageRead = z.infer<typeof insertJobChatMessageReadSchema>;
+export type JobChatMessageRead = typeof jobChatMessageReads.$inferSelect;
+
+// Activity log for team-wide notifications
+export const teamActivityLog = pgTable("team_activity_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id), // who performed the action
+  activityType: text("activity_type").notNull(), // task_completed, checklist_completed, job_updated, message_sent, etc.
+  entityType: text("entity_type"), // job, task, checklist, message
+  entityId: varchar("entity_id"),
+  description: text("description").notNull(),
+  metadata: text("metadata"), // JSON string for extra data
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const teamActivityLogRelations = relations(teamActivityLog, ({ one }) => ({
+  employee: one(employees, {
+    fields: [teamActivityLog.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertTeamActivityLogSchema = createInsertSchema(teamActivityLog).omit({ id: true, createdAt: true });
+export type InsertTeamActivityLog = z.infer<typeof insertTeamActivityLogSchema>;
+export type TeamActivityLog = typeof teamActivityLog.$inferSelect;
+
+// Message type constants
+export const JOB_CHAT_MESSAGE_TYPES = [
+  { value: "message", label: "Message" },
+  { value: "update", label: "Update" },
+  { value: "question", label: "Question" },
+  { value: "alert", label: "Alert" },
+] as const;
+
+export const ACTIVITY_TYPES = [
+  { value: "task_completed", label: "Task Completed" },
+  { value: "task_assigned", label: "Task Assigned" },
+  { value: "checklist_completed", label: "Checklist Completed" },
+  { value: "job_stage_changed", label: "Job Stage Changed" },
+  { value: "job_created", label: "Job Created" },
+  { value: "quote_sent", label: "Quote Sent" },
+  { value: "message_sent", label: "Message Sent" },
+  { value: "note_added", label: "Note Added" },
+] as const;

@@ -8905,4 +8905,238 @@ export function registerChecklistRoutes(app: Express) {
       res.status(500).json({ message: "Failed to get wellbeing dashboard" });
     }
   });
+
+  // =====================================================
+  // INTERNAL MESSAGING / COMMUNICATION HUB
+  // =====================================================
+
+  // Get all direct messages for current employee
+  app.get("/api/messages", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const messages = await storage.getInternalMessages(employee.id);
+      res.json(messages);
+    } catch (error) {
+      console.error("Get messages error:", error);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  // Get conversation with a specific employee
+  app.get("/api/messages/conversation/:employeeId", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const messages = await storage.getConversation(employee.id, req.params.employeeId);
+      // Mark messages as read
+      await storage.markMessagesAsRead(employee.id, req.params.employeeId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Get conversation error:", error);
+      res.status(500).json({ message: "Failed to get conversation" });
+    }
+  });
+
+  // Get unread message count
+  app.get("/api/messages/unread-count", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const count = await storage.getUnreadMessageCount(employee.id);
+      res.json({ count });
+    } catch (error) {
+      console.error("Get unread count error:", error);
+      res.status(500).json({ message: "Failed to get unread count" });
+    }
+  });
+
+  // Send a direct message
+  app.post("/api/messages", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Validate request body
+      const { recipientId, content, jobId } = req.body;
+      if (!recipientId || typeof recipientId !== 'string' || !recipientId.trim()) {
+        return res.status(400).json({ message: "recipientId is required" });
+      }
+      if (!content || typeof content !== 'string' || !content.trim()) {
+        return res.status(400).json({ message: "content is required and cannot be empty" });
+      }
+      if (content.length > 10000) {
+        return res.status(400).json({ message: "content exceeds maximum length of 10000 characters" });
+      }
+      
+      const message = await storage.createInternalMessage({
+        recipientId: recipientId.trim(),
+        content: content.trim(),
+        jobId: jobId || null,
+        senderId: employee.id,
+      });
+      // Log activity
+      await storage.createTeamActivityLog({
+        employeeId: employee.id,
+        activityType: "message_sent",
+        entityType: "message",
+        entityId: message.id,
+        description: `Sent a message to a team member`,
+      });
+      res.json(message);
+    } catch (error) {
+      console.error("Send message error:", error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Get job chat messages
+  app.get("/api/jobs/:jobId/chat", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const messages = await storage.getJobChatMessages(req.params.jobId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Get job chat error:", error);
+      res.status(500).json({ message: "Failed to get job chat" });
+    }
+  });
+
+  // Send job chat message
+  app.post("/api/jobs/:jobId/chat", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Validate request body
+      const { content } = req.body;
+      if (!content || typeof content !== 'string' || !content.trim()) {
+        return res.status(400).json({ message: "content is required and cannot be empty" });
+      }
+      if (content.length > 10000) {
+        return res.status(400).json({ message: "content exceeds maximum length of 10000 characters" });
+      }
+      
+      const message = await storage.createJobChatMessage({
+        content: content.trim(),
+        jobId: req.params.jobId,
+        employeeId: employee.id,
+      });
+      // Log activity
+      const job = await storage.getJob(req.params.jobId);
+      await storage.createTeamActivityLog({
+        employeeId: employee.id,
+        activityType: "message_sent",
+        entityType: "job",
+        entityId: req.params.jobId,
+        description: `Posted in job ${job?.jobNumber || 'unknown'} chat`,
+      });
+      res.json(message);
+    } catch (error) {
+      console.error("Send job chat error:", error);
+      res.status(500).json({ message: "Failed to send job chat message" });
+    }
+  });
+
+  // Delete job chat message
+  app.delete("/api/jobs/:jobId/chat/:messageId", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      // Only allow deleting own messages
+      const message = await storage.getJobChatMessage(req.params.messageId);
+      if (!message || message.employeeId !== employee.id) {
+        return res.status(403).json({ message: "Cannot delete this message" });
+      }
+      await storage.deleteJobChatMessage(req.params.messageId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete job chat error:", error);
+      res.status(500).json({ message: "Failed to delete message" });
+    }
+  });
+
+  // Pin/unpin job chat message
+  app.patch("/api/jobs/:jobId/chat/:messageId/pin", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const message = await storage.updateJobChatMessage(req.params.messageId, {
+        isPinned: req.body.isPinned,
+      });
+      res.json(message);
+    } catch (error) {
+      console.error("Pin job chat error:", error);
+      res.status(500).json({ message: "Failed to pin message" });
+    }
+  });
+
+  // Get team activity log
+  app.get("/api/activity", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const limit = parseInt(req.query.limit as string) || 50;
+      const activities = await storage.getTeamActivityLog(limit);
+      res.json(activities);
+    } catch (error) {
+      console.error("Get activity log error:", error);
+      res.status(500).json({ message: "Failed to get activity log" });
+    }
+  });
+
+  // Get communication hub dashboard data
+  app.get("/api/communications/dashboard", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const [
+        messages, 
+        unreadCount, 
+        recentActivity,
+        myTasks,
+        myChecklists
+      ] = await Promise.all([
+        storage.getInternalMessages(employee.id),
+        storage.getUnreadMessageCount(employee.id),
+        storage.getTeamActivityLog(20),
+        storage.getTasks(), // Filter for employee's tasks on frontend
+        storage.getChecklistInstances(), // Filter for employee's checklists on frontend
+      ]);
+
+      res.json({
+        currentEmployeeId: employee.id,
+        messages,
+        unreadCount,
+        recentActivity,
+        myTasks: myTasks.filter(t => t.assignedTo === employee.id && t.status !== 'completed'),
+        myChecklists: myChecklists.filter(c => c.assignedToId === employee.id && c.status !== 'completed'),
+      });
+    } catch (error) {
+      console.error("Get communications dashboard error:", error);
+      res.status(500).json({ message: "Failed to get communications dashboard" });
+    }
+  });
 }
