@@ -2277,10 +2277,11 @@ export const checklistItems = pgTable("checklist_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   templateId: varchar("template_id").notNull().references(() => checklistTemplates.id, { onDelete: "cascade" }),
   label: text("label").notNull(),
-  itemType: text("item_type").notNull().default("checkbox"), // checkbox, text, photo, signature, number
-  helpText: text("help_text"),
+  description: text("description"),
   itemOrder: integer("item_order").notNull().default(0),
   isRequired: boolean("is_required").default(true),
+  requiresNote: boolean("requires_note").default(false),
+  requiresPhoto: boolean("requires_photo").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -2417,4 +2418,154 @@ export const DEFAULT_CHECKLIST_CODES = [
   "vehicle_check",
   "payroll_completed",
   "team_paid",
+] as const;
+
+// ==================== OWNER WELLBEING SYSTEM ====================
+
+// Owner Wellbeing Settings - configurable nudge and work-life balance preferences
+export const ownerWellbeingSettings = pgTable("owner_wellbeing_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id).unique(),
+  
+  // Water/Hydration reminders
+  waterReminderEnabled: boolean("water_reminder_enabled").default(true),
+  waterReminderIntervalMinutes: integer("water_reminder_interval_minutes").default(60),
+  
+  // Stretch/Movement reminders
+  stretchReminderEnabled: boolean("stretch_reminder_enabled").default(true),
+  stretchReminderIntervalMinutes: integer("stretch_reminder_interval_minutes").default(90),
+  
+  // Meal reminders
+  mealReminderEnabled: boolean("meal_reminder_enabled").default(true),
+  mealReminderTimes: text("meal_reminder_times").default("12:00,18:00"), // Comma-separated times
+  
+  // Work cutoff time
+  workCutoffEnabled: boolean("work_cutoff_enabled").default(true),
+  workCutoffTime: text("work_cutoff_time").default("18:30"), // HH:MM format
+  workCutoffMessage: text("work_cutoff_message").default("Time to switch to family mode!"),
+  
+  // Session time tracking
+  sessionTrackingEnabled: boolean("session_tracking_enabled").default(true),
+  sessionWarningMinutes: integer("session_warning_minutes").default(120), // Warn after X mins online
+  
+  // Daily Top 3 work focus
+  dailyTop3Enabled: boolean("daily_top3_enabled").default(true),
+  
+  // Personal tasks morning routine
+  morningRoutineEnabled: boolean("morning_routine_enabled").default(true),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const ownerWellbeingSettingsRelations = relations(ownerWellbeingSettings, ({ one }) => ({
+  employee: one(employees, {
+    fields: [ownerWellbeingSettings.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertOwnerWellbeingSettingsSchema = createInsertSchema(ownerWellbeingSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOwnerWellbeingSettings = z.infer<typeof insertOwnerWellbeingSettingsSchema>;
+export type OwnerWellbeingSettings = typeof ownerWellbeingSettings.$inferSelect;
+
+// Personal Tasks - personal appointments/tasks for work-life balance
+export const personalTasks = pgTable("personal_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  taskType: text("task_type").default("personal"), // personal, appointment, morning_routine
+  dueDate: timestamp("due_date"),
+  dueTime: text("due_time"), // HH:MM format for appointments
+  reminderMinutesBefore: integer("reminder_minutes_before").default(15),
+  location: text("location"),
+  isCompleted: boolean("is_completed").default(false),
+  completedAt: timestamp("completed_at"),
+  isMorningTask: boolean("is_morning_task").default(false), // Part of "3 personal tasks before work"
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const personalTasksRelations = relations(personalTasks, ({ one }) => ({
+  employee: one(employees, {
+    fields: [personalTasks.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertPersonalTaskSchema = createInsertSchema(personalTasks).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
+export type InsertPersonalTask = z.infer<typeof insertPersonalTaskSchema>;
+export type PersonalTask = typeof personalTasks.$inferSelect;
+
+// Daily Focus (Top 3) - daily work focus items
+export const dailyFocusTasks = pgTable("daily_focus_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  focusDate: timestamp("focus_date").notNull(), // The date this focus is for
+  taskId: varchar("task_id").references(() => tasks.id), // Optional link to CRM task
+  jobId: varchar("job_id").references(() => jobs.id), // Optional link to job
+  title: text("title").notNull(),
+  description: text("description"),
+  priority: integer("priority").notNull().default(1), // 1, 2, or 3
+  isCompleted: boolean("is_completed").default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const dailyFocusTasksRelations = relations(dailyFocusTasks, ({ one }) => ({
+  employee: one(employees, {
+    fields: [dailyFocusTasks.employeeId],
+    references: [employees.id],
+  }),
+  task: one(tasks, {
+    fields: [dailyFocusTasks.taskId],
+    references: [tasks.id],
+  }),
+  job: one(jobs, {
+    fields: [dailyFocusTasks.jobId],
+    references: [jobs.id],
+  }),
+}));
+
+export const insertDailyFocusTaskSchema = createInsertSchema(dailyFocusTasks).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
+export type InsertDailyFocusTask = z.infer<typeof insertDailyFocusTaskSchema>;
+export type DailyFocusTask = typeof dailyFocusTasks.$inferSelect;
+
+// Wellbeing Nudge Log - track when nudges were shown/dismissed
+export const wellbeingNudgeLogs = pgTable("wellbeing_nudge_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  nudgeType: text("nudge_type").notNull(), // water, stretch, meal, work_cutoff, session_warning
+  action: text("action").notNull(), // shown, dismissed, snoozed, acknowledged
+  snoozedUntil: timestamp("snoozed_until"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const wellbeingNudgeLogsRelations = relations(wellbeingNudgeLogs, ({ one }) => ({
+  employee: one(employees, {
+    fields: [wellbeingNudgeLogs.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertWellbeingNudgeLogSchema = createInsertSchema(wellbeingNudgeLogs).omit({ id: true, createdAt: true });
+export type InsertWellbeingNudgeLog = z.infer<typeof insertWellbeingNudgeLogSchema>;
+export type WellbeingNudgeLog = typeof wellbeingNudgeLogs.$inferSelect;
+
+// Wellbeing constants
+export const NUDGE_TYPES = [
+  { value: "water", label: "Water Reminder", icon: "droplet" },
+  { value: "stretch", label: "Stretch Break", icon: "activity" },
+  { value: "meal", label: "Meal Reminder", icon: "utensils" },
+  { value: "work_cutoff", label: "Work Cutoff", icon: "clock" },
+  { value: "session_warning", label: "Session Warning", icon: "timer" },
+] as const;
+
+export const PERSONAL_TASK_TYPES = [
+  { value: "personal", label: "Personal Task" },
+  { value: "appointment", label: "Appointment" },
+  { value: "morning_routine", label: "Morning Routine" },
 ] as const;
