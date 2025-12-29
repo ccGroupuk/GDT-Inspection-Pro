@@ -5824,6 +5824,55 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     }
   });
 
+  // Partner Portal: Get outstanding callout fees for this partner
+  app.get("/api/partner-portal/outstanding-fees", async (req, res) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    const partner = await storage.getTradePartnerByAccessToken(token ?? "");
+    if (!partner) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    try {
+      const allCallouts = await storage.getEmergencyCallouts();
+      const jobs = await storage.getJobs();
+      
+      // Get completed callouts for this partner with outstanding fees
+      const outstandingFees = allCallouts.filter(c => 
+        c.completedAt && 
+        !c.feePaid && 
+        c.calloutFeeAmount && 
+        parseFloat(c.calloutFeeAmount) > 0 &&
+        c.completedByPartnerId === partner.id
+      );
+
+      const feesWithDetails = outstandingFees.map(c => {
+        const job = jobs.find(j => j.id === c.jobId);
+        return {
+          id: c.id,
+          incidentType: c.incidentType,
+          completedAt: c.completedAt,
+          totalCollected: c.totalCollected,
+          calloutFeeAmount: c.calloutFeeAmount,
+          job: job ? { id: job.id, jobNumber: job.jobNumber } : null,
+        };
+      });
+
+      // Calculate totals
+      const totalOutstanding = outstandingFees.reduce((sum, c) => 
+        sum + parseFloat(c.calloutFeeAmount || "0"), 0
+      );
+
+      res.json({
+        fees: feesWithDetails,
+        totalOutstanding: totalOutstanding.toFixed(2),
+        count: feesWithDetails.length,
+      });
+    } catch (error) {
+      console.error("Get partner outstanding fees error:", error);
+      res.status(500).json({ message: "Failed to get outstanding fees" });
+    }
+  });
+
   // ==================== EMPLOYEE MANAGEMENT ====================
 
   // Employee Authentication with rate limiting

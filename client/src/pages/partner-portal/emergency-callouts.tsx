@@ -104,6 +104,31 @@ export default function PartnerEmergencyCallouts() {
     refetchInterval: 10000,
   });
 
+  interface OutstandingFeesData {
+    fees: Array<{
+      id: string;
+      incidentType: string;
+      completedAt: string;
+      totalCollected: string;
+      calloutFeeAmount: string;
+      job: { id: string; jobNumber: string } | null;
+    }>;
+    totalOutstanding: string;
+    count: number;
+  }
+
+  const { data: outstandingFees } = useQuery<OutstandingFeesData>({
+    queryKey: ["/api/partner-portal/outstanding-fees"],
+    enabled: isAuthenticated,
+    queryFn: async () => {
+      const response = await fetch("/api/partner-portal/outstanding-fees", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Failed to fetch outstanding fees");
+      return response.json();
+    },
+  });
+
   const acknowledgeMutation = useMutation({
     mutationFn: async (responseId: string) => {
       return partnerApiRequest("POST", `/api/partner-portal/emergency-callouts/${responseId}/acknowledge`, {}, token);
@@ -494,6 +519,47 @@ export default function PartnerEmergencyCallouts() {
             <Siren className="w-6 h-6 text-destructive" />
             <h1 className="text-2xl font-bold">Emergency Callouts</h1>
           </div>
+          
+          {outstandingFees && outstandingFees.count > 0 && (
+            <Card className="border-amber-500 border-2">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-4">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    Outstanding Callout Fees
+                  </CardTitle>
+                  <Badge variant="destructive" data-testid="badge-fees-owed">
+                    £{outstandingFees.totalOutstanding} owed to CCC
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  You have {outstandingFees.count} completed emergency callout{outstandingFees.count !== 1 ? "s" : ""} with unpaid fees. 
+                  Please remit the 20% callout fee surcharge to CCC at your earliest convenience.
+                </p>
+                <div className="space-y-2">
+                  {outstandingFees.fees.map(fee => (
+                    <div key={fee.id} className="flex items-center justify-between gap-4 p-2 rounded-md bg-muted/30" data-testid={`fee-item-${fee.id}`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{fee.incidentType}</span>
+                        {fee.job && (
+                          <Badge variant="outline" className="text-xs">{fee.job.jobNumber}</Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(fee.completedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Collected: £{parseFloat(fee.totalCollected || "0").toFixed(2)}</p>
+                        <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">Fee: £{parseFloat(fee.calloutFeeAmount || "0").toFixed(2)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           
           {pendingCallouts.length > 0 && (
         <div className="space-y-3">
