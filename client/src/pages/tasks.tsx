@@ -190,8 +190,8 @@ export default function Tasks() {
                   <PopoverContent className="w-auto p-0" align="start">
                     <CalendarPicker
                       mode="single"
-                      selected={form.watch("dueDate") ? new Date(form.watch("dueDate")!) : undefined}
-                      onSelect={(date) => form.setValue("dueDate", date || null)}
+                      selected={form.watch("dueDate") ? new Date(String(form.watch("dueDate"))) : undefined}
+                      onSelect={(date) => form.setValue("dueDate", date ? date.toISOString() : null as any)}
                       initialFocus
                     />
                     {form.watch("dueDate") && (
