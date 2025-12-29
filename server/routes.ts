@@ -2266,7 +2266,7 @@ export async function registerRoutes(
       const calloutsWithDetails = await Promise.all(
         responses.map(async (response) => {
           const callout = await storage.getEmergencyCallout(response.calloutId);
-          if (!callout) return null;
+          if (!callout || !callout.jobId) return null;
           const job = await storage.getJob(callout.jobId);
           const contact = job ? await storage.getContact(job.contactId) : null;
           return { 
@@ -5934,9 +5934,10 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       });
 
       // Set HttpOnly cookie for secure session management
+      // Always use secure: true since Replit always serves over HTTPS
       res.cookie("employeeSession", sessionToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: true,
         sameSite: "lax",
         expires: expiresAt,
         path: "/",
@@ -5968,7 +5969,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       }
       res.clearCookie("employeeSession", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: true,
         sameSite: "lax",
         path: "/",
       });
@@ -6652,7 +6653,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       }
 
       const portalAccess = await storage.getClientPortalAccess(contactId);
-      if (!portalAccess) {
+      if (!portalAccess || !portalAccess.accessToken) {
         return res.status(400).json({ message: "Contact has no portal access. Generate access first." });
       }
 
@@ -6693,7 +6694,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       }
 
       const portalAccess = await storage.getPartnerPortalAccess(partnerId);
-      if (!portalAccess) {
+      if (!portalAccess || !portalAccess.accessToken) {
         return res.status(400).json({ message: "Partner has no portal access. Generate access first." });
       }
 
@@ -6763,7 +6764,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       }
 
       const portalAccess = await storage.getClientPortalAccess(contactId);
-      if (!portalAccess) {
+      if (!portalAccess || !portalAccess.accessToken) {
         return res.status(400).json({ message: "Contact has no portal access" });
       }
 
@@ -7203,12 +7204,8 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         }
         const afterDiscount = subtotal - discountAmount;
         let taxAmount = 0;
-        if (job.taxType && job.taxValue) {
-          if (job.taxType === "percentage") {
-            taxAmount = afterDiscount * (parseFloat(job.taxValue) / 100);
-          } else if (job.taxType === "fixed") {
-            taxAmount = parseFloat(job.taxValue) || 0;
-          }
+        if (job.taxEnabled && job.taxRate) {
+          taxAmount = afterDiscount * (parseFloat(job.taxRate) / 100);
         }
         const total = afterDiscount + taxAmount;
         quoteTotals = { subtotal, discountAmount, taxAmount, total };
@@ -7341,7 +7338,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         jobId: link.jobId,
         content: `[From ${link.partyType.charAt(0).toUpperCase() + link.partyType.slice(1)}] ${content}`,
         visibility,
-        createdBy: link.partyType,
+        authorName: link.partyType.charAt(0).toUpperCase() + link.partyType.slice(1),
       });
 
       res.json(note);

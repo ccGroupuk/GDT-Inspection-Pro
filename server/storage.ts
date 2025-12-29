@@ -71,6 +71,7 @@ export interface IStorage {
 
   getTradePartners(): Promise<TradePartner[]>;
   getTradePartner(id: string): Promise<TradePartner | undefined>;
+  getTradePartnerByAccessToken(token: string): Promise<TradePartner | undefined>;
   createTradePartner(partner: InsertTradePartner): Promise<TradePartner>;
   updateTradePartner(id: string, partner: Partial<InsertTradePartner>): Promise<TradePartner | undefined>;
   deleteTradePartner(id: string): Promise<boolean>;
@@ -503,6 +504,13 @@ export class DatabaseStorage implements IStorage {
   async getTradePartner(id: string): Promise<TradePartner | undefined> {
     const [partner] = await db.select().from(tradePartners).where(eq(tradePartners.id, id));
     return partner || undefined;
+  }
+
+  async getTradePartnerByAccessToken(token: string): Promise<TradePartner | undefined> {
+    if (!token) return undefined;
+    const access = await this.getPartnerPortalAccessByToken(token);
+    if (!access || !access.isActive) return undefined;
+    return this.getTradePartner(access.partnerId);
   }
 
   async createTradePartner(partner: InsertTradePartner): Promise<TradePartner> {
