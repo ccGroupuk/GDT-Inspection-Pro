@@ -1,18 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Clock, ArrowLeft, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Clock, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
-
-function generateMathChallenge() {
-  const num1 = Math.floor(Math.random() * 10) + 1;
-  const num2 = Math.floor(Math.random() * 10) + 1;
-  return { num1, num2, answer: num1 + num2 };
-}
 
 export default function EmployeePortalLogin() {
   const [, setLocation] = useLocation();
@@ -21,28 +15,9 @@ export default function EmployeePortalLogin() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [mathChallenge, setMathChallenge] = useState(generateMathChallenge);
-  const [captchaAnswer, setCaptchaAnswer] = useState("");
-
-  const refreshCaptcha = () => {
-    setMathChallenge(generateMathChallenge());
-    setCaptchaAnswer("");
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Verify CAPTCHA first - with better validation
-    const userAnswer = parseInt(captchaAnswer, 10);
-    if (isNaN(userAnswer) || userAnswer !== mathChallenge.answer) {
-      toast({
-        title: "Verification Failed",
-        description: `Please solve the math problem: ${mathChallenge.num1} + ${mathChallenge.num2} = ?`,
-        variant: "destructive"
-      });
-      refreshCaptcha();
-      return;
-    }
     
     console.log("Login attempt for:", email);
     setIsLoading(true);
@@ -89,8 +64,6 @@ export default function EmployeePortalLogin() {
         description: error.message,
         variant: "destructive"
       });
-      // Refresh CAPTCHA after failed login
-      refreshCaptcha();
     } finally {
       setIsLoading(false);
     }
@@ -159,34 +132,6 @@ export default function EmployeePortalLogin() {
                     )}
                   </Button>
                 </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="captcha">Human Verification</Label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-muted rounded-md p-2 text-center font-mono text-lg">
-                    {mathChallenge.num1} + {mathChallenge.num2} = ?
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={refreshCaptcha}
-                    tabIndex={-1}
-                    data-testid="button-refresh-captcha"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                </div>
-                <Input
-                  id="captcha"
-                  type="number"
-                  placeholder="Enter the answer"
-                  value={captchaAnswer}
-                  onChange={(e) => setCaptchaAnswer(e.target.value)}
-                  required
-                  data-testid="input-captcha-answer"
-                />
               </div>
               
               <Button 
