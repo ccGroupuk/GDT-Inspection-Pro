@@ -86,6 +86,11 @@ const menuItems = [
     icon: Package,
   },
   {
+    title: "Suppliers",
+    url: "/suppliers",
+    icon: Building2,
+  },
+  {
     title: "Tools & Vehicles",
     url: "/assets",
     icon: Truck,

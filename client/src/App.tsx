@@ -50,6 +50,7 @@ import EmployeePortalAdminView from "@/pages/employee-portal-admin-view";
 import EmployeesAdmin from "@/pages/employees-admin";
 import EmergencyCallouts from "@/pages/emergency-callouts";
 import Catalog from "@/pages/catalog";
+import Suppliers from "@/pages/suppliers";
 import QuoteTemplates from "@/pages/quote-templates";
 import Assets from "@/pages/assets";
 import JobHub from "@/pages/job-hub";
@@ -73,6 +74,7 @@ function AdminRouter() {
       <Route path="/employees/:employeeId/portal" component={EmployeePortalAdminView} />
       <Route path="/emergency-callouts" component={EmergencyCallouts} />
       <Route path="/catalog" component={Catalog} />
+      <Route path="/suppliers" component={Suppliers} />
       <Route path="/templates" component={QuoteTemplates} />
       <Route path="/assets" component={Assets} />
       <Route path="/checklists" component={Checklists} />

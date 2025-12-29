@@ -45,9 +45,12 @@ import {
   Clock, 
   Wrench, 
   ShoppingBag, 
-  Box 
+  Box,
+  Building2,
+  Star,
+  Loader2,
 } from "lucide-react";
-import type { ProductCategory, CatalogItem, InsertProductCategory, InsertCatalogItem } from "@shared/schema";
+import type { ProductCategory, CatalogItem, InsertProductCategory, InsertCatalogItem, Supplier, SupplierCatalogItem } from "@shared/schema";
 
 const ITEM_TYPES = [
   { value: "product", label: "Product", icon: Package },
@@ -112,6 +115,31 @@ export default function Catalog() {
   const { data: items = [], isLoading: loadingItems } = useQuery<CatalogItem[]>({
     queryKey: ["/api/catalog-items"],
   });
+
+  // Suppliers for linking
+  const { data: suppliers = [] } = useQuery<Supplier[]>({
+    queryKey: ["/api/suppliers"],
+  });
+
+  // Supplier links for the currently editing item
+  const { data: itemSuppliers = [], isLoading: loadingItemSuppliers } = useQuery<SupplierCatalogItem[]>({
+    queryKey: ["/api/catalog-items", editingItem?.id, "suppliers"],
+    queryFn: async () => {
+      if (!editingItem?.id) return [];
+      const res = await fetch(`/api/catalog-items/${editingItem.id}/suppliers`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!editingItem?.id,
+  });
+
+  // State for adding new supplier link
+  const [addingSupplier, setAddingSupplier] = useState(false);
+  const [newSupplierLink, setNewSupplierLink] = useState<{
+    supplierId: string;
+    supplierPrice: string;
+    supplierSku: string;
+  }>({ supplierId: "", supplierPrice: "", supplierSku: "" });
 
   const categoryForm = useForm<CategoryFormData>({
     resolver: zodResolver(categoryFormSchema),
@@ -210,6 +238,50 @@ export default function Catalog() {
       toast({ title: "Item Deleted" });
     },
   });
+
+  // Supplier link mutations
+  const addSupplierLinkMutation = useMutation({
+    mutationFn: async (data: { supplierId: string; catalogItemId: string; supplierPrice?: string; supplierSku?: string }) => {
+      return apiRequest("POST", "/api/supplier-catalog-items", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/catalog-items", editingItem?.id, "suppliers"] });
+      setAddingSupplier(false);
+      setNewSupplierLink({ supplierId: "", supplierPrice: "", supplierSku: "" });
+      toast({ title: "Supplier linked", description: "Supplier has been linked to this item." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to link supplier.", variant: "destructive" });
+    },
+  });
+
+  const removeSupplierLinkMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/supplier-catalog-items/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/catalog-items", editingItem?.id, "suppliers"] });
+      toast({ title: "Supplier removed", description: "Supplier link has been removed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to remove supplier link.", variant: "destructive" });
+    },
+  });
+
+  const handleAddSupplierLink = () => {
+    if (!editingItem?.id || !newSupplierLink.supplierId) return;
+    addSupplierLinkMutation.mutate({
+      catalogItemId: editingItem.id,
+      supplierId: newSupplierLink.supplierId,
+      supplierPrice: newSupplierLink.supplierPrice || undefined,
+      supplierSku: newSupplierLink.supplierSku || undefined,
+    });
+  };
+
+  const getSupplierName = (supplierId: string) => {
+    const supplier = suppliers.find(s => s.id === supplierId);
+    return supplier?.name || "Unknown Supplier";
+  };
 
   const openEditCategory = (category: ProductCategory) => {
     setEditingCategory(category);
@@ -718,6 +790,149 @@ export default function Catalog() {
                 data-testid="input-item-notes"
               />
             </div>
+
+            {/* Suppliers Section - only shown when editing existing item */}
+            {editingItem && (
+              <div className="space-y-3 pt-4 border-t">
+                <div className="flex items-center justify-between gap-4">
+                  <Label className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4" />
+                    Linked Suppliers
+                  </Label>
+                  {!addingSupplier && suppliers.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAddingSupplier(true)}
+                      data-testid="button-add-supplier-link"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Link Supplier
+                    </Button>
+                  )}
+                </div>
+
+                {loadingItemSuppliers ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </div>
+                ) : itemSuppliers.length === 0 && !addingSupplier ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    No suppliers linked to this item yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {itemSuppliers.map((link) => (
+                      <div
+                        key={link.id}
+                        className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-md"
+                        data-testid={`supplier-link-${link.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm flex items-center gap-2">
+                            {getSupplierName(link.supplierId)}
+                            {link.isPreferred && (
+                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
+                            {link.supplierSku && <span>SKU: {link.supplierSku}</span>}
+                            {link.supplierPrice && (
+                              <span>Cost: {"\u00A3"}{parseFloat(String(link.supplierPrice)).toFixed(2)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => removeSupplierLinkMutation.mutate(link.id)}
+                          disabled={removeSupplierLinkMutation.isPending}
+                          data-testid={`button-remove-supplier-${link.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add supplier form */}
+                {addingSupplier && (
+                  <div className="p-3 border rounded-md space-y-3 bg-muted/30">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Supplier *</Label>
+                        <Select
+                          value={newSupplierLink.supplierId}
+                          onValueChange={(value) => setNewSupplierLink({ ...newSupplierLink, supplierId: value })}
+                        >
+                          <SelectTrigger data-testid="select-new-supplier">
+                            <SelectValue placeholder="Select supplier" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {suppliers
+                              .filter(s => !itemSuppliers.some(link => link.supplierId === s.id))
+                              .map((supplier) => (
+                                <SelectItem key={supplier.id} value={supplier.id}>
+                                  {supplier.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Supplier SKU</Label>
+                        <Input
+                          value={newSupplierLink.supplierSku}
+                          onChange={(e) => setNewSupplierLink({ ...newSupplierLink, supplierSku: e.target.value })}
+                          placeholder="Supplier's product code"
+                          data-testid="input-supplier-sku"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Cost Price ({"\u00A3"})</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={newSupplierLink.supplierPrice}
+                          onChange={(e) => setNewSupplierLink({ ...newSupplierLink, supplierPrice: e.target.value })}
+                          placeholder="0.00"
+                          data-testid="input-supplier-cost"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setAddingSupplier(false);
+                          setNewSupplierLink({ supplierId: "", supplierPrice: "", supplierSku: "" });
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleAddSupplierLink}
+                        disabled={!newSupplierLink.supplierId || addSupplierLinkMutation.isPending}
+                        data-testid="button-save-supplier-link"
+                      >
+                        {addSupplierLinkMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        ) : null}
+                        Add Link
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-2">
               <Switch
