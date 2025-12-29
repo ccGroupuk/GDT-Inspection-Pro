@@ -2149,3 +2149,174 @@ export const REMINDER_TYPES = [
   { value: "warranty_expiring", label: "Warranty Expiring" },
   { value: "insurance_expiring", label: "Insurance Expiring" },
 ] as const;
+
+// =====================================
+// MANDATORY CHECKLISTS SYSTEM
+// =====================================
+
+// Checklist Templates - defines types of checklists
+export const checklistTemplates = pgTable("checklist_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(), // e.g., "emergency_job", "tool_check", "vehicle_check", "payroll", "team_paid"
+  name: text("name").notNull(),
+  description: text("description"),
+  targetType: text("target_type").notNull(), // job, asset, task, payroll, general
+  isMandatory: boolean("is_mandatory").default(true),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const checklistTemplatesRelations = relations(checklistTemplates, ({ many }) => ({
+  items: many(checklistItems),
+  instances: many(checklistInstances),
+}));
+
+export const insertChecklistTemplateSchema = createInsertSchema(checklistTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertChecklistTemplate = z.infer<typeof insertChecklistTemplateSchema>;
+export type ChecklistTemplate = typeof checklistTemplates.$inferSelect;
+
+// Checklist Items - individual items within a template
+export const checklistItems = pgTable("checklist_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id").notNull().references(() => checklistTemplates.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  description: text("description"),
+  itemOrder: integer("item_order").notNull().default(0),
+  isRequired: boolean("is_required").default(true),
+  requiresNote: boolean("requires_note").default(false),
+  requiresPhoto: boolean("requires_photo").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const checklistItemsRelations = relations(checklistItems, ({ one, many }) => ({
+  template: one(checklistTemplates, {
+    fields: [checklistItems.templateId],
+    references: [checklistTemplates.id],
+  }),
+  responses: many(checklistResponses),
+}));
+
+export const insertChecklistItemSchema = createInsertSchema(checklistItems).omit({ id: true, createdAt: true });
+export type InsertChecklistItem = z.infer<typeof insertChecklistItemSchema>;
+export type ChecklistItem = typeof checklistItems.$inferSelect;
+
+// Checklist Instances - an instance of a checklist for a specific target
+export const checklistInstances = pgTable("checklist_instances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id").notNull().references(() => checklistTemplates.id),
+  targetType: text("target_type").notNull(), // job, asset, payroll, general
+  targetId: varchar("target_id"), // references jobs.id, assets.id, etc. - null for general
+  assignedToId: varchar("assigned_to_id").references(() => employees.id),
+  status: text("status").default("pending"), // pending, in_progress, completed
+  dueDate: timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  completedById: varchar("completed_by_id").references(() => employees.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const checklistInstancesRelations = relations(checklistInstances, ({ one, many }) => ({
+  template: one(checklistTemplates, {
+    fields: [checklistInstances.templateId],
+    references: [checklistTemplates.id],
+  }),
+  assignedTo: one(employees, {
+    fields: [checklistInstances.assignedToId],
+    references: [employees.id],
+    relationName: "assignedChecklists",
+  }),
+  completedBy: one(employees, {
+    fields: [checklistInstances.completedById],
+    references: [employees.id],
+    relationName: "completedChecklists",
+  }),
+  responses: many(checklistResponses),
+  auditEvents: many(checklistAuditEvents),
+}));
+
+export const insertChecklistInstanceSchema = createInsertSchema(checklistInstances).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertChecklistInstance = z.infer<typeof insertChecklistInstanceSchema>;
+export type ChecklistInstance = typeof checklistInstances.$inferSelect;
+
+// Checklist Responses - individual item responses within an instance
+export const checklistResponses = pgTable("checklist_responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instanceId: varchar("instance_id").notNull().references(() => checklistInstances.id, { onDelete: "cascade" }),
+  itemId: varchar("item_id").notNull().references(() => checklistItems.id),
+  value: boolean("value").default(false), // checked or not
+  note: text("note"),
+  photoUrl: text("photo_url"),
+  completedById: varchar("completed_by_id").references(() => employees.id),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const checklistResponsesRelations = relations(checklistResponses, ({ one }) => ({
+  instance: one(checklistInstances, {
+    fields: [checklistResponses.instanceId],
+    references: [checklistInstances.id],
+  }),
+  item: one(checklistItems, {
+    fields: [checklistResponses.itemId],
+    references: [checklistItems.id],
+  }),
+  completedBy: one(employees, {
+    fields: [checklistResponses.completedById],
+    references: [employees.id],
+  }),
+}));
+
+export const insertChecklistResponseSchema = createInsertSchema(checklistResponses).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertChecklistResponse = z.infer<typeof insertChecklistResponseSchema>;
+export type ChecklistResponse = typeof checklistResponses.$inferSelect;
+
+// Checklist Audit Events - track all actions for compliance
+export const checklistAuditEvents = pgTable("checklist_audit_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instanceId: varchar("instance_id").notNull().references(() => checklistInstances.id, { onDelete: "cascade" }),
+  action: text("action").notNull(), // created, item_completed, item_uncompleted, completed, reopened
+  actorId: varchar("actor_id").references(() => employees.id),
+  actorName: text("actor_name"),
+  metadata: text("metadata"), // JSON string for additional data
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const checklistAuditEventsRelations = relations(checklistAuditEvents, ({ one }) => ({
+  instance: one(checklistInstances, {
+    fields: [checklistAuditEvents.instanceId],
+    references: [checklistInstances.id],
+  }),
+  actor: one(employees, {
+    fields: [checklistAuditEvents.actorId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertChecklistAuditEventSchema = createInsertSchema(checklistAuditEvents).omit({ id: true, createdAt: true });
+export type InsertChecklistAuditEvent = z.infer<typeof insertChecklistAuditEventSchema>;
+export type ChecklistAuditEvent = typeof checklistAuditEvents.$inferSelect;
+
+// Checklist constants
+export const CHECKLIST_TARGET_TYPES = [
+  { value: "job", label: "Job" },
+  { value: "asset", label: "Asset" },
+  { value: "payroll", label: "Payroll" },
+  { value: "general", label: "General" },
+] as const;
+
+export const CHECKLIST_STATUSES = [
+  { value: "pending", label: "Pending" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "completed", label: "Completed" },
+] as const;
+
+export const DEFAULT_CHECKLIST_CODES = [
+  "emergency_job",
+  "tool_check",
+  "vehicle_check",
+  "payroll_completed",
+  "team_paid",
+] as const;
