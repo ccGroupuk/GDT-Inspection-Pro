@@ -502,12 +502,16 @@ export default function PartnerPortalJobDetail() {
               <div className="space-y-2">
                 <Label>Total Amount Collected from Client (£)</Label>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*\.?[0-9]*"
                   placeholder="e.g., 250.00"
                   value={totalCollected}
                   onChange={(e) => setTotalCollected(e.target.value)}
-                  min={0}
-                  step="0.01"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   data-testid="input-total-collected"
                 />
               </div>
@@ -536,6 +540,9 @@ export default function PartnerPortalJobDetail() {
                   value={completionNotes}
                   onChange={(e) => setCompletionNotes(e.target.value)}
                   className="min-h-[80px]"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   data-testid="textarea-completion-notes"
                 />
               </div>
