@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { FormSkeleton } from "@/components/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Save, CheckCircle, Handshake, RefreshCw, Plus, Trash2, Package, FileStack, Search, X, ChevronRight } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle, Handshake, RefreshCw, Plus, Trash2, Package, FileStack, Search, X, ChevronRight, Eye, EyeOff, Percent } from "lucide-react";
 import { Link } from "wouter";
 import type { Job, Contact, TradePartner, InsertJob, QuoteItem, CatalogItem, ProductCategory, QuoteTemplate, QuoteTemplateItem } from "@shared/schema";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -65,6 +65,18 @@ export default function JobForm() {
   const [taxRate, setTaxRate] = useState("20");
   const [discountType, setDiscountType] = useState<string | null>(null);
   const [discountValue, setDiscountValue] = useState("");
+  
+  // Client visibility settings
+  const [useDefaultMarkup, setUseDefaultMarkup] = useState(true);
+  const [customMarkupPercent, setCustomMarkupPercent] = useState("");
+  const [hideClientCostBreakdown, setHideClientCostBreakdown] = useState(true);
+  const [showClientPreview, setShowClientPreview] = useState(false);
+  
+  // Default markup from system settings
+  const { data: defaultMarkupSetting } = useQuery<{ settingValue: string } | null>({
+    queryKey: ["/api/company-settings/default_material_markup_percent"],
+  });
+  const defaultMarkupPercent = defaultMarkupSetting?.settingValue || "15";
   
   // Catalog & Template picker states
   const [showCatalogPicker, setShowCatalogPicker] = useState(false);
@@ -124,6 +136,10 @@ export default function JobForm() {
       setTaxRate(editData.job.taxRate || "20");
       setDiscountType(editData.job.discountType || null);
       setDiscountValue(editData.job.discountValue || "");
+      // Client visibility settings
+      setUseDefaultMarkup(editData.job.useDefaultMarkup ?? true);
+      setCustomMarkupPercent(editData.job.customMarkupPercent || "");
+      setHideClientCostBreakdown(editData.job.hideClientCostBreakdown ?? true);
     }
   }, [editData?.job]);
 
@@ -335,7 +351,7 @@ export default function JobForm() {
 
   const mutation = useMutation({
     mutationFn: async (values: FormData) => {
-      // Include quote settings in the job data
+      // Include quote settings and client visibility in the job data
       const jobData = {
         ...values,
         taxEnabled,
@@ -343,6 +359,10 @@ export default function JobForm() {
         discountType: discountType || null,
         discountValue: discountValue || null,
         quotedValue: quoteTotals.grandTotal.toFixed(2),
+        // Client visibility settings
+        useDefaultMarkup,
+        customMarkupPercent: customMarkupPercent || null,
+        hideClientCostBreakdown,
       };
 
       let jobResponse;
@@ -809,6 +829,76 @@ export default function JobForm() {
                     </div>
                   </div>
                 </div>
+
+                {/* Client Visibility Settings */}
+                <div className="border-t border-border pt-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <EyeOff className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">Client Visibility Settings</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={hideClientCostBreakdown}
+                          onCheckedChange={setHideClientCostBreakdown}
+                          data-testid="switch-hide-cost-breakdown"
+                        />
+                        <div>
+                          <Label>Hide Cost Breakdown</Label>
+                          <p className="text-xs text-muted-foreground">Client sees final prices only</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={useDefaultMarkup}
+                          onCheckedChange={(checked) => {
+                            setUseDefaultMarkup(checked);
+                            if (checked) setCustomMarkupPercent("");
+                          }}
+                          data-testid="switch-use-default-markup"
+                        />
+                        <div>
+                          <Label>Apply Material Markup ({defaultMarkupPercent}%)</Label>
+                          <p className="text-xs text-muted-foreground">Adds hidden markup to material items</p>
+                        </div>
+                      </div>
+
+                      {!useDefaultMarkup && (
+                        <div className="flex items-center gap-2 pl-8">
+                          <Label className="text-sm text-muted-foreground">Custom markup:</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={customMarkupPercent}
+                            onChange={(e) => setCustomMarkupPercent(e.target.value)}
+                            className="w-20"
+                            placeholder="0"
+                            data-testid="input-custom-markup"
+                          />
+                          <span className="text-sm text-muted-foreground">%</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col justify-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowClientPreview(true)}
+                        data-testid="button-preview-client-quote"
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        Preview Client Quote
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
+                        See exactly what the client will see
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
           </CardContent>
@@ -1095,7 +1185,7 @@ export default function JobForm() {
                 <FileStack className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
                 <p>No templates found</p>
                 <Link href="/templates">
-                  <Button type="button" variant="link" className="mt-2">
+                  <Button type="button" variant="ghost" className="mt-2">
                     Create your first template
                   </Button>
                 </Link>
@@ -1136,6 +1226,134 @@ export default function JobForm() {
             <p className="text-sm text-muted-foreground">{filteredTemplates.length} templates</p>
             <Button type="button" variant="outline" onClick={() => setShowTemplatePicker(false)}>
               Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Client Quote Preview Dialog */}
+      <Dialog open={showClientPreview} onOpenChange={setShowClientPreview}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              Client Quote Preview
+            </DialogTitle>
+            <DialogDescription>
+              This is exactly what the client will see. Markup is applied to material items and cost breakdowns are hidden.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {quoteItems.length === 0 ? (
+              <p className="text-center text-muted-foreground py-4">No quote items to preview</p>
+            ) : (
+              <>
+                <div className="border rounded-lg divide-y divide-border">
+                  {quoteItems.map((item, index) => {
+                    const markupPercent = useDefaultMarkup 
+                      ? parseFloat(defaultMarkupPercent) 
+                      : parseFloat(customMarkupPercent) || 0;
+                    const basePrice = parseFloat(item.unitPrice) || 0;
+                    const qty = parseFloat(item.quantity) || 0;
+                    const clientUnitPrice = basePrice * (1 + markupPercent / 100);
+                    const clientLineTotal = qty * clientUnitPrice;
+                    
+                    return (
+                      <div key={index} className="p-3 flex justify-between items-center gap-4">
+                        <div className="flex-1">
+                          <span className="font-medium">{item.description || "Item"}</span>
+                          {!hideClientCostBreakdown && (
+                            <span className="text-sm text-muted-foreground ml-2">x{qty}</span>
+                          )}
+                        </div>
+                        <div className="text-right font-mono">
+                          {hideClientCostBreakdown ? (
+                            <span>£{clientLineTotal.toFixed(2)}</span>
+                          ) : (
+                            <div className="text-sm">
+                              <div>£{clientUnitPrice.toFixed(2)} x {qty}</div>
+                              <div className="font-medium">£{clientLineTotal.toFixed(2)}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  {(() => {
+                    const markupPercent = useDefaultMarkup 
+                      ? parseFloat(defaultMarkupPercent) 
+                      : parseFloat(customMarkupPercent) || 0;
+                    const clientSubtotal = quoteItems.reduce((sum, item) => {
+                      const basePrice = parseFloat(item.unitPrice) || 0;
+                      const qty = parseFloat(item.quantity) || 0;
+                      const clientUnitPrice = basePrice * (1 + markupPercent / 100);
+                      return sum + (qty * clientUnitPrice);
+                    }, 0);
+                    
+                    let clientDiscount = 0;
+                    if (discountType && discountValue) {
+                      if (discountType === "percentage") {
+                        clientDiscount = clientSubtotal * (parseFloat(discountValue) / 100);
+                      } else {
+                        clientDiscount = parseFloat(discountValue) || 0;
+                      }
+                    }
+                    
+                    const afterDiscount = clientSubtotal - clientDiscount;
+                    const clientTax = taxEnabled ? afterDiscount * (parseFloat(taxRate) / 100) : 0;
+                    const clientTotal = afterDiscount + clientTax;
+                    
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span className="font-mono">£{clientSubtotal.toFixed(2)}</span>
+                        </div>
+                        {clientDiscount > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Discount</span>
+                            <span className="font-mono text-green-600">-£{clientDiscount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {taxEnabled && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">VAT ({taxRate}%)</span>
+                            <span className="font-mono">£{clientTax.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-2 border-t border-border">
+                          <span className="font-semibold">Total</span>
+                          <span className="font-mono font-semibold text-lg">£{clientTotal.toFixed(2)}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+                
+                {(() => {
+                  const effectiveMarkup = useDefaultMarkup 
+                    ? parseFloat(defaultMarkupPercent) 
+                    : parseFloat(customMarkupPercent) || 0;
+                  return effectiveMarkup > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 p-2 rounded">
+                      <Percent className="w-3 h-3" />
+                      <span>
+                        {effectiveMarkup}% markup applied to all items (admin view only - hidden from client)
+                      </span>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+          
+          <div className="flex justify-end pt-4 border-t border-border">
+            <Button type="button" variant="outline" onClick={() => setShowClientPreview(false)}>
+              Close
             </Button>
           </div>
         </DialogContent>

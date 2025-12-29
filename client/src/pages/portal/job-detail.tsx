@@ -96,6 +96,7 @@ interface PortalJobDetail {
   paymentRequests: PaymentRequest[];
   quoteItems: QuoteItem[];
   invoices: PortalInvoice[];
+  hideClientCostBreakdown?: boolean;
 }
 
 export default function PortalJobDetail() {
@@ -468,8 +469,12 @@ export default function PortalJobDetail() {
                         <thead className="bg-muted/50">
                           <tr>
                             <th className="text-left p-3 font-medium">Description</th>
-                            <th className="text-right p-3 font-medium w-16">Qty</th>
-                            <th className="text-right p-3 font-medium w-24">Price</th>
+                            {!job.hideClientCostBreakdown && (
+                              <>
+                                <th className="text-right p-3 font-medium w-16">Qty</th>
+                                <th className="text-right p-3 font-medium w-24">Price</th>
+                              </>
+                            )}
                             <th className="text-right p-3 font-medium w-24">Total</th>
                           </tr>
                         </thead>
@@ -477,8 +482,12 @@ export default function PortalJobDetail() {
                           {job.quoteItems.map((item) => (
                             <tr key={item.id} data-testid={`quote-row-${item.id}`}>
                               <td className="p-3">{item.description}</td>
-                              <td className="p-3 text-right font-mono text-muted-foreground">{item.quantity}</td>
-                              <td className="p-3 text-right font-mono text-muted-foreground">£{parseFloat(item.unitPrice).toFixed(2)}</td>
+                              {!job.hideClientCostBreakdown && (
+                                <>
+                                  <td className="p-3 text-right font-mono text-muted-foreground">{item.quantity}</td>
+                                  <td className="p-3 text-right font-mono text-muted-foreground">£{parseFloat(item.unitPrice).toFixed(2)}</td>
+                                </>
+                              )}
                               <td className="p-3 text-right font-mono font-medium">£{parseFloat(item.lineTotal).toFixed(2)}</td>
                             </tr>
                           ))}

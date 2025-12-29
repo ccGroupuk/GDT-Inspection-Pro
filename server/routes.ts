@@ -384,6 +384,45 @@ export async function registerRoutes(
     }
   });
 
+  // Company Settings
+  app.get("/api/company-settings", async (req, res) => {
+    try {
+      const settings = await storage.getCompanySettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Get company settings error:", error);
+      res.status(500).json({ message: "Failed to load company settings" });
+    }
+  });
+
+  app.get("/api/company-settings/:key", async (req, res) => {
+    try {
+      const settings = await storage.getCompanySettings();
+      const setting = settings.find(s => s.settingKey === req.params.key);
+      if (!setting) {
+        return res.json(null);
+      }
+      res.json(setting);
+    } catch (error) {
+      console.error("Get company setting error:", error);
+      res.status(500).json({ message: "Failed to load company setting" });
+    }
+  });
+
+  app.put("/api/company-settings/:key", async (req, res) => {
+    try {
+      const { value } = req.body;
+      const setting = await storage.upsertCompanySetting({
+        settingKey: req.params.key,
+        settingValue: value,
+      });
+      res.json(setting);
+    } catch (error) {
+      console.error("Update company setting error:", error);
+      res.status(500).json({ message: "Failed to update company setting" });
+    }
+  });
+
   // Contacts
   app.get("/api/contacts", async (req, res) => {
     try {
@@ -1239,10 +1278,57 @@ export async function registerRoutes(
       }
       
       const paymentRequests = await storage.getPaymentRequestsByJob(req.params.jobId);
-      const quoteItems = await storage.getQuoteItemsByJob(req.params.jobId);
+      const rawQuoteItems = await storage.getQuoteItemsByJob(req.params.jobId);
       const allInvoices = await storage.getInvoicesByJob(req.params.jobId);
       const invoices = allInvoices.filter(inv => inv.showInPortal);
-      res.json({ ...job, paymentRequests, quoteItems, invoices });
+      
+      // Apply markup to quote items for client view
+      let markupPercent = 0;
+      if (job.useDefaultMarkup) {
+        const settings = await storage.getCompanySettings();
+        const defaultMarkup = settings.find(s => s.settingKey === "default_material_markup_percent");
+        markupPercent = parseFloat(defaultMarkup?.settingValue || "0");
+      } else if (job.customMarkupPercent) {
+        markupPercent = parseFloat(job.customMarkupPercent);
+      }
+      
+      // Apply markup to items for client view
+      const quoteItems = rawQuoteItems.map(item => {
+        if (markupPercent > 0) {
+          const basePrice = parseFloat(item.unitPrice);
+          const markedUpPrice = basePrice * (1 + markupPercent / 100);
+          const qty = parseFloat(item.quantity);
+          return {
+            ...item,
+            unitPrice: markedUpPrice.toFixed(2),
+            lineTotal: (qty * markedUpPrice).toFixed(2),
+          };
+        }
+        return item;
+      });
+      
+      // Calculate new quoted value with markup
+      const subtotal = quoteItems.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0);
+      let discountAmount = 0;
+      if (job.discountType && job.discountValue) {
+        if (job.discountType === "percentage") {
+          discountAmount = subtotal * (parseFloat(job.discountValue) / 100);
+        } else {
+          discountAmount = parseFloat(job.discountValue);
+        }
+      }
+      const afterDiscount = subtotal - discountAmount;
+      const taxAmount = job.taxEnabled ? afterDiscount * (parseFloat(job.taxRate || "0") / 100) : 0;
+      const clientTotal = (afterDiscount + taxAmount).toFixed(2);
+      
+      res.json({ 
+        ...job, 
+        paymentRequests, 
+        quoteItems, 
+        invoices,
+        quotedValue: clientTotal, // Override with marked-up total
+        hideClientCostBreakdown: job.hideClientCostBreakdown ?? true,
+      });
     } catch (error) {
       console.error("Portal job detail error:", error);
       res.status(500).json({ message: "Failed to load job" });

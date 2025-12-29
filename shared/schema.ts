@@ -107,6 +107,11 @@ export const jobs = pgTable("jobs", {
   quoteResponse: text("quote_response"), // pending, accepted, declined
   quoteRespondedAt: timestamp("quote_responded_at"),
   
+  // Client-facing quote visibility settings
+  useDefaultMarkup: boolean("use_default_markup").default(true), // Apply system default markup
+  customMarkupPercent: decimal("custom_markup_percent", { precision: 5, scale: 2 }), // Override markup %
+  hideClientCostBreakdown: boolean("hide_client_cost_breakdown").default(true), // Hide profit margins from client
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
