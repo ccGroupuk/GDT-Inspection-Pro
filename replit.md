@@ -73,3 +73,36 @@ The CRM is built with a clear separation of concerns, utilizing a modern web sta
   - Generic emails
   
   To enable: Either use Replit's Resend integration (recommended) or add `RESEND_API_KEY` as a secret. Also set `EMAIL_FROM` env var for custom sender address (default: `CCC Group <noreply@cccgroup.co.uk>`).
+
+## Future Business Plans (Saved December 2024)
+
+The owner is exploring commercializing this CRM for other carpentry/construction businesses. Two approaches have been evaluated:
+
+### Option A: Full Multi-Tenant SaaS
+- Convert to shared database with tenant isolation (tenant ID on all 70+ tables)
+- **Effort:** 4-6 months development
+- **Requires:** New auth system, billing integration (Stripe), onboarding flows, tenant provisioning
+- **Best for:** High volume of customers, lower per-customer hosting costs at scale
+- **Complexity:** High - every query must enforce tenant isolation
+
+### Option B: Clone & Manage Model (Recommended Starting Point)
+- Clone the app for each customer as a separate Replit instance
+- **Effort:** 1-2 sessions to create template version, ~30 mins per new customer setup
+- **Revenue Model:** One-time setup fee + monthly management fee
+- **Best for:** Validating market demand, premium service, fewer customers initially
+- **Complexity:** Low - current app already works
+
+### Preparation Steps for Option B (To Do):
+1. Create a "template" version with CCC Group data removed and generic sample data
+2. Add simple branding configuration (company name, logo, primary colors)
+3. Document the customer setup checklist
+4. Define pricing structure (setup fee + monthly management)
+
+### Per-Customer Setup Process:
+1. Clone the template Repl
+2. Create new PostgreSQL database
+3. Configure company details and branding
+4. Set up their custom domain (optional)
+5. Create initial admin employee account
+
+**Status:** Planning to start implementation next week (January 2025).
