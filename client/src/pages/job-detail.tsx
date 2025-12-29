@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { FormSkeleton } from "@/components/loading-skeleton";
+import { ChecklistCompletion, PendingChecklistsWarning } from "@/components/checklist-completion";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useUpload } from "@/hooks/use-upload";
@@ -821,6 +822,10 @@ export default function JobDetail() {
                     ))}
                   </SelectContent>
                 </Select>
+                {/* Pending checklists warning */}
+                <div className="mt-3">
+                  <PendingChecklistsWarning jobId={id!} />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1158,6 +1163,9 @@ export default function JobDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* Mandatory Checklists */}
+          <ChecklistCompletion targetType="job" targetId={id!} />
 
           <Card>
             <CardHeader className="pb-3">
