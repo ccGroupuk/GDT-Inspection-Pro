@@ -1697,7 +1697,13 @@ export const ACCESS_AREAS = [
 // Emergency Callouts - for urgent jobs that need immediate partner response
 export const emergencyCallouts = pgTable("emergency_callouts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: "cascade" }), // Optional - can be created later when partner is assigned
+  
+  // Client details (for standalone emergencies without a job)
+  clientName: text("client_name"),
+  clientPhone: text("client_phone"),
+  clientAddress: text("client_address"),
+  clientPostcode: text("client_postcode"),
   
   // Emergency details
   incidentType: text("incident_type").notNull(), // leak, flood, fire_damage, security, electrical, gas, structural, other

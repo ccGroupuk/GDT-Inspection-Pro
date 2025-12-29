@@ -2955,8 +2955,8 @@ export async function registerRoutes(
         })
       );
       
-      // Get job info
-      const job = await storage.getJob(callout.jobId);
+      // Get job info if exists
+      const job = callout.jobId ? await storage.getJob(callout.jobId) : null;
       
       res.json({ ...callout, responses: responsesWithPartners, job });
     } catch (error) {
@@ -2965,27 +2965,41 @@ export async function registerRoutes(
     }
   });
 
-  // Create emergency callout and broadcast to partners
+  // Create emergency callout and broadcast to partners (supports standalone without job)
   app.post("/api/emergency-callouts", async (req, res) => {
     try {
-      const { jobId, incidentType, priority, description, partnerIds } = req.body;
+      const { jobId, incidentType, priority, description, partnerIds, clientName, clientPhone, clientAddress, clientPostcode } = req.body;
       
-      if (!jobId || !incidentType) {
-        return res.status(400).json({ message: "jobId and incidentType are required" });
+      if (!incidentType || typeof incidentType !== "string" || incidentType.trim() === "") {
+        return res.status(400).json({ message: "incidentType is required" });
+      }
+      
+      // Require at least one partner to broadcast to
+      const partnerIdsArray = Array.isArray(partnerIds) ? partnerIds : [];
+      if (partnerIdsArray.length === 0) {
+        return res.status(400).json({ message: "At least one partner must be selected for the emergency broadcast" });
+      }
+      
+      // For standalone emergencies, require client details
+      if (!jobId && (!clientName || !clientPhone || !clientAddress)) {
+        return res.status(400).json({ message: "Client name, phone, and address are required for standalone emergencies" });
       }
       
       // Create the emergency callout
       const callout = await storage.createEmergencyCallout({
-        jobId,
-        incidentType,
+        jobId: jobId || null,
+        incidentType: incidentType.trim(),
         priority: priority || "high",
         description,
         status: "open",
         broadcastAt: new Date(),
+        clientName: clientName || null,
+        clientPhone: clientPhone || null,
+        clientAddress: clientAddress || null,
+        clientPostcode: clientPostcode || null,
       });
       
       // Create response records for each partner (broadcasting to them)
-      const partnerIdsArray = partnerIds || [];
       for (const partnerId of partnerIdsArray) {
         await storage.createEmergencyCalloutResponse({
           calloutId: callout.id,
@@ -3029,21 +3043,71 @@ export async function registerRoutes(
         }
       }
       
-      // Update the callout
+      // Get the current callout
+      const existingCallout = await storage.getEmergencyCallout(req.params.id);
+      if (!existingCallout) {
+        return res.status(404).json({ message: "Callout not found" });
+      }
+      
+      let jobId = existingCallout.jobId;
+      
+      // If this is a standalone emergency (no job), create contact and job now
+      if (!jobId && existingCallout.clientName && existingCallout.clientPhone && existingCallout.clientAddress) {
+        // Try to find existing contact by phone or create a new one
+        const allContacts = await storage.getContacts();
+        let contact = allContacts.find(c => 
+          c.phone === existingCallout.clientPhone
+        );
+        
+        if (!contact) {
+          contact = await storage.createContact({
+            name: existingCallout.clientName,
+            phone: existingCallout.clientPhone,
+            address: existingCallout.clientAddress,
+            postcode: existingCallout.clientPostcode || "",
+            notes: "Created from emergency callout",
+          });
+        }
+        
+        // Use proper job number generation from storage
+        const jobNumber = await storage.getNextJobNumber();
+        
+        // Get incident type label for service type (safely handle null/empty incidentType)
+        const incidentTypeStr = existingCallout.incidentType || "emergency";
+        const incidentLabel = incidentTypeStr.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        
+        // Create job
+        const job = await storage.createJob({
+          jobNumber,
+          contactId: contact.id,
+          serviceType: `Emergency: ${incidentLabel}`,
+          description: existingCallout.description || `Emergency callout - ${incidentLabel}`,
+          jobAddress: existingCallout.clientAddress,
+          jobPostcode: existingCallout.clientPostcode || "",
+          deliveryType: "partner",
+          partnerId: response.partnerId,
+          status: "in_progress",
+          partnerStatus: "accepted",
+        });
+        
+        jobId = job.id;
+        
+        // Update the callout with the job ID
+        await storage.updateEmergencyCallout(req.params.id, { jobId });
+      } else if (jobId) {
+        // Update existing job with the assigned partner
+        await storage.updateJob(jobId, {
+          partnerId: response.partnerId,
+          partnerStatus: "accepted",
+        });
+      }
+      
+      // Update the callout status
       const callout = await storage.updateEmergencyCallout(req.params.id, {
         status: "assigned",
         assignedPartnerId: response.partnerId,
         assignedAt: new Date(),
       });
-      
-      // Update the job with the assigned partner
-      const existingCallout = await storage.getEmergencyCallout(req.params.id);
-      if (existingCallout?.jobId) {
-        await storage.updateJob(existingCallout.jobId, {
-          partnerId: response.partnerId,
-          partnerStatus: "accepted",
-        });
-      }
       
       res.json(callout);
     } catch (error) {

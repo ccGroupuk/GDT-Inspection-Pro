@@ -14,6 +14,7 @@ import {
   HelpCircle,
   UserCog,
   LogOut,
+  Siren,
 } from "lucide-react";
 import {
   Sidebar,
@@ -69,6 +70,11 @@ const menuItems = [
     title: "Employees",
     url: "/employees",
     icon: UserCog,
+  },
+  {
+    title: "Emergency Callouts",
+    url: "/emergency-callouts",
+    icon: Siren,
   },
   {
     title: "SEO Power House",
