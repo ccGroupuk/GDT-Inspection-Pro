@@ -55,6 +55,7 @@ import QuoteTemplates from "@/pages/quote-templates";
 import Assets from "@/pages/assets";
 import JobHub from "@/pages/job-hub";
 import Checklists from "@/pages/checklists";
+import Wellbeing from "@/pages/wellbeing";
 
 function AdminRouter() {
   return (
@@ -79,6 +80,7 @@ function AdminRouter() {
       <Route path="/assets" component={Assets} />
       <Route path="/checklists" component={Checklists} />
       <Route path="/seo" component={SEOPowerHouse} />
+      <Route path="/wellbeing" component={Wellbeing} />
       <Route path="/help-center" component={HelpCenterAdmin} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />

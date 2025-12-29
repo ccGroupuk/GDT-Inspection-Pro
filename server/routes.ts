@@ -8527,13 +8527,14 @@ export function registerChecklistRoutes(app: Express) {
         }
       };
       
-      const isComplete = item ? hasValidResponse(item.itemType) : value === true;
+      // Since we're using checkbox-style items, just check value
+      const isComplete = value === true;
       
       // Upsert response with all type-specific fields
       const response = await storage.upsertChecklistResponse({
         instanceId: req.params.id,
         itemId,
-        value: item?.itemType === 'checkbox' ? value : isComplete,
+        value: isComplete,
         textValue,
         numberValue,
         signatureData,
@@ -8549,7 +8550,7 @@ export function registerChecklistRoutes(app: Express) {
         action: isComplete ? 'item_completed' : 'item_uncompleted',
         actorId: employee?.id,
         actorName: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown',
-        metadata: JSON.stringify({ itemId, itemType: item?.itemType }),
+        metadata: JSON.stringify({ itemId }),
       });
       
       // Check if all required items are completed
@@ -8560,14 +8561,8 @@ export function registerChecklistRoutes(app: Express) {
       const isItemCompleted = (itemToCheck: typeof items[0]): boolean => {
         const resp = responses.find(r => r.itemId === itemToCheck.id);
         if (!resp) return false;
-        switch (itemToCheck.itemType) {
-          case 'checkbox': return resp.value === true;
-          case 'text': return !!(resp.textValue && resp.textValue.trim());
-          case 'number': return resp.numberValue !== null && resp.numberValue !== undefined;
-          case 'photo': return !!(resp.photoUrl && resp.photoUrl.trim());
-          case 'signature': return !!(resp.signatureData && resp.signatureData.trim());
-          default: return resp.value === true;
-        }
+        // Simplified: item is complete if value is true
+        return resp.value === true;
       };
       const allRequiredCompleted = requiredItems.every(i => isItemCompleted(i));
       
@@ -8628,6 +8623,286 @@ export function registerChecklistRoutes(app: Express) {
     } catch (error) {
       console.error("Get audit events error:", error);
       res.status(500).json({ message: "Failed to get audit events" });
+    }
+  });
+
+  // ==================== OWNER WELLBEING SYSTEM ====================
+
+  // Get wellbeing settings for current employee
+  app.get("/api/wellbeing/settings", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const settings = await storage.getOwnerWellbeingSettings(employee.id);
+      res.json(settings || null);
+    } catch (error) {
+      console.error("Get wellbeing settings error:", error);
+      res.status(500).json({ message: "Failed to get wellbeing settings" });
+    }
+  });
+
+  // Save wellbeing settings
+  app.post("/api/wellbeing/settings", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const settings = await storage.upsertOwnerWellbeingSettings({
+        ...req.body,
+        employeeId: employee.id,
+      });
+      res.json(settings);
+    } catch (error) {
+      console.error("Save wellbeing settings error:", error);
+      res.status(500).json({ message: "Failed to save wellbeing settings" });
+    }
+  });
+
+  // Get personal tasks for current employee
+  app.get("/api/wellbeing/personal-tasks", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const tasks = await storage.getPersonalTasks(employee.id);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Get personal tasks error:", error);
+      res.status(500).json({ message: "Failed to get personal tasks" });
+    }
+  });
+
+  // Get morning tasks for current employee
+  app.get("/api/wellbeing/morning-tasks", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const tasks = await storage.getMorningTasks(employee.id);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Get morning tasks error:", error);
+      res.status(500).json({ message: "Failed to get morning tasks" });
+    }
+  });
+
+  // Get upcoming personal tasks
+  app.get("/api/wellbeing/upcoming-tasks", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const daysAhead = parseInt(req.query.days as string) || 7;
+      const tasks = await storage.getUpcomingPersonalTasks(employee.id, daysAhead);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Get upcoming personal tasks error:", error);
+      res.status(500).json({ message: "Failed to get upcoming personal tasks" });
+    }
+  });
+
+  // Create personal task
+  app.post("/api/wellbeing/personal-tasks", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const task = await storage.createPersonalTask({
+        ...req.body,
+        employeeId: employee.id,
+      });
+      res.json(task);
+    } catch (error) {
+      console.error("Create personal task error:", error);
+      res.status(500).json({ message: "Failed to create personal task" });
+    }
+  });
+
+  // Update personal task
+  app.patch("/api/wellbeing/personal-tasks/:id", async (req, res) => {
+    try {
+      const task = await storage.updatePersonalTask(req.params.id, req.body);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Update personal task error:", error);
+      res.status(500).json({ message: "Failed to update personal task" });
+    }
+  });
+
+  // Complete personal task
+  app.post("/api/wellbeing/personal-tasks/:id/complete", async (req, res) => {
+    try {
+      const task = await storage.updatePersonalTask(req.params.id, {
+        isCompleted: true,
+        completedAt: new Date(),
+      });
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Complete personal task error:", error);
+      res.status(500).json({ message: "Failed to complete personal task" });
+    }
+  });
+
+  // Delete personal task
+  app.delete("/api/wellbeing/personal-tasks/:id", async (req, res) => {
+    try {
+      await storage.deletePersonalTask(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete personal task error:", error);
+      res.status(500).json({ message: "Failed to delete personal task" });
+    }
+  });
+
+  // Get daily focus tasks for today
+  app.get("/api/wellbeing/daily-focus", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const dateStr = req.query.date as string;
+      const date = dateStr ? new Date(dateStr) : new Date();
+      const tasks = await storage.getDailyFocusTasks(employee.id, date);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Get daily focus tasks error:", error);
+      res.status(500).json({ message: "Failed to get daily focus tasks" });
+    }
+  });
+
+  // Create daily focus task
+  app.post("/api/wellbeing/daily-focus", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const task = await storage.createDailyFocusTask({
+        ...req.body,
+        employeeId: employee.id,
+        focusDate: req.body.focusDate ? new Date(req.body.focusDate) : new Date(),
+      });
+      res.json(task);
+    } catch (error) {
+      console.error("Create daily focus task error:", error);
+      res.status(500).json({ message: "Failed to create daily focus task" });
+    }
+  });
+
+  // Update daily focus task
+  app.patch("/api/wellbeing/daily-focus/:id", async (req, res) => {
+    try {
+      const task = await storage.updateDailyFocusTask(req.params.id, req.body);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Update daily focus task error:", error);
+      res.status(500).json({ message: "Failed to update daily focus task" });
+    }
+  });
+
+  // Complete daily focus task
+  app.post("/api/wellbeing/daily-focus/:id/complete", async (req, res) => {
+    try {
+      const task = await storage.updateDailyFocusTask(req.params.id, {
+        isCompleted: true,
+      } as any);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Complete daily focus task error:", error);
+      res.status(500).json({ message: "Failed to complete daily focus task" });
+    }
+  });
+
+  // Delete daily focus task
+  app.delete("/api/wellbeing/daily-focus/:id", async (req, res) => {
+    try {
+      await storage.deleteDailyFocusTask(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete daily focus task error:", error);
+      res.status(500).json({ message: "Failed to delete daily focus task" });
+    }
+  });
+
+  // Log nudge action (shown, dismissed, snoozed)
+  app.post("/api/wellbeing/nudge-log", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const log = await storage.createWellbeingNudgeLog({
+        ...req.body,
+        employeeId: employee.id,
+      });
+      res.json(log);
+    } catch (error) {
+      console.error("Log nudge action error:", error);
+      res.status(500).json({ message: "Failed to log nudge action" });
+    }
+  });
+
+  // Get latest nudge log for a type
+  app.get("/api/wellbeing/nudge-log/:type", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const log = await storage.getLatestNudgeLog(employee.id, req.params.type);
+      res.json(log || null);
+    } catch (error) {
+      console.error("Get latest nudge log error:", error);
+      res.status(500).json({ message: "Failed to get nudge log" });
+    }
+  });
+
+  // Get wellbeing dashboard data (combined endpoint for efficiency)
+  app.get("/api/wellbeing/dashboard", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const today = new Date();
+      const [settings, morningTasks, dailyFocus, upcomingTasks] = await Promise.all([
+        storage.getOwnerWellbeingSettings(employee.id),
+        storage.getMorningTasks(employee.id),
+        storage.getDailyFocusTasks(employee.id, today),
+        storage.getUpcomingPersonalTasks(employee.id, 3), // Next 3 days
+      ]);
+
+      res.json({
+        settings,
+        morningTasks,
+        dailyFocus,
+        upcomingTasks,
+        nextAppointment: upcomingTasks.find(t => t.taskType === 'appointment'),
+      });
+    } catch (error) {
+      console.error("Get wellbeing dashboard error:", error);
+      res.status(500).json({ message: "Failed to get wellbeing dashboard" });
     }
   });
 }

@@ -19,6 +19,7 @@ import {
   FileText,
   Truck,
   ClipboardCheck,
+  Heart,
 } from "lucide-react";
 import {
   Sidebar,
@@ -109,6 +110,11 @@ const menuItems = [
     title: "SEO Power House",
     url: "/seo",
     icon: Megaphone,
+  },
+  {
+    title: "Work-Life Balance",
+    url: "/wellbeing",
+    icon: Heart,
   },
   {
     title: "Help Center",

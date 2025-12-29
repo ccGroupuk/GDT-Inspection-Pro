@@ -2495,7 +2495,7 @@ export const personalTasksRelations = relations(personalTasks, ({ one }) => ({
   }),
 }));
 
-export const insertPersonalTaskSchema = createInsertSchema(personalTasks).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
+export const insertPersonalTaskSchema = createInsertSchema(personalTasks).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertPersonalTask = z.infer<typeof insertPersonalTaskSchema>;
 export type PersonalTask = typeof personalTasks.$inferSelect;
 
@@ -2530,7 +2530,7 @@ export const dailyFocusTasksRelations = relations(dailyFocusTasks, ({ one }) => 
   }),
 }));
 
-export const insertDailyFocusTaskSchema = createInsertSchema(dailyFocusTasks).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
+export const insertDailyFocusTaskSchema = createInsertSchema(dailyFocusTasks).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertDailyFocusTask = z.infer<typeof insertDailyFocusTaskSchema>;
 export type DailyFocusTask = typeof dailyFocusTasks.$inferSelect;
 

@@ -62,6 +62,10 @@ import {
   checklistInstances, type ChecklistInstance, type InsertChecklistInstance,
   checklistResponses, type ChecklistResponse, type InsertChecklistResponse,
   checklistAuditEvents, type ChecklistAuditEvent, type InsertChecklistAuditEvent,
+  ownerWellbeingSettings, type OwnerWellbeingSettings, type InsertOwnerWellbeingSettings,
+  personalTasks, type PersonalTask, type InsertPersonalTask,
+  dailyFocusTasks, type DailyFocusTask, type InsertDailyFocusTask,
+  wellbeingNudgeLogs, type WellbeingNudgeLog, type InsertWellbeingNudgeLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -505,6 +509,33 @@ export interface IStorage {
   // Checklist Audit Events
   getChecklistAuditEvents(instanceId: string): Promise<ChecklistAuditEvent[]>;
   createChecklistAuditEvent(event: InsertChecklistAuditEvent): Promise<ChecklistAuditEvent>;
+
+  // Owner Wellbeing Settings
+  getOwnerWellbeingSettings(employeeId: string): Promise<OwnerWellbeingSettings | undefined>;
+  upsertOwnerWellbeingSettings(settings: InsertOwnerWellbeingSettings): Promise<OwnerWellbeingSettings>;
+
+  // Personal Tasks
+  getPersonalTasks(employeeId: string): Promise<PersonalTask[]>;
+  getPersonalTasksByDate(employeeId: string, date: Date): Promise<PersonalTask[]>;
+  getMorningTasks(employeeId: string): Promise<PersonalTask[]>;
+  getUpcomingPersonalTasks(employeeId: string, daysAhead: number): Promise<PersonalTask[]>;
+  getPersonalTask(id: string): Promise<PersonalTask | undefined>;
+  createPersonalTask(task: InsertPersonalTask): Promise<PersonalTask>;
+  updatePersonalTask(id: string, task: Partial<InsertPersonalTask>): Promise<PersonalTask | undefined>;
+  deletePersonalTask(id: string): Promise<boolean>;
+
+  // Daily Focus Tasks
+  getDailyFocusTasks(employeeId: string, date: Date): Promise<DailyFocusTask[]>;
+  getDailyFocusTask(id: string): Promise<DailyFocusTask | undefined>;
+  createDailyFocusTask(task: InsertDailyFocusTask): Promise<DailyFocusTask>;
+  updateDailyFocusTask(id: string, task: Partial<InsertDailyFocusTask>): Promise<DailyFocusTask | undefined>;
+  deleteDailyFocusTask(id: string): Promise<boolean>;
+  clearDailyFocusTasks(employeeId: string, date: Date): Promise<boolean>;
+
+  // Wellbeing Nudge Logs
+  getWellbeingNudgeLogs(employeeId: string, type: string): Promise<WellbeingNudgeLog[]>;
+  getLatestNudgeLog(employeeId: string, type: string): Promise<WellbeingNudgeLog | undefined>;
+  createWellbeingNudgeLog(log: InsertWellbeingNudgeLog): Promise<WellbeingNudgeLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2446,6 +2477,174 @@ export class DatabaseStorage implements IStorage {
 
   async createChecklistAuditEvent(event: InsertChecklistAuditEvent): Promise<ChecklistAuditEvent> {
     const [created] = await db.insert(checklistAuditEvents).values(event).returning();
+    return created;
+  }
+
+  // Owner Wellbeing Settings
+  async getOwnerWellbeingSettings(employeeId: string): Promise<OwnerWellbeingSettings | undefined> {
+    const [settings] = await db.select().from(ownerWellbeingSettings).where(eq(ownerWellbeingSettings.employeeId, employeeId));
+    return settings || undefined;
+  }
+
+  async upsertOwnerWellbeingSettings(settings: InsertOwnerWellbeingSettings): Promise<OwnerWellbeingSettings> {
+    const existing = await this.getOwnerWellbeingSettings(settings.employeeId);
+    if (existing) {
+      const [updated] = await db.update(ownerWellbeingSettings)
+        .set({ ...settings, updatedAt: new Date() })
+        .where(eq(ownerWellbeingSettings.employeeId, settings.employeeId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(ownerWellbeingSettings).values(settings).returning();
+    return created;
+  }
+
+  // Personal Tasks
+  async getPersonalTasks(employeeId: string): Promise<PersonalTask[]> {
+    return db.select().from(personalTasks)
+      .where(eq(personalTasks.employeeId, employeeId))
+      .orderBy(asc(personalTasks.sortOrder), desc(personalTasks.createdAt));
+  }
+
+  async getPersonalTasksByDate(employeeId: string, date: Date): Promise<PersonalTask[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    return db.select().from(personalTasks)
+      .where(and(
+        eq(personalTasks.employeeId, employeeId),
+        gte(personalTasks.dueDate, startOfDay),
+        lte(personalTasks.dueDate, endOfDay)
+      ))
+      .orderBy(asc(personalTasks.sortOrder));
+  }
+
+  async getMorningTasks(employeeId: string): Promise<PersonalTask[]> {
+    return db.select().from(personalTasks)
+      .where(and(
+        eq(personalTasks.employeeId, employeeId),
+        eq(personalTasks.isMorningTask, true),
+        eq(personalTasks.isCompleted, false)
+      ))
+      .orderBy(asc(personalTasks.sortOrder));
+  }
+
+  async getUpcomingPersonalTasks(employeeId: string, daysAhead: number): Promise<PersonalTask[]> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const futureDate = new Date(today);
+    futureDate.setDate(futureDate.getDate() + daysAhead);
+    
+    return db.select().from(personalTasks)
+      .where(and(
+        eq(personalTasks.employeeId, employeeId),
+        gte(personalTasks.dueDate, today),
+        lte(personalTasks.dueDate, futureDate)
+      ))
+      .orderBy(asc(personalTasks.dueDate));
+  }
+
+  async getPersonalTask(id: string): Promise<PersonalTask | undefined> {
+    const [task] = await db.select().from(personalTasks).where(eq(personalTasks.id, id));
+    return task || undefined;
+  }
+
+  async createPersonalTask(task: InsertPersonalTask): Promise<PersonalTask> {
+    const [created] = await db.insert(personalTasks).values(task).returning();
+    return created;
+  }
+
+  async updatePersonalTask(id: string, task: Partial<InsertPersonalTask>): Promise<PersonalTask | undefined> {
+    const [updated] = await db.update(personalTasks)
+      .set({ ...task, updatedAt: new Date() })
+      .where(eq(personalTasks.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deletePersonalTask(id: string): Promise<boolean> {
+    await db.delete(personalTasks).where(eq(personalTasks.id, id));
+    return true;
+  }
+
+  // Daily Focus Tasks
+  async getDailyFocusTasks(employeeId: string, date: Date): Promise<DailyFocusTask[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    return db.select().from(dailyFocusTasks)
+      .where(and(
+        eq(dailyFocusTasks.employeeId, employeeId),
+        gte(dailyFocusTasks.focusDate, startOfDay),
+        lte(dailyFocusTasks.focusDate, endOfDay)
+      ))
+      .orderBy(asc(dailyFocusTasks.priority));
+  }
+
+  async getDailyFocusTask(id: string): Promise<DailyFocusTask | undefined> {
+    const [task] = await db.select().from(dailyFocusTasks).where(eq(dailyFocusTasks.id, id));
+    return task || undefined;
+  }
+
+  async createDailyFocusTask(task: InsertDailyFocusTask): Promise<DailyFocusTask> {
+    const [created] = await db.insert(dailyFocusTasks).values(task).returning();
+    return created;
+  }
+
+  async updateDailyFocusTask(id: string, task: Partial<InsertDailyFocusTask>): Promise<DailyFocusTask | undefined> {
+    const [updated] = await db.update(dailyFocusTasks)
+      .set({ ...task, updatedAt: new Date() })
+      .where(eq(dailyFocusTasks.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteDailyFocusTask(id: string): Promise<boolean> {
+    await db.delete(dailyFocusTasks).where(eq(dailyFocusTasks.id, id));
+    return true;
+  }
+
+  async clearDailyFocusTasks(employeeId: string, date: Date): Promise<boolean> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    await db.delete(dailyFocusTasks).where(and(
+      eq(dailyFocusTasks.employeeId, employeeId),
+      gte(dailyFocusTasks.focusDate, startOfDay),
+      lte(dailyFocusTasks.focusDate, endOfDay)
+    ));
+    return true;
+  }
+
+  // Wellbeing Nudge Logs
+  async getWellbeingNudgeLogs(employeeId: string, type: string): Promise<WellbeingNudgeLog[]> {
+    return db.select().from(wellbeingNudgeLogs)
+      .where(and(
+        eq(wellbeingNudgeLogs.employeeId, employeeId),
+        eq(wellbeingNudgeLogs.nudgeType, type)
+      ))
+      .orderBy(desc(wellbeingNudgeLogs.createdAt));
+  }
+
+  async getLatestNudgeLog(employeeId: string, type: string): Promise<WellbeingNudgeLog | undefined> {
+    const [log] = await db.select().from(wellbeingNudgeLogs)
+      .where(and(
+        eq(wellbeingNudgeLogs.employeeId, employeeId),
+        eq(wellbeingNudgeLogs.nudgeType, type)
+      ))
+      .orderBy(desc(wellbeingNudgeLogs.createdAt))
+      .limit(1);
+    return log || undefined;
+  }
+
+  async createWellbeingNudgeLog(log: InsertWellbeingNudgeLog): Promise<WellbeingNudgeLog> {
+    const [created] = await db.insert(wellbeingNudgeLogs).values(log).returning();
     return created;
   }
 }
