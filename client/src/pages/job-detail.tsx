@@ -2061,6 +2061,11 @@ export default function JobDetail() {
                             {response.partner?.businessName || "Unknown Partner"}
                           </span>
                           <div className="flex items-center gap-2">
+                            {response.partner?.emergencyCalloutFee != null && !isNaN(parseFloat(String(response.partner.emergencyCalloutFee))) && (
+                              <Badge variant="outline" className="text-xs">
+                                £{parseFloat(String(response.partner.emergencyCalloutFee)).toFixed(2)}/hr
+                              </Badge>
+                            )}
                             {response.proposedArrivalMinutes && (
                               <Badge variant="outline" className="text-xs">
                                 <Clock className="w-3 h-3 mr-1" />

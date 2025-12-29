@@ -47,6 +47,7 @@ export const tradePartners = pgTable("trade_partners", {
   // Emergency callout availability
   emergencyAvailable: boolean("emergency_available").default(false), // Available for emergency callouts
   emergencyNote: text("emergency_note"), // Notes about availability
+  emergencyCalloutFee: decimal("emergency_callout_fee", { precision: 10, scale: 2 }), // First hour labour fee for emergencies
 });
 
 export const insertTradePartnerSchema = createInsertSchema(tradePartners).omit({ id: true });

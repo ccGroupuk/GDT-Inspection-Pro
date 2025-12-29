@@ -71,6 +71,8 @@ export default function Partners() {
       rating: 5,
       notes: "",
       isActive: true,
+      emergencyAvailable: false,
+      emergencyCalloutFee: "",
     },
   });
 
@@ -206,6 +208,8 @@ export default function Partners() {
       rating: partner.rating || 5,
       notes: partner.notes || "",
       isActive: partner.isActive ?? true,
+      emergencyAvailable: partner.emergencyAvailable || false,
+      emergencyCalloutFee: partner.emergencyCalloutFee || "",
     });
     setIsDialogOpen(true);
   };
@@ -226,6 +230,8 @@ export default function Partners() {
       rating: 5,
       notes: "",
       isActive: true,
+      emergencyAvailable: false,
+      emergencyCalloutFee: "",
     });
     setIsDialogOpen(true);
   };
@@ -372,6 +378,36 @@ export default function Partners() {
                     data-testid="switch-active"
                   />
                   <Label>Active Partner</Label>
+                </div>
+              </div>
+
+              {/* Emergency Callout Section */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-medium mb-3">Emergency Callout</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={form.watch("emergencyAvailable") || false}
+                      onCheckedChange={(checked) => form.setValue("emergencyAvailable", checked)}
+                      data-testid="switch-emergency-available"
+                    />
+                    <Label>Available for Emergency Callouts</Label>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="emergencyCalloutFee">First Hour Callout Fee</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">£</span>
+                      <Input
+                        {...form.register("emergencyCalloutFee")}
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        className="pl-7"
+                        data-testid="input-emergency-callout-fee"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">Labour charge for first hour of emergency work</p>
+                  </div>
                 </div>
               </div>
 

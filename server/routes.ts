@@ -475,7 +475,16 @@ export async function registerRoutes(
 
   app.post("/api/partners", async (req, res) => {
     try {
-      const data = insertTradePartnerSchema.parse(req.body);
+      // Normalize emergencyCalloutFee: empty string to null, otherwise parse as decimal
+      const body = { ...req.body };
+      if (body.emergencyCalloutFee === "" || body.emergencyCalloutFee === undefined) {
+        body.emergencyCalloutFee = null;
+      } else if (typeof body.emergencyCalloutFee === "string") {
+        const parsed = parseFloat(body.emergencyCalloutFee);
+        body.emergencyCalloutFee = isNaN(parsed) ? null : parsed.toFixed(2);
+      }
+      
+      const data = insertTradePartnerSchema.parse(body);
       const partner = await storage.createTradePartner(data);
       res.status(201).json(partner);
     } catch (error) {
@@ -489,7 +498,16 @@ export async function registerRoutes(
 
   app.patch("/api/partners/:id", async (req, res) => {
     try {
-      const data = insertTradePartnerSchema.partial().parse(req.body);
+      // Normalize emergencyCalloutFee: empty string to null, otherwise parse as decimal
+      const body = { ...req.body };
+      if (body.emergencyCalloutFee === "" || body.emergencyCalloutFee === undefined) {
+        body.emergencyCalloutFee = null;
+      } else if (typeof body.emergencyCalloutFee === "string") {
+        const parsed = parseFloat(body.emergencyCalloutFee);
+        body.emergencyCalloutFee = isNaN(parsed) ? null : parsed.toFixed(2);
+      }
+      
+      const data = insertTradePartnerSchema.partial().parse(body);
       const partner = await storage.updateTradePartner(req.params.id, data);
       if (!partner) {
         return res.status(404).json({ message: "Partner not found" });
