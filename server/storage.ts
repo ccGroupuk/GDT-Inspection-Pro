@@ -53,6 +53,11 @@ import {
   assets, type Asset, type InsertAsset,
   assetFaults, type AssetFault, type InsertAssetFault,
   assetReminders, type AssetReminder, type InsertAssetReminder,
+  checklistTemplates, type ChecklistTemplate, type InsertChecklistTemplate,
+  checklistItems, type ChecklistItem, type InsertChecklistItem,
+  checklistInstances, type ChecklistInstance, type InsertChecklistInstance,
+  checklistResponses, type ChecklistResponse, type InsertChecklistResponse,
+  checklistAuditEvents, type ChecklistAuditEvent, type InsertChecklistAuditEvent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -427,6 +432,43 @@ export interface IStorage {
   createAssetReminder(reminder: InsertAssetReminder): Promise<AssetReminder>;
   updateAssetReminder(id: string, reminder: Partial<InsertAssetReminder>): Promise<AssetReminder | undefined>;
   deleteAssetReminder(id: string): Promise<boolean>;
+
+  // Checklist Templates
+  getChecklistTemplates(): Promise<ChecklistTemplate[]>;
+  getChecklistTemplate(id: string): Promise<ChecklistTemplate | undefined>;
+  getChecklistTemplateByCode(code: string): Promise<ChecklistTemplate | undefined>;
+  createChecklistTemplate(template: InsertChecklistTemplate): Promise<ChecklistTemplate>;
+  updateChecklistTemplate(id: string, template: Partial<InsertChecklistTemplate>): Promise<ChecklistTemplate | undefined>;
+  deleteChecklistTemplate(id: string): Promise<boolean>;
+
+  // Checklist Items
+  getChecklistItems(templateId: string): Promise<ChecklistItem[]>;
+  getChecklistItem(id: string): Promise<ChecklistItem | undefined>;
+  createChecklistItem(item: InsertChecklistItem): Promise<ChecklistItem>;
+  updateChecklistItem(id: string, item: Partial<InsertChecklistItem>): Promise<ChecklistItem | undefined>;
+  deleteChecklistItem(id: string): Promise<boolean>;
+  deleteChecklistItemsByTemplate(templateId: string): Promise<boolean>;
+
+  // Checklist Instances
+  getChecklistInstances(): Promise<ChecklistInstance[]>;
+  getChecklistInstance(id: string): Promise<ChecklistInstance | undefined>;
+  getChecklistInstancesByTarget(targetType: string, targetId: string): Promise<ChecklistInstance[]>;
+  getChecklistInstancesByStatus(status: string): Promise<ChecklistInstance[]>;
+  getPendingChecklistInstancesForJob(jobId: string): Promise<ChecklistInstance[]>;
+  createChecklistInstance(instance: InsertChecklistInstance): Promise<ChecklistInstance>;
+  updateChecklistInstance(id: string, instance: Partial<InsertChecklistInstance>): Promise<ChecklistInstance | undefined>;
+  deleteChecklistInstance(id: string): Promise<boolean>;
+
+  // Checklist Responses
+  getChecklistResponses(instanceId: string): Promise<ChecklistResponse[]>;
+  getChecklistResponse(id: string): Promise<ChecklistResponse | undefined>;
+  createChecklistResponse(response: InsertChecklistResponse): Promise<ChecklistResponse>;
+  updateChecklistResponse(id: string, response: Partial<InsertChecklistResponse>): Promise<ChecklistResponse | undefined>;
+  upsertChecklistResponse(response: InsertChecklistResponse): Promise<ChecklistResponse>;
+
+  // Checklist Audit Events
+  getChecklistAuditEvents(instanceId: string): Promise<ChecklistAuditEvent[]>;
+  createChecklistAuditEvent(event: InsertChecklistAuditEvent): Promise<ChecklistAuditEvent>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2088,6 +2130,154 @@ export class DatabaseStorage implements IStorage {
   async deleteAssetReminder(id: string): Promise<boolean> {
     await db.delete(assetReminders).where(eq(assetReminders.id, id));
     return true;
+  }
+
+  // Checklist Templates
+  async getChecklistTemplates(): Promise<ChecklistTemplate[]> {
+    return db.select().from(checklistTemplates).orderBy(asc(checklistTemplates.name));
+  }
+
+  async getChecklistTemplate(id: string): Promise<ChecklistTemplate | undefined> {
+    const [template] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, id));
+    return template || undefined;
+  }
+
+  async getChecklistTemplateByCode(code: string): Promise<ChecklistTemplate | undefined> {
+    const [template] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.code, code));
+    return template || undefined;
+  }
+
+  async createChecklistTemplate(template: InsertChecklistTemplate): Promise<ChecklistTemplate> {
+    const [created] = await db.insert(checklistTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateChecklistTemplate(id: string, template: Partial<InsertChecklistTemplate>): Promise<ChecklistTemplate | undefined> {
+    const [updated] = await db.update(checklistTemplates).set({ ...template, updatedAt: new Date() }).where(eq(checklistTemplates.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteChecklistTemplate(id: string): Promise<boolean> {
+    await db.delete(checklistTemplates).where(eq(checklistTemplates.id, id));
+    return true;
+  }
+
+  // Checklist Items
+  async getChecklistItems(templateId: string): Promise<ChecklistItem[]> {
+    return db.select().from(checklistItems).where(eq(checklistItems.templateId, templateId)).orderBy(asc(checklistItems.itemOrder));
+  }
+
+  async getChecklistItem(id: string): Promise<ChecklistItem | undefined> {
+    const [item] = await db.select().from(checklistItems).where(eq(checklistItems.id, id));
+    return item || undefined;
+  }
+
+  async createChecklistItem(item: InsertChecklistItem): Promise<ChecklistItem> {
+    const [created] = await db.insert(checklistItems).values(item).returning();
+    return created;
+  }
+
+  async updateChecklistItem(id: string, item: Partial<InsertChecklistItem>): Promise<ChecklistItem | undefined> {
+    const [updated] = await db.update(checklistItems).set(item).where(eq(checklistItems.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteChecklistItem(id: string): Promise<boolean> {
+    await db.delete(checklistItems).where(eq(checklistItems.id, id));
+    return true;
+  }
+
+  async deleteChecklistItemsByTemplate(templateId: string): Promise<boolean> {
+    await db.delete(checklistItems).where(eq(checklistItems.templateId, templateId));
+    return true;
+  }
+
+  // Checklist Instances
+  async getChecklistInstances(): Promise<ChecklistInstance[]> {
+    return db.select().from(checklistInstances).orderBy(desc(checklistInstances.createdAt));
+  }
+
+  async getChecklistInstance(id: string): Promise<ChecklistInstance | undefined> {
+    const [instance] = await db.select().from(checklistInstances).where(eq(checklistInstances.id, id));
+    return instance || undefined;
+  }
+
+  async getChecklistInstancesByTarget(targetType: string, targetId: string): Promise<ChecklistInstance[]> {
+    return db.select().from(checklistInstances).where(
+      and(eq(checklistInstances.targetType, targetType), eq(checklistInstances.targetId, targetId))
+    ).orderBy(desc(checklistInstances.createdAt));
+  }
+
+  async getChecklistInstancesByStatus(status: string): Promise<ChecklistInstance[]> {
+    return db.select().from(checklistInstances).where(eq(checklistInstances.status, status)).orderBy(desc(checklistInstances.createdAt));
+  }
+
+  async getPendingChecklistInstancesForJob(jobId: string): Promise<ChecklistInstance[]> {
+    return db.select().from(checklistInstances).where(
+      and(
+        eq(checklistInstances.targetType, 'job'),
+        eq(checklistInstances.targetId, jobId),
+        or(eq(checklistInstances.status, 'pending'), eq(checklistInstances.status, 'in_progress'))
+      )
+    ).orderBy(desc(checklistInstances.createdAt));
+  }
+
+  async createChecklistInstance(instance: InsertChecklistInstance): Promise<ChecklistInstance> {
+    const [created] = await db.insert(checklistInstances).values(instance).returning();
+    return created;
+  }
+
+  async updateChecklistInstance(id: string, instance: Partial<InsertChecklistInstance>): Promise<ChecklistInstance | undefined> {
+    const [updated] = await db.update(checklistInstances).set({ ...instance, updatedAt: new Date() }).where(eq(checklistInstances.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteChecklistInstance(id: string): Promise<boolean> {
+    await db.delete(checklistInstances).where(eq(checklistInstances.id, id));
+    return true;
+  }
+
+  // Checklist Responses
+  async getChecklistResponses(instanceId: string): Promise<ChecklistResponse[]> {
+    return db.select().from(checklistResponses).where(eq(checklistResponses.instanceId, instanceId));
+  }
+
+  async getChecklistResponse(id: string): Promise<ChecklistResponse | undefined> {
+    const [response] = await db.select().from(checklistResponses).where(eq(checklistResponses.id, id));
+    return response || undefined;
+  }
+
+  async createChecklistResponse(response: InsertChecklistResponse): Promise<ChecklistResponse> {
+    const [created] = await db.insert(checklistResponses).values(response).returning();
+    return created;
+  }
+
+  async updateChecklistResponse(id: string, response: Partial<InsertChecklistResponse>): Promise<ChecklistResponse | undefined> {
+    const [updated] = await db.update(checklistResponses).set({ ...response, updatedAt: new Date() }).where(eq(checklistResponses.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async upsertChecklistResponse(response: InsertChecklistResponse): Promise<ChecklistResponse> {
+    // Check if response exists for this instance/item combo
+    const [existing] = await db.select().from(checklistResponses).where(
+      and(eq(checklistResponses.instanceId, response.instanceId), eq(checklistResponses.itemId, response.itemId))
+    );
+    if (existing) {
+      const [updated] = await db.update(checklistResponses).set({ ...response, updatedAt: new Date() }).where(eq(checklistResponses.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(checklistResponses).values(response).returning();
+    return created;
+  }
+
+  // Checklist Audit Events
+  async getChecklistAuditEvents(instanceId: string): Promise<ChecklistAuditEvent[]> {
+    return db.select().from(checklistAuditEvents).where(eq(checklistAuditEvents.instanceId, instanceId)).orderBy(desc(checklistAuditEvents.createdAt));
+  }
+
+  async createChecklistAuditEvent(event: InsertChecklistAuditEvent): Promise<ChecklistAuditEvent> {
+    const [created] = await db.insert(checklistAuditEvents).values(event).returning();
+    return created;
   }
 }
 

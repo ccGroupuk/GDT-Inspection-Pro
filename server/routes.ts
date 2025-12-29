@@ -49,6 +49,7 @@ export async function registerRoutes(
   // Setup authentication (BEFORE other routes)
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerChecklistRoutes(app);
 
   // Helper to get employee from session cookie
   const getEmployeeFromCookie = async (req: Request): Promise<Employee | null> => {
@@ -7762,4 +7763,337 @@ function buildContentPrompt(params: {
   }
   
   return prompt;
+}
+
+// =====================================
+// CHECKLIST MANAGEMENT ROUTES
+// =====================================
+
+export function registerChecklistRoutes(app: Express) {
+  // Checklist Templates CRUD
+  app.get("/api/checklist-templates", async (req, res) => {
+    try {
+      const templates = await storage.getChecklistTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Get checklist templates error:", error);
+      res.status(500).json({ message: "Failed to get checklist templates" });
+    }
+  });
+
+  app.get("/api/checklist-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getChecklistTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      const items = await storage.getChecklistItems(req.params.id);
+      res.json({ ...template, items });
+    } catch (error) {
+      console.error("Get checklist template error:", error);
+      res.status(500).json({ message: "Failed to get checklist template" });
+    }
+  });
+
+  app.post("/api/checklist-templates", async (req, res) => {
+    try {
+      const { items, ...templateData } = req.body;
+      const template = await storage.createChecklistTemplate(templateData);
+      
+      // Create items if provided
+      if (items && items.length > 0) {
+        for (let i = 0; i < items.length; i++) {
+          await storage.createChecklistItem({
+            ...items[i],
+            templateId: template.id,
+            itemOrder: i,
+          });
+        }
+      }
+      
+      const createdItems = await storage.getChecklistItems(template.id);
+      res.status(201).json({ ...template, items: createdItems });
+    } catch (error) {
+      console.error("Create checklist template error:", error);
+      res.status(500).json({ message: "Failed to create checklist template" });
+    }
+  });
+
+  app.patch("/api/checklist-templates/:id", async (req, res) => {
+    try {
+      const { items, ...templateData } = req.body;
+      const updated = await storage.updateChecklistTemplate(req.params.id, templateData);
+      if (!updated) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      // If items provided, replace all items
+      if (items !== undefined) {
+        await storage.deleteChecklistItemsByTemplate(req.params.id);
+        for (let i = 0; i < items.length; i++) {
+          await storage.createChecklistItem({
+            ...items[i],
+            templateId: req.params.id,
+            itemOrder: i,
+          });
+        }
+      }
+      
+      const updatedItems = await storage.getChecklistItems(req.params.id);
+      res.json({ ...updated, items: updatedItems });
+    } catch (error) {
+      console.error("Update checklist template error:", error);
+      res.status(500).json({ message: "Failed to update checklist template" });
+    }
+  });
+
+  app.delete("/api/checklist-templates/:id", async (req, res) => {
+    try {
+      await storage.deleteChecklistTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete checklist template error:", error);
+      res.status(500).json({ message: "Failed to delete checklist template" });
+    }
+  });
+
+  // Checklist Items
+  app.get("/api/checklist-templates/:templateId/items", async (req, res) => {
+    try {
+      const items = await storage.getChecklistItems(req.params.templateId);
+      res.json(items);
+    } catch (error) {
+      console.error("Get checklist items error:", error);
+      res.status(500).json({ message: "Failed to get checklist items" });
+    }
+  });
+
+  app.post("/api/checklist-items", async (req, res) => {
+    try {
+      const item = await storage.createChecklistItem(req.body);
+      res.status(201).json(item);
+    } catch (error) {
+      console.error("Create checklist item error:", error);
+      res.status(500).json({ message: "Failed to create checklist item" });
+    }
+  });
+
+  app.patch("/api/checklist-items/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateChecklistItem(req.params.id, req.body);
+      if (!updated) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Update checklist item error:", error);
+      res.status(500).json({ message: "Failed to update checklist item" });
+    }
+  });
+
+  app.delete("/api/checklist-items/:id", async (req, res) => {
+    try {
+      await storage.deleteChecklistItem(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete checklist item error:", error);
+      res.status(500).json({ message: "Failed to delete checklist item" });
+    }
+  });
+
+  // Checklist Instances
+  app.get("/api/checklist-instances", async (req, res) => {
+    try {
+      const { targetType, targetId, status } = req.query;
+      let instances;
+      
+      if (targetType && targetId) {
+        instances = await storage.getChecklistInstancesByTarget(targetType as string, targetId as string);
+      } else if (status) {
+        instances = await storage.getChecklistInstancesByStatus(status as string);
+      } else {
+        instances = await storage.getChecklistInstances();
+      }
+      
+      res.json(instances);
+    } catch (error) {
+      console.error("Get checklist instances error:", error);
+      res.status(500).json({ message: "Failed to get checklist instances" });
+    }
+  });
+
+  app.get("/api/checklist-instances/:id", async (req, res) => {
+    try {
+      const instance = await storage.getChecklistInstance(req.params.id);
+      if (!instance) {
+        return res.status(404).json({ message: "Instance not found" });
+      }
+      
+      // Get template and items
+      const template = await storage.getChecklistTemplate(instance.templateId);
+      const items = template ? await storage.getChecklistItems(template.id) : [];
+      const responses = await storage.getChecklistResponses(req.params.id);
+      const auditEvents = await storage.getChecklistAuditEvents(req.params.id);
+      
+      res.json({ 
+        ...instance, 
+        template,
+        items,
+        responses,
+        auditEvents,
+      });
+    } catch (error) {
+      console.error("Get checklist instance error:", error);
+      res.status(500).json({ message: "Failed to get checklist instance" });
+    }
+  });
+
+  // Create a new checklist instance for a target (job, asset, etc.)
+  app.post("/api/checklist-instances", async (req, res) => {
+    try {
+      const { templateId, targetType, targetId, assignedToId, dueDate } = req.body;
+      
+      const template = await storage.getChecklistTemplate(templateId);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      const instance = await storage.createChecklistInstance({
+        templateId,
+        targetType: targetType || template.targetType,
+        targetId,
+        assignedToId,
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+        status: 'pending',
+      });
+      
+      // Create audit event
+      const employee = (req as any).employee;
+      await storage.createChecklistAuditEvent({
+        instanceId: instance.id,
+        action: 'created',
+        actorId: employee?.id,
+        actorName: employee ? `${employee.firstName} ${employee.lastName}` : 'System',
+      });
+      
+      res.status(201).json(instance);
+    } catch (error) {
+      console.error("Create checklist instance error:", error);
+      res.status(500).json({ message: "Failed to create checklist instance" });
+    }
+  });
+
+  // Update checklist instance
+  app.patch("/api/checklist-instances/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateChecklistInstance(req.params.id, req.body);
+      if (!updated) {
+        return res.status(404).json({ message: "Instance not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Update checklist instance error:", error);
+      res.status(500).json({ message: "Failed to update checklist instance" });
+    }
+  });
+
+  // Complete a checklist item (upsert response)
+  app.post("/api/checklist-instances/:id/respond", async (req, res) => {
+    try {
+      const { itemId, value, note, photoUrl } = req.body;
+      const employee = (req as any).employee;
+      
+      const instance = await storage.getChecklistInstance(req.params.id);
+      if (!instance) {
+        return res.status(404).json({ message: "Instance not found" });
+      }
+      
+      // Upsert response
+      const response = await storage.upsertChecklistResponse({
+        instanceId: req.params.id,
+        itemId,
+        value,
+        note,
+        photoUrl,
+        completedById: employee?.id,
+        completedAt: value ? new Date() : undefined,
+      });
+      
+      // Create audit event
+      await storage.createChecklistAuditEvent({
+        instanceId: req.params.id,
+        action: value ? 'item_completed' : 'item_uncompleted',
+        actorId: employee?.id,
+        actorName: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown',
+        metadata: JSON.stringify({ itemId }),
+      });
+      
+      // Check if all required items are completed
+      const template = await storage.getChecklistTemplate(instance.templateId);
+      const items = template ? await storage.getChecklistItems(template.id) : [];
+      const responses = await storage.getChecklistResponses(req.params.id);
+      
+      const requiredItems = items.filter(i => i.isRequired);
+      const completedItemIds = responses.filter(r => r.value).map(r => r.itemId);
+      const allRequiredCompleted = requiredItems.every(i => completedItemIds.includes(i.id));
+      
+      // Update instance status
+      if (allRequiredCompleted && instance.status !== 'completed') {
+        await storage.updateChecklistInstance(req.params.id, {
+          status: 'completed',
+          completedAt: new Date(),
+          completedById: employee?.id,
+        });
+        
+        await storage.createChecklistAuditEvent({
+          instanceId: req.params.id,
+          action: 'completed',
+          actorId: employee?.id,
+          actorName: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown',
+        });
+      } else if (!allRequiredCompleted && instance.status === 'pending') {
+        await storage.updateChecklistInstance(req.params.id, {
+          status: 'in_progress',
+        });
+      }
+      
+      res.json(response);
+    } catch (error) {
+      console.error("Respond to checklist error:", error);
+      res.status(500).json({ message: "Failed to respond to checklist" });
+    }
+  });
+
+  // Get pending checklists for a job (used for job completion gating)
+  app.get("/api/jobs/:jobId/pending-checklists", async (req, res) => {
+    try {
+      const pendingChecklists = await storage.getPendingChecklistInstancesForJob(req.params.jobId);
+      res.json(pendingChecklists);
+    } catch (error) {
+      console.error("Get pending checklists error:", error);
+      res.status(500).json({ message: "Failed to get pending checklists" });
+    }
+  });
+
+  // Delete checklist instance
+  app.delete("/api/checklist-instances/:id", async (req, res) => {
+    try {
+      await storage.deleteChecklistInstance(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete checklist instance error:", error);
+      res.status(500).json({ message: "Failed to delete checklist instance" });
+    }
+  });
+
+  // Audit trail for a checklist instance
+  app.get("/api/checklist-instances/:id/audit", async (req, res) => {
+    try {
+      const events = await storage.getChecklistAuditEvents(req.params.id);
+      res.json(events);
+    } catch (error) {
+      console.error("Get audit events error:", error);
+      res.status(500).json({ message: "Failed to get audit events" });
+    }
+  });
 }
