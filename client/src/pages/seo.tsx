@@ -1642,6 +1642,7 @@ function ContentCreatorSection() {
 function PostsSection() {
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedPost, setSelectedPost] = useState<SeoContentPost | null>(null);
 
   const { data: posts = [], isLoading } = useQuery<SeoContentPost[]>({
     queryKey: ["/api/seo/content-posts"],
@@ -1794,8 +1795,12 @@ function PostsSection() {
               <Card key={post.id} className="bg-muted/30">
                 <CardContent className="pt-4">
                   <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
+                    <div 
+                      className="flex-1 min-w-0 cursor-pointer hover-elevate rounded-md p-2 -m-2"
+                      onClick={() => setSelectedPost(post)}
+                      data-testid={`button-view-post-${post.id}`}
+                    >
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         {getPlatformIcon(post.platform)}
                         <span className="text-sm font-medium capitalize">
                           {post.platform.replace("_", " ")}
@@ -1807,6 +1812,7 @@ function PostsSection() {
                         </Badge>
                       </div>
                       <p className="text-sm line-clamp-3">{post.content}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Click to view full content</p>
                       {post.scheduledFor && (
                         <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
@@ -1872,6 +1878,96 @@ function PostsSection() {
           </div>
         )}
       </CardContent>
+      
+      {/* Post Detail Dialog */}
+      <Dialog open={!!selectedPost} onOpenChange={(open) => !open && setSelectedPost(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedPost && getPlatformIcon(selectedPost.platform)}
+              <span className="capitalize">{selectedPost?.platform.replace("_", " ")} Post</span>
+              {selectedPost && (
+                <Badge variant={getStatusColor(selectedPost.status) as "default" | "secondary" | "destructive" | "outline"} className="ml-2">
+                  {selectedPost.status.replace("_", " ")}
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedPost && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="outline">{selectedPost.postType.replace("_", " ")}</Badge>
+                {selectedPost.scheduledFor && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    Scheduled: {new Date(selectedPost.scheduledFor).toLocaleDateString()}
+                  </span>
+                )}
+                {selectedPost.publishedAt && (
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Published: {new Date(selectedPost.publishedAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              
+              <div className="bg-muted/50 p-4 rounded-md">
+                <p className="text-sm whitespace-pre-wrap">{selectedPost.content}</p>
+              </div>
+              
+              {selectedPost.hashtags && (
+                <p className="text-sm text-muted-foreground">{selectedPost.hashtags}</p>
+              )}
+              
+              <DialogFooter className="flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedPost.content);
+                    toast({ title: "Copied!", description: "Content copied to clipboard" });
+                  }}
+                  data-testid="button-dialog-copy"
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy Content
+                </Button>
+                
+                {selectedPost.status !== "published" && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        handlePostNow(selectedPost);
+                        setSelectedPost(null);
+                      }}
+                      data-testid="button-dialog-post-now"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Post Now
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        updateStatusMutation.mutate({ id: selectedPost.id, status: "published" });
+                        setSelectedPost(null);
+                      }}
+                      disabled={updateStatusMutation.isPending}
+                      data-testid="button-dialog-mark-published"
+                    >
+                      {updateStatusMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                      )}
+                      Mark Published
+                    </Button>
+                  </>
+                )}
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
