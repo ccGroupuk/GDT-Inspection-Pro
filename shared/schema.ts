@@ -832,9 +832,26 @@ export const seoBusinessProfile = pgTable("seo_business_profile", {
   contactPhone: text("contact_phone"),
   contactEmail: text("contact_email"),
   websiteUrl: text("website_url"),
+  // Social media URLs for quick posting
+  facebookUrl: text("facebook_url"),
+  instagramUrl: text("instagram_url"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Google Business Profile Locations - Multiple locations support
+export const seoGoogleBusinessLocations = pgTable("seo_google_business_locations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // e.g. "Cardiff", "Caerphilly"
+  googleBusinessUrl: text("google_business_url").notNull(), // Direct link to GMB
+  address: text("address"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSeoGoogleBusinessLocationSchema = createInsertSchema(seoGoogleBusinessLocations).omit({ id: true, createdAt: true });
+export type InsertSeoGoogleBusinessLocation = z.infer<typeof insertSeoGoogleBusinessLocationSchema>;
+export type SeoGoogleBusinessLocation = typeof seoGoogleBusinessLocations.$inferSelect;
 
 export const insertSeoBusinessProfileSchema = createInsertSchema(seoBusinessProfile).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSeoBusinessProfile = z.infer<typeof insertSeoBusinessProfileSchema>;
@@ -913,8 +930,9 @@ export const seoContentPosts = pgTable("seo_content_posts", {
   jobId: varchar("job_id").references(() => jobs.id),
   
   // Platform targeting
-  platform: text("platform").notNull(), // gbp, facebook, instagram
+  platform: text("platform").notNull(), // google_business, facebook, instagram
   postType: text("post_type").notNull().default("update"), // update, offer, before_after, seasonal
+  targetLocationId: varchar("target_location_id").references(() => seoGoogleBusinessLocations.id), // For Google Business posts
   
   // Content
   content: text("content").notNull(),
@@ -952,6 +970,10 @@ export const seoContentPostsRelations = relations(seoContentPosts, ({ one }) => 
   job: one(jobs, {
     fields: [seoContentPosts.jobId],
     references: [jobs.id],
+  }),
+  targetLocation: one(seoGoogleBusinessLocations, {
+    fields: [seoContentPosts.targetLocationId],
+    references: [seoGoogleBusinessLocations.id],
   }),
 }));
 
@@ -1004,6 +1026,24 @@ export const seoAutopilotSettings = pgTable("seo_autopilot_settings", {
 });
 
 export const insertSeoAutopilotSettingsSchema = createInsertSchema(seoAutopilotSettings).omit({ id: true, createdAt: true, updatedAt: true });
+
+// SEO Media Library - Marketing images for content
+export const seoMediaLibrary = pgTable("seo_media_library", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  filename: text("filename").notNull(),
+  url: text("url").notNull(),
+  category: text("category").notNull().default("general"), // job_photos, team, promotional, seasonal, before_after, logo
+  title: text("title"),
+  description: text("description"),
+  tags: text("tags").array(),
+  isAiGenerated: boolean("is_ai_generated").default(false),
+  aiPrompt: text("ai_prompt"), // If AI generated, store the prompt used
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSeoMediaLibrarySchema = createInsertSchema(seoMediaLibrary).omit({ id: true, createdAt: true });
+export type InsertSeoMediaLibrary = z.infer<typeof insertSeoMediaLibrarySchema>;
+export type SeoMediaLibrary = typeof seoMediaLibrary.$inferSelect;
 export type InsertSeoAutopilotSettings = z.infer<typeof insertSeoAutopilotSettingsSchema>;
 export type SeoAutopilotSettings = typeof seoAutopilotSettings.$inferSelect;
 

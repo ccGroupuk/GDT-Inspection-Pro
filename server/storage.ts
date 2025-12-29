@@ -21,6 +21,8 @@ import {
   partnerAvailability, type PartnerAvailability, type InsertPartnerAvailability,
   jobScheduleProposals, type JobScheduleProposal, type InsertJobScheduleProposal,
   seoBusinessProfile, type SeoBusinessProfile, type InsertSeoBusinessProfile,
+  seoGoogleBusinessLocations, type SeoGoogleBusinessLocation, type InsertSeoGoogleBusinessLocation,
+  seoMediaLibrary, type SeoMediaLibrary, type InsertSeoMediaLibrary,
   seoBrandVoice, type SeoBrandVoice, type InsertSeoBrandVoice,
   seoWeeklyFocus, type SeoWeeklyFocus, type InsertSeoWeeklyFocus,
   seoJobMedia, type SeoJobMedia, type InsertSeoJobMedia,
@@ -208,6 +210,21 @@ export interface IStorage {
   // SEO Business Profile
   getSeoBusinessProfile(): Promise<SeoBusinessProfile | undefined>;
   upsertSeoBusinessProfile(profile: InsertSeoBusinessProfile): Promise<SeoBusinessProfile>;
+
+  // SEO Google Business Locations
+  getSeoGoogleBusinessLocations(): Promise<SeoGoogleBusinessLocation[]>;
+  getSeoGoogleBusinessLocation(id: string): Promise<SeoGoogleBusinessLocation | undefined>;
+  createSeoGoogleBusinessLocation(location: InsertSeoGoogleBusinessLocation): Promise<SeoGoogleBusinessLocation>;
+  updateSeoGoogleBusinessLocation(id: string, location: Partial<InsertSeoGoogleBusinessLocation>): Promise<SeoGoogleBusinessLocation | undefined>;
+  deleteSeoGoogleBusinessLocation(id: string): Promise<boolean>;
+
+  // SEO Media Library
+  getSeoMediaLibrary(): Promise<SeoMediaLibrary[]>;
+  getSeoMediaLibraryByCategory(category: string): Promise<SeoMediaLibrary[]>;
+  getSeoMediaItem(id: string): Promise<SeoMediaLibrary | undefined>;
+  createSeoMediaItem(media: InsertSeoMediaLibrary): Promise<SeoMediaLibrary>;
+  updateSeoMediaItem(id: string, media: Partial<InsertSeoMediaLibrary>): Promise<SeoMediaLibrary | undefined>;
+  deleteSeoMediaItem(id: string): Promise<boolean>;
 
   // SEO Brand Voice
   getSeoBrandVoice(): Promise<SeoBrandVoice | undefined>;
@@ -1121,6 +1138,74 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(seoBusinessProfile).values(profile).returning();
     return created;
+  }
+
+  // SEO Google Business Locations Methods
+  async getSeoGoogleBusinessLocations(): Promise<SeoGoogleBusinessLocation[]> {
+    return db.select().from(seoGoogleBusinessLocations).orderBy(desc(seoGoogleBusinessLocations.isDefault));
+  }
+
+  async getSeoGoogleBusinessLocation(id: string): Promise<SeoGoogleBusinessLocation | undefined> {
+    const [location] = await db.select().from(seoGoogleBusinessLocations).where(eq(seoGoogleBusinessLocations.id, id));
+    return location || undefined;
+  }
+
+  async createSeoGoogleBusinessLocation(location: InsertSeoGoogleBusinessLocation): Promise<SeoGoogleBusinessLocation> {
+    // If this is set as default, unset all other defaults first
+    if (location.isDefault) {
+      await db.update(seoGoogleBusinessLocations).set({ isDefault: false });
+    }
+    const [created] = await db.insert(seoGoogleBusinessLocations).values(location).returning();
+    return created;
+  }
+
+  async updateSeoGoogleBusinessLocation(id: string, location: Partial<InsertSeoGoogleBusinessLocation>): Promise<SeoGoogleBusinessLocation | undefined> {
+    // If this is set as default, unset all other defaults first
+    if (location.isDefault) {
+      await db.update(seoGoogleBusinessLocations).set({ isDefault: false });
+    }
+    const [updated] = await db.update(seoGoogleBusinessLocations)
+      .set(location)
+      .where(eq(seoGoogleBusinessLocations.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteSeoGoogleBusinessLocation(id: string): Promise<boolean> {
+    const result = await db.delete(seoGoogleBusinessLocations).where(eq(seoGoogleBusinessLocations.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // SEO Media Library Methods
+  async getSeoMediaLibrary(): Promise<SeoMediaLibrary[]> {
+    return db.select().from(seoMediaLibrary).orderBy(desc(seoMediaLibrary.createdAt));
+  }
+
+  async getSeoMediaLibraryByCategory(category: string): Promise<SeoMediaLibrary[]> {
+    return db.select().from(seoMediaLibrary).where(eq(seoMediaLibrary.category, category)).orderBy(desc(seoMediaLibrary.createdAt));
+  }
+
+  async getSeoMediaItem(id: string): Promise<SeoMediaLibrary | undefined> {
+    const [item] = await db.select().from(seoMediaLibrary).where(eq(seoMediaLibrary.id, id));
+    return item || undefined;
+  }
+
+  async createSeoMediaItem(media: InsertSeoMediaLibrary): Promise<SeoMediaLibrary> {
+    const [created] = await db.insert(seoMediaLibrary).values(media).returning();
+    return created;
+  }
+
+  async updateSeoMediaItem(id: string, media: Partial<InsertSeoMediaLibrary>): Promise<SeoMediaLibrary | undefined> {
+    const [updated] = await db.update(seoMediaLibrary)
+      .set(media)
+      .where(eq(seoMediaLibrary.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteSeoMediaItem(id: string): Promise<boolean> {
+    const result = await db.delete(seoMediaLibrary).where(eq(seoMediaLibrary.id, id)).returning();
+    return result.length > 0;
   }
 
   // SEO Brand Voice Methods

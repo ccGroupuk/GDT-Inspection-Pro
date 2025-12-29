@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema, insertSeoBusinessProfileSchema, insertSeoBrandVoiceSchema, insertSeoWeeklyFocusSchema, insertSeoJobMediaSchema, insertSeoContentPostSchema, insertEmployeeSchema, insertTimeEntrySchema, insertPayPeriodSchema, insertPayrollRunSchema, insertPayrollAdjustmentSchema, insertEmployeeDocumentSchema, type Employee } from "@shared/schema";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema, insertSeoBusinessProfileSchema, insertSeoGoogleBusinessLocationSchema, insertSeoMediaLibrarySchema, insertSeoBrandVoiceSchema, insertSeoWeeklyFocusSchema, insertSeoJobMediaSchema, insertSeoContentPostSchema, insertEmployeeSchema, insertTimeEntrySchema, insertPayPeriodSchema, insertPayrollRunSchema, insertPayrollAdjustmentSchema, insertEmployeeDocumentSchema, type Employee } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -4710,6 +4710,124 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     } catch (error) {
       console.error("Save SEO business profile error:", error);
       res.status(500).json({ message: "Failed to save business profile" });
+    }
+  });
+
+  // SEO Google Business Locations
+  app.get("/api/seo/google-business-locations", async (req, res) => {
+    try {
+      const locations = await storage.getSeoGoogleBusinessLocations();
+      res.json(locations);
+    } catch (error) {
+      console.error("Get Google Business locations error:", error);
+      res.status(500).json({ message: "Failed to load locations" });
+    }
+  });
+
+  app.post("/api/seo/google-business-locations", async (req, res) => {
+    try {
+      const parsed = insertSeoGoogleBusinessLocationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const location = await storage.createSeoGoogleBusinessLocation(parsed.data);
+      res.json(location);
+    } catch (error) {
+      console.error("Create Google Business location error:", error);
+      res.status(500).json({ message: "Failed to create location" });
+    }
+  });
+
+  app.patch("/api/seo/google-business-locations/:id", async (req, res) => {
+    try {
+      const location = await storage.updateSeoGoogleBusinessLocation(req.params.id, req.body);
+      if (!location) {
+        return res.status(404).json({ message: "Location not found" });
+      }
+      res.json(location);
+    } catch (error) {
+      console.error("Update Google Business location error:", error);
+      res.status(500).json({ message: "Failed to update location" });
+    }
+  });
+
+  app.delete("/api/seo/google-business-locations/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteSeoGoogleBusinessLocation(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Location not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete Google Business location error:", error);
+      res.status(500).json({ message: "Failed to delete location" });
+    }
+  });
+
+  // SEO Media Library
+  app.get("/api/seo/media-library", async (req, res) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const media = category 
+        ? await storage.getSeoMediaLibraryByCategory(category)
+        : await storage.getSeoMediaLibrary();
+      res.json(media);
+    } catch (error) {
+      console.error("Get media library error:", error);
+      res.status(500).json({ message: "Failed to load media library" });
+    }
+  });
+
+  app.get("/api/seo/media-library/:id", async (req, res) => {
+    try {
+      const item = await storage.getSeoMediaItem(req.params.id);
+      if (!item) {
+        return res.status(404).json({ message: "Media item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Get media item error:", error);
+      res.status(500).json({ message: "Failed to load media item" });
+    }
+  });
+
+  app.post("/api/seo/media-library", async (req, res) => {
+    try {
+      const parsed = insertSeoMediaLibrarySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const item = await storage.createSeoMediaItem(parsed.data);
+      res.json(item);
+    } catch (error) {
+      console.error("Create media item error:", error);
+      res.status(500).json({ message: "Failed to create media item" });
+    }
+  });
+
+  app.patch("/api/seo/media-library/:id", async (req, res) => {
+    try {
+      const item = await storage.updateSeoMediaItem(req.params.id, req.body);
+      if (!item) {
+        return res.status(404).json({ message: "Media item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Update media item error:", error);
+      res.status(500).json({ message: "Failed to update media item" });
+    }
+  });
+
+  app.delete("/api/seo/media-library/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteSeoMediaItem(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Media item not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete media item error:", error);
+      res.status(500).json({ message: "Failed to delete media item" });
     }
   });
 
