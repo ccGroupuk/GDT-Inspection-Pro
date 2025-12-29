@@ -6167,12 +6167,18 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     }
   });
 
-  // Public: Get help articles for admin audience
+  // Get help articles for full access employees
+  // Note: This route is protected by global admin middleware - only owner/full_access reach here
+  // Returns ALL published articles so employees can train on client/partner SOPs
   app.get("/api/help/admin", async (req, res) => {
     try {
-      const categories = await storage.getHelpCategoriesByAudience("admin");
-      const articles = await storage.getHelpArticlesByAudience("admin");
-      res.json({ categories, articles });
+      // Since only owner/full_access employees reach this endpoint (global middleware),
+      // return ALL published articles for training purposes
+      const categories = await storage.getHelpCategories();
+      const articles = await storage.getHelpArticles();
+      // Filter to only published articles
+      const publishedArticles = articles.filter(a => a.isPublished);
+      res.json({ categories, articles: publishedArticles });
     } catch (error) {
       console.error("Get admin help error:", error);
       res.status(500).json({ message: "Failed to get help content" });
