@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
 import { 
   Siren, 
   Clock, 
@@ -17,6 +19,13 @@ import {
   CheckCircle, 
   X,
   Phone,
+  Briefcase,
+  LogOut,
+  ClipboardCheck,
+  FileText,
+  Calendar,
+  HelpCircle,
+  Settings,
 } from "lucide-react";
 import type { EmergencyCallout, EmergencyCalloutResponse, Job, Contact } from "@shared/schema";
 import { EMERGENCY_INCIDENT_TYPES, EMERGENCY_PRIORITIES } from "@shared/schema";
@@ -28,9 +37,30 @@ interface EmergencyResponseWithDetails extends EmergencyCalloutResponse {
   };
 }
 
+async function partnerApiRequest(method: string, url: string, data?: unknown, token?: string | null): Promise<Response> {
+  const headers: HeadersInit = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  if (data) {
+    headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: data ? JSON.stringify(data) : undefined,
+  });
+  if (!res.ok) {
+    const text = (await res.text()) || res.statusText;
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return res;
+}
+
 export default function PartnerEmergencyCallouts() {
   const { toast } = useToast();
-  const token = localStorage.getItem("partner_portal_token");
+  const { token, isAuthenticated, logout } = usePartnerPortalAuth();
+  const [, setLocation] = useLocation();
   
   const [selectedResponse, setSelectedResponse] = useState<EmergencyResponseWithDetails | null>(null);
   const [respondDialogOpen, setRespondDialogOpen] = useState(false);
@@ -39,8 +69,27 @@ export default function PartnerEmergencyCallouts() {
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLocation("/partner-portal/login");
+    }
+  }, [isAuthenticated, setLocation]);
+
+  const { data: profile } = useQuery({
+    queryKey: ["/api/partner-portal/profile"],
+    enabled: isAuthenticated,
+    queryFn: async () => {
+      const res = await fetch("/api/partner-portal/profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load profile");
+      return res.json();
+    },
+  });
+
   const { data: emergencyCallouts, isLoading } = useQuery<EmergencyResponseWithDetails[]>({
     queryKey: ["/api/partner-portal/emergency-callouts"],
+    enabled: isAuthenticated,
     queryFn: async () => {
       const response = await fetch("/api/partner-portal/emergency-callouts", {
         headers: { Authorization: `Bearer ${token}` },
@@ -53,9 +102,7 @@ export default function PartnerEmergencyCallouts() {
 
   const acknowledgeMutation = useMutation({
     mutationFn: async (responseId: string) => {
-      return apiRequest("POST", `/api/partner-portal/emergency-callouts/${responseId}/acknowledge`, {}, {
-        Authorization: `Bearer ${token}`,
-      });
+      return partnerApiRequest("POST", `/api/partner-portal/emergency-callouts/${responseId}/acknowledge`, {}, token);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/emergency-callouts"] });
@@ -68,12 +115,10 @@ export default function PartnerEmergencyCallouts() {
 
   const respondMutation = useMutation({
     mutationFn: async (data: { responseId: string; proposedArrivalMinutes: number; responseNotes?: string }) => {
-      return apiRequest("POST", `/api/partner-portal/emergency-callouts/${data.responseId}/respond`, {
+      return partnerApiRequest("POST", `/api/partner-portal/emergency-callouts/${data.responseId}/respond`, {
         proposedArrivalMinutes: data.proposedArrivalMinutes,
         responseNotes: data.responseNotes,
-      }, {
-        Authorization: `Bearer ${token}`,
-      });
+      }, token);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/emergency-callouts"] });
@@ -90,11 +135,9 @@ export default function PartnerEmergencyCallouts() {
 
   const declineMutation = useMutation({
     mutationFn: async (data: { responseId: string; declineReason?: string }) => {
-      return apiRequest("POST", `/api/partner-portal/emergency-callouts/${data.responseId}/decline`, {
+      return partnerApiRequest("POST", `/api/partner-portal/emergency-callouts/${data.responseId}/decline`, {
         declineReason: data.declineReason,
-      }, {
-        Authorization: `Bearer ${token}`,
-      });
+      }, token);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/emergency-callouts"] });
@@ -118,10 +161,125 @@ export default function PartnerEmergencyCallouts() {
   
   const declinedCallouts = emergencyCallouts?.filter(r => r.status === "declined") || [];
 
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  const renderHeader = () => (
+    <>
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
+              <Briefcase className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold">Partner Portal</h1>
+              {profile && (
+                <p className="text-sm text-muted-foreground">{profile.businessName}</p>
+              )}
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={logout} data-testid="button-partner-logout">
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
+          </Button>
+        </div>
+      </header>
+
+      <nav className="border-b border-border bg-muted/30">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center gap-1 overflow-x-auto">
+            <Link href="/partner-portal/jobs">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-jobs"
+              >
+                <Briefcase className="w-4 h-4 mr-2" />
+                Jobs
+              </Button>
+            </Link>
+            <Link href="/partner-portal/surveys">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-surveys"
+              >
+                <ClipboardCheck className="w-4 h-4 mr-2" />
+                Surveys
+              </Button>
+            </Link>
+            <Link href="/partner-portal/quotes">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-quotes"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Quotes
+              </Button>
+            </Link>
+            <Link href="/partner-portal/calendar">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-calendar"
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Calendar
+              </Button>
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-none border-b-2 border-primary text-foreground"
+              data-testid="nav-emergency"
+            >
+              <Siren className="w-4 h-4 mr-2" />
+              Emergency
+            </Button>
+            <Link href="/partner-portal/help">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-help"
+              >
+                <HelpCircle className="w-4 h-4 mr-2" />
+                Help
+              </Button>
+            </Link>
+            <Link href="/partner-portal/profile">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-profile"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </nav>
+    </>
+  );
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[300px]">
-        <div className="text-muted-foreground">Loading emergency callouts...</div>
+      <div className="min-h-screen bg-background">
+        {renderHeader()}
+        <main className="container mx-auto px-4 py-6">
+          <div className="flex items-center justify-center min-h-[300px]">
+            <div className="text-muted-foreground">Loading emergency callouts...</div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -169,16 +327,36 @@ export default function PartnerEmergencyCallouts() {
             <p className="text-sm text-muted-foreground">{callout.description}</p>
           )}
           
-          {callout.job && (
+          {callout.job ? (
             <div className="space-y-1 text-sm">
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-muted-foreground" />
-                <span>{callout.job.address || "Address not provided"}</span>
+                <span>{callout.job.jobAddress || "Address not provided"}</span>
               </div>
               {callout.contact && (
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-muted-foreground" />
                   <span>{callout.contact.phone || callout.contact.email}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1 text-sm">
+              {callout.clientName && (
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{callout.clientName}</span>
+                </div>
+              )}
+              {callout.clientAddress && (
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-muted-foreground" />
+                  <span>{callout.clientAddress} {callout.clientPostcode || ""}</span>
+                </div>
+              )}
+              {callout.clientPhone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-muted-foreground" />
+                  <span>{callout.clientPhone}</span>
                 </div>
               )}
             </div>
@@ -255,13 +433,16 @@ export default function PartnerEmergencyCallouts() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Siren className="w-6 h-6 text-destructive" />
-        <h1 className="text-2xl font-bold">Emergency Callouts</h1>
-      </div>
-      
-      {pendingCallouts.length > 0 && (
+    <div className="min-h-screen bg-background">
+      {renderHeader()}
+      <main className="container mx-auto px-4 py-6">
+        <div className="space-y-6">
+          <div className="flex items-center gap-3">
+            <Siren className="w-6 h-6 text-destructive" />
+            <h1 className="text-2xl font-bold">Emergency Callouts</h1>
+          </div>
+          
+          {pendingCallouts.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-lg font-semibold flex items-center gap-2 text-destructive">
             <AlertTriangle className="w-5 h-5" />
@@ -412,6 +593,8 @@ export default function PartnerEmergencyCallouts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </div>
+      </main>
     </div>
   );
 }
