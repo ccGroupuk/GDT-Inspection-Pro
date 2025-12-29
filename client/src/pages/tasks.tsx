@@ -20,7 +20,10 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, CheckSquare, Calendar, Trash2, AlertCircle, Clock } from "lucide-react";
+import { Plus, Search, CheckSquare, Calendar, Trash2, AlertCircle, Clock, CalendarIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { format } from "date-fns";
 import type { Task, Job, InsertTask } from "@shared/schema";
 import { insertTaskSchema } from "@shared/schema";
 import { z } from "zod";
@@ -167,6 +170,44 @@ export default function Tasks() {
                   placeholder="Task description..."
                   data-testid="textarea-task-description"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Due Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                      data-testid="button-task-due-date"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {form.watch("dueDate") 
+                        ? format(new Date(form.watch("dueDate")!), "PPP")
+                        : "No due date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarPicker
+                      mode="single"
+                      selected={form.watch("dueDate") ? new Date(form.watch("dueDate")!) : undefined}
+                      onSelect={(date) => form.setValue("dueDate", date || null)}
+                      initialFocus
+                    />
+                    {form.watch("dueDate") && (
+                      <div className="p-2 border-t">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="w-full"
+                          onClick={() => form.setValue("dueDate", null)}
+                        >
+                          Clear date
+                        </Button>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
