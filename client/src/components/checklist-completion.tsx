@@ -41,6 +41,15 @@ type InstanceWithDetails = ChecklistInstance & {
   auditEvents?: ChecklistAuditEvent[];
 };
 
+type ResponseData = {
+  value?: boolean;
+  textValue?: string;
+  numberValue?: number;
+  photoUrl?: string;
+  signatureData?: string;
+  note?: string;
+};
+
 type ChecklistCompletionProps = {
   targetType: string;
   targetId: string;
@@ -92,11 +101,10 @@ export function ChecklistCompletion({ targetType, targetId, compact = false }: C
   });
 
   const respondMutation = useMutation({
-    mutationFn: async ({ instanceId, itemId, value, note }: { instanceId: string; itemId: string; value: boolean; note?: string }) => {
+    mutationFn: async ({ instanceId, itemId, data }: { instanceId: string; itemId: string; data: ResponseData }) => {
       return apiRequest("POST", `/api/checklist-instances/${instanceId}/respond`, {
         itemId,
-        value,
-        note,
+        ...data,
       });
     },
     onSuccess: () => {
@@ -120,14 +128,6 @@ export function ChecklistCompletion({ targetType, targetId, compact = false }: C
         return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"><Clock className="w-3 h-3 mr-1" />In Progress</Badge>;
       default:
         return <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"><AlertTriangle className="w-3 h-3 mr-1" />Pending</Badge>;
-    }
-  };
-
-  const getItemIcon = (itemType: string) => {
-    switch (itemType) {
-      case "photo": return <Camera className="w-4 h-4" />;
-      case "text": return <FileText className="w-4 h-4" />;
-      default: return <CheckCircle2 className="w-4 h-4" />;
     }
   };
 
@@ -227,8 +227,8 @@ export function ChecklistCompletion({ targetType, targetId, compact = false }: C
                   <AccordionContent>
                     <ChecklistInstanceDetail
                       instance={instance}
-                      onRespond={(itemId, value, note) => 
-                        respondMutation.mutate({ instanceId: instance.id, itemId, value, note })
+                      onRespond={(itemId, data) => 
+                        respondMutation.mutate({ instanceId: instance.id, itemId, data })
                       }
                       isResponding={respondMutation.isPending}
                     />
@@ -245,12 +245,12 @@ export function ChecklistCompletion({ targetType, targetId, compact = false }: C
 
 type ChecklistInstanceDetailProps = {
   instance: ChecklistInstance;
-  onRespond: (itemId: string, value: boolean, note?: string) => void;
+  onRespond: (itemId: string, data: ResponseData) => void;
   isResponding: boolean;
 };
 
 function ChecklistInstanceDetail({ instance, onRespond, isResponding }: ChecklistInstanceDetailProps) {
-  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [formData, setFormData] = useState<Record<string, ResponseData>>({});
 
   const { data: details } = useQuery<InstanceWithDetails>({
     queryKey: ["/api/checklist-instances", instance.id],
@@ -267,60 +267,202 @@ function ChecklistInstanceDetail({ instance, onRespond, isResponding }: Checklis
   const { items = [], responses = [] } = details;
   const responseMap = new Map(responses.map(r => [r.itemId, r]));
 
+  const isItemCompleted = (item: ChecklistItem, response: ChecklistResponse | undefined): boolean => {
+    if (!response) return false;
+    switch (item.itemType) {
+      case 'checkbox': return response.value === true;
+      case 'text': return !!(response.textValue && response.textValue.trim());
+      case 'number': return response.numberValue !== null && response.numberValue !== undefined;
+      case 'photo': return !!(response.photoUrl && response.photoUrl.trim());
+      case 'signature': return !!(response.signatureData && response.signatureData.trim());
+      default: return response.value === true;
+    }
+  };
+
+  const getDisplayValue = (item: ChecklistItem, response: ChecklistResponse | undefined): string => {
+    if (!response) return '';
+    switch (item.itemType) {
+      case 'text': return response.textValue || '';
+      case 'number': return response.numberValue?.toString() || '';
+      default: return '';
+    }
+  };
+
   return (
     <div className="space-y-3 pt-2">
       {items.map((item) => {
         const response = responseMap.get(item.id);
-        const isCompleted = response?.value === true;
+        const isCompleted = isItemCompleted(item, response);
+        const currentFormData = formData[item.id] || {};
+        const disabled = isResponding || instance.status === "completed";
 
         return (
           <div 
             key={item.id} 
-            className={`flex items-start gap-3 p-3 rounded-md border ${isCompleted ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" : "bg-background"}`}
+            className={`flex flex-col gap-2 p-3 rounded-md border ${isCompleted ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" : "bg-background"}`}
             data-testid={`checklist-item-${item.id}`}
           >
-            <Checkbox
-              checked={isCompleted}
-              onCheckedChange={(checked) => {
-                onRespond(item.id, !!checked, notes[item.id]);
-              }}
-              disabled={isResponding || instance.status === "completed"}
-              data-testid={`checkbox-item-${item.id}`}
-            />
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-2">
-                <span className={`font-medium ${isCompleted ? "line-through text-muted-foreground" : ""}`}>
-                  {item.label}
-                </span>
-                {item.isRequired && (
-                  <Badge variant="destructive" className="text-xs">Required</Badge>
-                )}
-              </div>
-              {item.helpText && (
-                <p className="text-xs text-muted-foreground">{item.helpText}</p>
-              )}
-              {item.itemType === "text" && !isCompleted && (
-                <Textarea
-                  placeholder="Enter notes..."
-                  value={notes[item.id] || ""}
-                  onChange={(e) => setNotes({ ...notes, [item.id]: e.target.value })}
-                  className="mt-2 text-sm"
-                  disabled={isResponding}
-                  data-testid={`textarea-note-${item.id}`}
+            <div className="flex items-start gap-3">
+              {item.itemType === 'checkbox' && (
+                <Checkbox
+                  checked={isCompleted}
+                  onCheckedChange={(checked) => {
+                    onRespond(item.id, { value: !!checked });
+                  }}
+                  disabled={disabled}
+                  data-testid={`checkbox-item-${item.id}`}
                 />
               )}
-              {response?.note && (
-                <div className="flex items-start gap-1 mt-1 text-xs text-muted-foreground">
-                  <MessageSquare className="w-3 h-3 mt-0.5" />
-                  <span>{response.note}</span>
+              {item.itemType !== 'checkbox' && (
+                <div className="w-5 h-5 flex items-center justify-center text-muted-foreground">
+                  {getItemIcon(item.itemType)}
                 </div>
               )}
-              {response?.completedAt && (
-                <p className="text-xs text-muted-foreground">
-                  Completed: {new Date(response.completedAt).toLocaleString()}
-                </p>
-              )}
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`font-medium ${isCompleted ? "text-muted-foreground" : ""}`}>
+                    {item.label}
+                  </span>
+                  {item.isRequired && (
+                    <Badge variant="destructive" className="text-xs">Required</Badge>
+                  )}
+                  <Badge variant="outline" className="text-xs">{item.itemType}</Badge>
+                </div>
+                {item.helpText && (
+                  <p className="text-xs text-muted-foreground">{item.helpText}</p>
+                )}
+              </div>
             </div>
+
+            {item.itemType === 'text' && (
+              <div className="ml-8 space-y-2">
+                {isCompleted ? (
+                  <div className="p-2 bg-muted rounded text-sm">{getDisplayValue(item, response)}</div>
+                ) : (
+                  <>
+                    <Textarea
+                      placeholder="Enter text response..."
+                      value={currentFormData.textValue || ''}
+                      onChange={(e) => setFormData({ ...formData, [item.id]: { ...currentFormData, textValue: e.target.value } })}
+                      className="text-sm"
+                      disabled={disabled}
+                      data-testid={`textarea-${item.id}`}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => onRespond(item.id, { textValue: currentFormData.textValue })}
+                      disabled={disabled || !currentFormData.textValue?.trim()}
+                      data-testid={`button-submit-${item.id}`}
+                    >
+                      Save Response
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {item.itemType === 'number' && (
+              <div className="ml-8 space-y-2">
+                {isCompleted ? (
+                  <div className="p-2 bg-muted rounded text-sm font-mono">{getDisplayValue(item, response)}</div>
+                ) : (
+                  <>
+                    <Input
+                      type="number"
+                      placeholder="Enter number..."
+                      value={currentFormData.numberValue ?? ''}
+                      onChange={(e) => setFormData({ ...formData, [item.id]: { ...currentFormData, numberValue: parseFloat(e.target.value) || undefined } })}
+                      className="text-sm max-w-[200px]"
+                      disabled={disabled}
+                      data-testid={`input-number-${item.id}`}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => onRespond(item.id, { numberValue: currentFormData.numberValue })}
+                      disabled={disabled || currentFormData.numberValue === undefined}
+                      data-testid={`button-submit-${item.id}`}
+                    >
+                      Save Response
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {item.itemType === 'photo' && (
+              <div className="ml-8 space-y-2">
+                {isCompleted && response?.photoUrl ? (
+                  <div className="max-w-xs">
+                    <img src={response.photoUrl} alt="Uploaded photo" className="rounded border" />
+                  </div>
+                ) : (
+                  <>
+                    <Input
+                      type="url"
+                      placeholder="Enter photo URL..."
+                      value={currentFormData.photoUrl || ''}
+                      onChange={(e) => setFormData({ ...formData, [item.id]: { ...currentFormData, photoUrl: e.target.value } })}
+                      className="text-sm"
+                      disabled={disabled}
+                      data-testid={`input-photo-${item.id}`}
+                    />
+                    <p className="text-xs text-muted-foreground">Note: Photo upload coming soon. For now, paste a URL.</p>
+                    <Button
+                      size="sm"
+                      onClick={() => onRespond(item.id, { photoUrl: currentFormData.photoUrl })}
+                      disabled={disabled || !currentFormData.photoUrl?.trim()}
+                      data-testid={`button-submit-${item.id}`}
+                    >
+                      Save Photo
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {item.itemType === 'signature' && (
+              <div className="ml-8 space-y-2">
+                {isCompleted && response?.signatureData ? (
+                  <div className="p-2 bg-muted rounded">
+                    <img src={response.signatureData} alt="Signature" className="max-h-20" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="p-4 border-2 border-dashed rounded text-center text-muted-foreground">
+                      Signature capture coming soon. For now, type name to confirm:
+                    </div>
+                    <Input
+                      placeholder="Type full name to sign..."
+                      value={currentFormData.signatureData || ''}
+                      onChange={(e) => setFormData({ ...formData, [item.id]: { ...currentFormData, signatureData: e.target.value } })}
+                      className="text-sm"
+                      disabled={disabled}
+                      data-testid={`input-signature-${item.id}`}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => onRespond(item.id, { signatureData: currentFormData.signatureData })}
+                      disabled={disabled || !currentFormData.signatureData?.trim()}
+                      data-testid={`button-submit-${item.id}`}
+                    >
+                      Confirm Signature
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {response?.note && (
+              <div className="ml-8 flex items-start gap-1 text-xs text-muted-foreground">
+                <MessageSquare className="w-3 h-3 mt-0.5" />
+                <span>{response.note}</span>
+              </div>
+            )}
+            {response?.completedAt && (
+              <p className="ml-8 text-xs text-muted-foreground">
+                Completed: {new Date(response.completedAt).toLocaleString()}
+              </p>
+            )}
           </div>
         );
       })}
@@ -333,6 +475,16 @@ function ChecklistInstanceDetail({ instance, onRespond, isResponding }: Checklis
       )}
     </div>
   );
+}
+
+function getItemIcon(itemType: string) {
+  switch (itemType) {
+    case "photo": return <Camera className="w-4 h-4" />;
+    case "text": return <FileText className="w-4 h-4" />;
+    case "signature": return <FileText className="w-4 h-4" />;
+    case "number": return <FileText className="w-4 h-4" />;
+    default: return <CheckCircle2 className="w-4 h-4" />;
+  }
 }
 
 export function PendingChecklistsWarning({ jobId }: { jobId: string }) {

@@ -2244,9 +2244,12 @@ export const checklistResponses = pgTable("checklist_responses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   instanceId: varchar("instance_id").notNull().references(() => checklistInstances.id, { onDelete: "cascade" }),
   itemId: varchar("item_id").notNull().references(() => checklistItems.id),
-  value: boolean("value").default(false), // checked or not
+  value: boolean("value").default(false), // for checkbox type
+  textValue: text("text_value"), // for text type
+  numberValue: decimal("number_value", { precision: 15, scale: 4 }), // for number type
+  signatureData: text("signature_data"), // for signature type (base64 data URL)
   note: text("note"),
-  photoUrl: text("photo_url"),
+  photoUrl: text("photo_url"), // for photo type
   completedById: varchar("completed_by_id").references(() => employees.id),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow(),

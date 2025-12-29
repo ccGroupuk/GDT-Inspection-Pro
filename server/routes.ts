@@ -8000,7 +8000,7 @@ export function registerChecklistRoutes(app: Express) {
   // Complete a checklist item (upsert response)
   app.post("/api/checklist-instances/:id/respond", async (req, res) => {
     try {
-      const { itemId, value, note, photoUrl } = req.body;
+      const { itemId, value, textValue, numberValue, signatureData, note, photoUrl } = req.body;
       const employee = (req as any).employee;
       
       const instance = await storage.getChecklistInstance(req.params.id);
@@ -8008,34 +8008,66 @@ export function registerChecklistRoutes(app: Express) {
         return res.status(404).json({ message: "Instance not found" });
       }
       
-      // Upsert response
+      // Get the item to determine its type
+      const template = await storage.getChecklistTemplate(instance.templateId);
+      const items = template ? await storage.getChecklistItems(template.id) : [];
+      const item = items.find(i => i.id === itemId);
+      
+      // Determine if the item has a valid response based on its type
+      const hasValidResponse = (itemType: string): boolean => {
+        switch (itemType) {
+          case 'checkbox': return value === true;
+          case 'text': return !!(textValue && textValue.trim());
+          case 'number': return numberValue !== null && numberValue !== undefined && !isNaN(parseFloat(String(numberValue)));
+          case 'photo': return !!(photoUrl && photoUrl.trim());
+          case 'signature': return !!(signatureData && signatureData.trim());
+          default: return value === true;
+        }
+      };
+      
+      const isComplete = item ? hasValidResponse(item.itemType) : value === true;
+      
+      // Upsert response with all type-specific fields
       const response = await storage.upsertChecklistResponse({
         instanceId: req.params.id,
         itemId,
-        value,
+        value: item?.itemType === 'checkbox' ? value : isComplete,
+        textValue,
+        numberValue,
+        signatureData,
         note,
         photoUrl,
         completedById: employee?.id,
-        completedAt: value ? new Date() : undefined,
+        completedAt: isComplete ? new Date() : undefined,
       });
       
       // Create audit event
       await storage.createChecklistAuditEvent({
         instanceId: req.params.id,
-        action: value ? 'item_completed' : 'item_uncompleted',
+        action: isComplete ? 'item_completed' : 'item_uncompleted',
         actorId: employee?.id,
         actorName: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown',
-        metadata: JSON.stringify({ itemId }),
+        metadata: JSON.stringify({ itemId, itemType: item?.itemType }),
       });
       
       // Check if all required items are completed
-      const template = await storage.getChecklistTemplate(instance.templateId);
-      const items = template ? await storage.getChecklistItems(template.id) : [];
       const responses = await storage.getChecklistResponses(req.params.id);
       
+      // For each required item, check if its corresponding response has valid data
       const requiredItems = items.filter(i => i.isRequired);
-      const completedItemIds = responses.filter(r => r.value).map(r => r.itemId);
-      const allRequiredCompleted = requiredItems.every(i => completedItemIds.includes(i.id));
+      const isItemCompleted = (itemToCheck: typeof items[0]): boolean => {
+        const resp = responses.find(r => r.itemId === itemToCheck.id);
+        if (!resp) return false;
+        switch (itemToCheck.itemType) {
+          case 'checkbox': return resp.value === true;
+          case 'text': return !!(resp.textValue && resp.textValue.trim());
+          case 'number': return resp.numberValue !== null && resp.numberValue !== undefined;
+          case 'photo': return !!(resp.photoUrl && resp.photoUrl.trim());
+          case 'signature': return !!(resp.signatureData && resp.signatureData.trim());
+          default: return resp.value === true;
+        }
+      };
+      const allRequiredCompleted = requiredItems.every(i => isItemCompleted(i));
       
       // Update instance status
       if (allRequiredCompleted && instance.status !== 'completed') {
