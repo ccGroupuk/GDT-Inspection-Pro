@@ -519,14 +519,17 @@ export default function AssetsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Assigned To</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <Select 
+                        onValueChange={(val) => field.onChange(val === "unassigned" ? null : val)} 
+                        value={field.value || "unassigned"}
+                      >
                         <FormControl>
                           <SelectTrigger data-testid="select-assignee">
                             <SelectValue placeholder="Select employee" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Unassigned</SelectItem>
+                          <SelectItem value="unassigned">Unassigned</SelectItem>
                           {employees.map((emp) => (
                             <SelectItem key={emp.id} value={emp.id}>
                               {emp.firstName} {emp.lastName}
