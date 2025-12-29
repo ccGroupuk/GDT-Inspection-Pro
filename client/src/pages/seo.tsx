@@ -41,7 +41,9 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { SiGoogle, SiInstagram, SiFacebook } from "react-icons/si";
-import type { SeoBusinessProfile, SeoContentPost, SeoWeeklyFocus, SeoAutopilotSettings, SeoAutopilotSlot } from "@shared/schema";
+import type { SeoBusinessProfile, SeoContentPost, SeoWeeklyFocus, SeoAutopilotSettings, SeoAutopilotSlot, SeoGoogleBusinessLocation, SeoMediaLibrary } from "@shared/schema";
+import { Trash2, Edit, GripVertical } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -60,7 +62,7 @@ export default function SEOPowerHouse() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:grid-cols-7">
           <TabsTrigger value="profile" className="gap-2" data-testid="tab-profile">
             <Building2 className="w-4 h-4" />
             <span className="hidden sm:inline">Profile</span>
@@ -72,6 +74,10 @@ export default function SEOPowerHouse() {
           <TabsTrigger value="focus" className="gap-2" data-testid="tab-focus">
             <Target className="w-4 h-4" />
             <span className="hidden sm:inline">Weekly Focus</span>
+          </TabsTrigger>
+          <TabsTrigger value="media" className="gap-2" data-testid="tab-media">
+            <ImageIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Media</span>
           </TabsTrigger>
           <TabsTrigger value="autopilot" className="gap-2" data-testid="tab-autopilot">
             <Zap className="w-4 h-4" />
@@ -99,6 +105,10 @@ export default function SEOPowerHouse() {
           <WeeklyFocusSection />
         </TabsContent>
         
+        <TabsContent value="media">
+          <MediaLibrarySection />
+        </TabsContent>
+        
         <TabsContent value="autopilot">
           <AutopilotSection />
         </TabsContent>
@@ -124,6 +134,8 @@ function BusinessProfileSection() {
     contactPhone: "",
     contactEmail: "",
     websiteUrl: "",
+    facebookUrl: "",
+    instagramUrl: "",
   });
   
   // Store raw text for comma-separated fields to allow typing commas
@@ -135,6 +147,65 @@ function BusinessProfileSection() {
 
   const { data: profile, isLoading } = useQuery<SeoBusinessProfile | null>({
     queryKey: ["/api/seo/business-profile"],
+  });
+  
+  // Google Business Locations
+  const { data: googleLocations = [] } = useQuery<SeoGoogleBusinessLocation[]>({
+    queryKey: ["/api/seo/google-business-locations"],
+  });
+  
+  const [locationDialogOpen, setLocationDialogOpen] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<SeoGoogleBusinessLocation | null>(null);
+  const [newLocation, setNewLocation] = useState({
+    name: "",
+    googleBusinessUrl: "",
+    address: "",
+    isDefault: false,
+  });
+  
+  const createLocationMutation = useMutation({
+    mutationFn: async (data: typeof newLocation) => {
+      const res = await apiRequest("POST", "/api/seo/google-business-locations", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/google-business-locations"] });
+      setLocationDialogOpen(false);
+      setNewLocation({ name: "", googleBusinessUrl: "", address: "", isDefault: false });
+      toast({ title: "Location added", description: "Google Business location has been added." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to add location.", variant: "destructive" });
+    },
+  });
+  
+  const updateLocationMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<typeof newLocation> }) => {
+      const res = await apiRequest("PATCH", `/api/seo/google-business-locations/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/google-business-locations"] });
+      setEditingLocation(null);
+      toast({ title: "Location updated", description: "Google Business location has been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update location.", variant: "destructive" });
+    },
+  });
+  
+  const deleteLocationMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/seo/google-business-locations/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/google-business-locations"] });
+      toast({ title: "Location deleted", description: "Google Business location has been removed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete location.", variant: "destructive" });
+    },
   });
 
   const saveMutation = useMutation({
@@ -160,6 +231,8 @@ function BusinessProfileSection() {
         contactPhone: profile.contactPhone || "",
         contactEmail: profile.contactEmail || "",
         websiteUrl: profile.websiteUrl || "",
+        facebookUrl: profile.facebookUrl || "",
+        instagramUrl: profile.instagramUrl || "",
       });
       setRawInputs({
         servicesOffered: (profile.servicesOffered || []).join(", "),
@@ -316,6 +389,180 @@ function BusinessProfileSection() {
             />
           </div>
         </div>
+
+        <Separator />
+        
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <SiFacebook className="w-5 h-5 text-blue-600" />
+            Social Media Links
+          </h3>
+          <p className="text-sm text-muted-foreground">Add your social media page URLs for quick posting</p>
+          
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="facebookUrl" className="flex items-center gap-2">
+                <SiFacebook className="w-4 h-4" />
+                Facebook Page URL
+              </Label>
+              <Input
+                id="facebookUrl"
+                data-testid="input-facebook-url"
+                value={formData.facebookUrl}
+                onChange={(e) => setFormData(prev => ({ ...prev, facebookUrl: e.target.value }))}
+                placeholder="https://www.facebook.com/cccgroup"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="instagramUrl" className="flex items-center gap-2">
+                <SiInstagram className="w-4 h-4" />
+                Instagram Profile URL
+              </Label>
+              <Input
+                id="instagramUrl"
+                data-testid="input-instagram-url"
+                value={formData.instagramUrl}
+                onChange={(e) => setFormData(prev => ({ ...prev, instagramUrl: e.target.value }))}
+                placeholder="https://www.instagram.com/cccgroup"
+              />
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <SiGoogle className="w-5 h-5 text-blue-500" />
+                Google Business Locations
+              </h3>
+              <p className="text-sm text-muted-foreground">Manage your Google Business Profile locations for posting</p>
+            </div>
+            <Dialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" data-testid="button-add-location">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Location
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Google Business Location</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="locationName">Location Name</Label>
+                    <Input
+                      id="locationName"
+                      data-testid="input-location-name"
+                      value={newLocation.name}
+                      onChange={(e) => setNewLocation(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g., Cardiff, Caerphilly"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="googleBusinessUrl">Google Business URL</Label>
+                    <Input
+                      id="googleBusinessUrl"
+                      data-testid="input-google-business-url"
+                      value={newLocation.googleBusinessUrl}
+                      onChange={(e) => setNewLocation(prev => ({ ...prev, googleBusinessUrl: e.target.value }))}
+                      placeholder="https://business.google.com/..."
+                    />
+                    <p className="text-xs text-muted-foreground">Paste the URL from your Google Business dashboard</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="locationAddress">Address (optional)</Label>
+                    <Input
+                      id="locationAddress"
+                      data-testid="input-location-address"
+                      value={newLocation.address}
+                      onChange={(e) => setNewLocation(prev => ({ ...prev, address: e.target.value }))}
+                      placeholder="Full address"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="isDefault"
+                      checked={newLocation.isDefault}
+                      onCheckedChange={(checked) => setNewLocation(prev => ({ ...prev, isDefault: checked as boolean }))}
+                    />
+                    <Label htmlFor="isDefault">Set as default location</Label>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setLocationDialogOpen(false)}>Cancel</Button>
+                  <Button 
+                    onClick={() => createLocationMutation.mutate(newLocation)}
+                    disabled={createLocationMutation.isPending || !newLocation.name || !newLocation.googleBusinessUrl}
+                    data-testid="button-save-location"
+                  >
+                    {createLocationMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    Save Location
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {googleLocations.length === 0 ? (
+            <Card className="bg-muted/30">
+              <CardContent className="py-6 text-center text-muted-foreground">
+                <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>No Google Business locations added yet</p>
+                <p className="text-sm">Add your locations to enable quick posting to Google Business</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {googleLocations.map((location) => (
+                <Card key={location.id} className="bg-muted/30">
+                  <CardContent className="py-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <SiGoogle className="w-5 h-5 text-blue-500" />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{location.name}</span>
+                            {location.isDefault && (
+                              <Badge variant="secondary" className="text-xs">Default</Badge>
+                            )}
+                          </div>
+                          {location.address && (
+                            <p className="text-sm text-muted-foreground">{location.address}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => window.open(location.googleBusinessUrl, '_blank')}
+                          data-testid={`button-open-location-${location.id}`}
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteLocationMutation.mutate(location.id)}
+                          disabled={deleteLocationMutation.isPending}
+                          data-testid={`button-delete-location-${location.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <Separator />
 
         <Button
           onClick={handleSave}
@@ -829,6 +1076,258 @@ function WeeklyFocusSection() {
   );
 }
 
+const MEDIA_CATEGORIES = [
+  { value: "general", label: "General" },
+  { value: "job_photos", label: "Job Photos" },
+  { value: "team", label: "Team Photos" },
+  { value: "promotional", label: "Promotional" },
+  { value: "seasonal", label: "Seasonal" },
+  { value: "before_after", label: "Before/After" },
+  { value: "logo", label: "Logo & Branding" },
+];
+
+function MediaLibrarySection() {
+  const { toast } = useToast();
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [newMedia, setNewMedia] = useState({
+    filename: "",
+    url: "",
+    category: "general",
+    title: "",
+    description: "",
+  });
+
+  const { data: mediaItems = [], isLoading } = useQuery<SeoMediaLibrary[]>({
+    queryKey: ["/api/seo/media-library"],
+  });
+
+  const filteredMedia = categoryFilter === "all" 
+    ? mediaItems 
+    : mediaItems.filter(m => m.category === categoryFilter);
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof newMedia) => {
+      const res = await apiRequest("POST", "/api/seo/media-library", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/media-library"] });
+      setUploadDialogOpen(false);
+      setNewMedia({ filename: "", url: "", category: "general", title: "", description: "" });
+      toast({ title: "Media added", description: "Image has been added to your library." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to add media.", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/seo/media-library/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/media-library"] });
+      toast({ title: "Deleted", description: "Media has been removed from your library." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete media.", variant: "destructive" });
+    },
+  });
+
+  const copyUrlToClipboard = (url: string) => {
+    navigator.clipboard.writeText(url);
+    toast({ title: "URL copied", description: "Image URL copied to clipboard." });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ImageIcon className="w-5 h-5" />
+              Media Library
+            </CardTitle>
+            <CardDescription>
+              Manage your marketing images for social media posts
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-40" data-testid="select-media-category-filter">
+                <SelectValue placeholder="Filter by category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {MEDIA_CATEGORIES.map(cat => (
+                  <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-media">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Image
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Image to Library</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaUrl">Image URL</Label>
+                    <Input
+                      id="mediaUrl"
+                      data-testid="input-media-url"
+                      value={newMedia.url}
+                      onChange={(e) => setNewMedia(prev => ({ ...prev, url: e.target.value }))}
+                      placeholder="https://example.com/image.jpg"
+                    />
+                    <p className="text-xs text-muted-foreground">Enter the URL of an image, or use Object Storage to upload</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaFilename">Filename</Label>
+                    <Input
+                      id="mediaFilename"
+                      data-testid="input-media-filename"
+                      value={newMedia.filename}
+                      onChange={(e) => setNewMedia(prev => ({ ...prev, filename: e.target.value }))}
+                      placeholder="kitchen-project-01.jpg"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaTitle">Title (optional)</Label>
+                    <Input
+                      id="mediaTitle"
+                      data-testid="input-media-title"
+                      value={newMedia.title}
+                      onChange={(e) => setNewMedia(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Beautiful Kitchen Renovation"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaCategory">Category</Label>
+                    <Select 
+                      value={newMedia.category} 
+                      onValueChange={(v) => setNewMedia(prev => ({ ...prev, category: v }))}
+                    >
+                      <SelectTrigger data-testid="select-media-category">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MEDIA_CATEGORIES.map(cat => (
+                          <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaDescription">Description (optional)</Label>
+                    <Textarea
+                      id="mediaDescription"
+                      data-testid="input-media-description"
+                      value={newMedia.description}
+                      onChange={(e) => setNewMedia(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Describe this image for AI context..."
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>Cancel</Button>
+                  <Button 
+                    onClick={() => createMutation.mutate(newMedia)}
+                    disabled={createMutation.isPending || !newMedia.url || !newMedia.filename}
+                    data-testid="button-save-media"
+                  >
+                    {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    Add to Library
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {filteredMedia.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+            <ImageIcon className="w-10 h-10 mb-4 opacity-50" />
+            <p>No media items yet</p>
+            <p className="text-sm">Add images to use in your social media posts</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {filteredMedia.map((item) => (
+              <Card key={item.id} className="bg-muted/30 overflow-hidden">
+                <div className="aspect-square relative">
+                  <img 
+                    src={item.url} 
+                    alt={item.title || item.filename}
+                    className="w-full h-full object-cover"
+                  />
+                  {item.isAiGenerated && (
+                    <Badge className="absolute top-2 left-2" variant="secondary">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      AI
+                    </Badge>
+                  )}
+                </div>
+                <CardContent className="p-3">
+                  <p className="text-sm font-medium truncate">{item.title || item.filename}</p>
+                  <Badge variant="outline" className="mt-1 text-xs">
+                    {MEDIA_CATEGORIES.find(c => c.value === item.category)?.label || item.category}
+                  </Badge>
+                  <div className="flex items-center gap-1 mt-2">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => copyUrlToClipboard(item.url)}
+                      data-testid={`button-copy-media-url-${item.id}`}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => window.open(item.url, '_blank')}
+                      data-testid={`button-view-media-${item.id}`}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => deleteMutation.mutate(item.id)}
+                      disabled={deleteMutation.isPending}
+                      data-testid={`button-delete-media-${item.id}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ContentCreatorSection() {
   const { toast } = useToast();
   const [platform, setPlatform] = useState("facebook");
@@ -1133,10 +1632,69 @@ function PostsSection() {
   const { data: posts = [], isLoading } = useQuery<SeoContentPost[]>({
     queryKey: ["/api/seo/content-posts"],
   });
+  
+  // Get profile for social media URLs
+  const { data: profile } = useQuery<SeoBusinessProfile | null>({
+    queryKey: ["/api/seo/business-profile"],
+  });
+  
+  // Get Google Business locations for posting
+  const { data: googleLocations = [] } = useQuery<SeoGoogleBusinessLocation[]>({
+    queryKey: ["/api/seo/google-business-locations"],
+  });
 
   const filteredPosts = statusFilter === "all" 
     ? posts 
     : posts.filter(p => p.status === statusFilter);
+  
+  // Mutation to update post status
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/seo/content-posts/${id}`, { 
+        status,
+        publishedAt: status === "published" ? new Date().toISOString() : undefined
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/content-posts"] });
+      toast({ title: "Post updated", description: "Post status has been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update post.", variant: "destructive" });
+    },
+  });
+  
+  // Get the posting URL for a platform
+  const getPostingUrl = (platform: string, targetLocationId?: string | null) => {
+    switch (platform) {
+      case "facebook":
+        return profile?.facebookUrl || "https://www.facebook.com";
+      case "instagram":
+        return profile?.instagramUrl || "https://www.instagram.com";
+      case "google_business":
+        if (targetLocationId) {
+          const location = googleLocations.find(l => l.id === targetLocationId);
+          if (location) return location.googleBusinessUrl;
+        }
+        // Return default location or first available
+        const defaultLocation = googleLocations.find(l => l.isDefault) || googleLocations[0];
+        return defaultLocation?.googleBusinessUrl || "https://business.google.com";
+      default:
+        return "#";
+    }
+  };
+  
+  // Handle post now action - copies content and opens platform
+  const handlePostNow = (post: SeoContentPost) => {
+    navigator.clipboard.writeText(post.content);
+    const url = getPostingUrl(post.platform, post.targetLocationId);
+    window.open(url, '_blank');
+    toast({ 
+      title: "Content copied!", 
+      description: `Opening ${post.platform.replace("_", " ")} - paste your content there.`
+    });
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -1242,7 +1800,7 @@ function PostsSection() {
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Button
                         size="icon"
                         variant="ghost"
@@ -1254,6 +1812,44 @@ function PostsSection() {
                       >
                         <Copy className="w-4 h-4" />
                       </Button>
+                      
+                      {/* Post Now button - opens platform with content copied */}
+                      {post.status !== "published" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handlePostNow(post)}
+                          data-testid={`button-post-now-${post.id}`}
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Post Now
+                        </Button>
+                      )}
+                      
+                      {/* Mark as Published button */}
+                      {post.status !== "published" && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => updateStatusMutation.mutate({ id: post.id, status: "published" })}
+                          disabled={updateStatusMutation.isPending}
+                          data-testid={`button-mark-published-${post.id}`}
+                        >
+                          {updateStatusMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                          )}
+                          Mark Published
+                        </Button>
+                      )}
+                      
+                      {/* Published indicator */}
+                      {post.status === "published" && post.publishedAt && (
+                        <span className="text-xs text-muted-foreground">
+                          Published {new Date(post.publishedAt).toLocaleDateString()}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </CardContent>
