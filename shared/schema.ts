@@ -1730,6 +1730,16 @@ export const emergencyCallouts = pgTable("emergency_callouts", {
   resolvedAt: timestamp("resolved_at"),
   resolutionNotes: text("resolution_notes"),
   
+  // Completion payment tracking (partner collects from client, owes fee to CCC)
+  completedAt: timestamp("completed_at"),
+  completedByPartnerId: varchar("completed_by_partner_id").references(() => tradePartners.id),
+  totalCollected: decimal("total_collected", { precision: 10, scale: 2 }), // Amount partner collected from client
+  calloutFeePercent: decimal("callout_fee_percent", { precision: 5, scale: 2 }).default("20.00"), // CCC fee percentage (default 20%)
+  calloutFeeAmount: decimal("callout_fee_amount", { precision: 10, scale: 2 }), // Calculated fee owed to CCC
+  feePaid: boolean("fee_paid").default(false), // Has partner paid the fee to CCC?
+  feePaidAt: timestamp("fee_paid_at"),
+  feeTransactionId: varchar("fee_transaction_id").references(() => financialTransactions.id), // Link to finance entry
+  
   createdAt: timestamp("created_at").defaultNow(),
   createdBy: varchar("created_by"),
 });
