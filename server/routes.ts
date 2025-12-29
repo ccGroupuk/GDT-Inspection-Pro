@@ -7395,7 +7395,16 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   // Create asset
   app.post("/api/assets", async (req, res) => {
     try {
-      const asset = await storage.createAsset(req.body);
+      // Parse date strings to Date objects
+      const assetData = { ...req.body };
+      const dateFields = ['purchaseDate', 'warrantyExpiry', 'motDate', 'insuranceExpiry', 'nextServiceDate', 'lastServiceDate'];
+      for (const field of dateFields) {
+        if (assetData[field] && typeof assetData[field] === 'string') {
+          assetData[field] = new Date(assetData[field]);
+        }
+      }
+      
+      const asset = await storage.createAsset(assetData);
       
       // Auto-create reminders for vehicles
       if (asset.type === 'vehicle') {
@@ -7450,7 +7459,16 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   // Update asset
   app.patch("/api/assets/:id", async (req, res) => {
     try {
-      const updated = await storage.updateAsset(req.params.id, req.body);
+      // Parse date strings to Date objects
+      const assetData = { ...req.body };
+      const dateFields = ['purchaseDate', 'warrantyExpiry', 'motDate', 'insuranceExpiry', 'nextServiceDate', 'lastServiceDate'];
+      for (const field of dateFields) {
+        if (assetData[field] && typeof assetData[field] === 'string') {
+          assetData[field] = new Date(assetData[field]);
+        }
+      }
+      
+      const updated = await storage.updateAsset(req.params.id, assetData);
       if (!updated) {
         return res.status(404).json({ message: "Asset not found" });
       }
