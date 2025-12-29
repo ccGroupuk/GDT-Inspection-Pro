@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { 
   Briefcase, LogOut, Loader2, Calendar, HelpCircle, Settings, 
-  ClipboardCheck, FileText, Plus, Trash2, Save, Send, ArrowLeft
+  ClipboardCheck, FileText, Plus, Trash2, Save, Send, ArrowLeft, Siren
 } from "lucide-react";
 import type { PartnerQuote, PartnerQuoteItem, Job } from "@shared/schema";
 
@@ -498,6 +498,17 @@ export default function PartnerPortalQuotes() {
               >
                 <Calendar className="w-4 h-4 mr-2" />
                 Calendar
+              </Button>
+            </Link>
+            <Link href="/partner-portal/emergency-callouts">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-none border-b-2 border-transparent text-muted-foreground"
+                data-testid="nav-emergency"
+              >
+                <Siren className="w-4 h-4 mr-2" />
+                Emergency
               </Button>
             </Link>
             <Link href="/partner-portal/help">

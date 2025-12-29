@@ -38,13 +38,21 @@ import {
   Upload,
   ClipboardCheck,
   Clock,
+  AlertTriangle,
+  Siren,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey } from "@shared/schema";
-import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES, NOTE_VISIBILITY, SURVEY_STATUSES } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse } from "@shared/schema";
+import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES, NOTE_VISIBILITY, SURVEY_STATUSES, EMERGENCY_INCIDENT_TYPES, EMERGENCY_PRIORITIES } from "@shared/schema";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface JobSurveyWithPartner extends JobSurvey {
   partner?: TradePartner | null;
+}
+
+interface EmergencyCalloutWithDetails extends EmergencyCallout {
+  responses?: (EmergencyCalloutResponse & { partner?: TradePartner })[];
+  job?: Job;
 }
 
 interface JobNoteWithAttachments extends JobNote {
@@ -166,6 +174,27 @@ export default function JobDetail() {
     enabled: Boolean(id),
   });
 
+  // Fetch emergency callouts for this job
+  const { data: emergencyCallouts } = useQuery<EmergencyCalloutWithDetails[]>({
+    queryKey: ["/api/jobs", id, "emergency-callouts"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/emergency-callouts`);
+      if (!response.ok) throw new Error("Failed to fetch emergency callouts");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
+  // Fetch emergency-ready partners
+  const { data: emergencyPartners } = useQuery<TradePartner[]>({
+    queryKey: ["/api/emergency-ready-partners"],
+    queryFn: async () => {
+      const response = await fetch("/api/emergency-ready-partners");
+      if (!response.ok) throw new Error("Failed to fetch emergency partners");
+      return response.json();
+    },
+  });
+
   // Schedule proposal dialog state
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [proposedStartDate, setProposedStartDate] = useState("");
@@ -186,6 +215,25 @@ export default function JobDetail() {
   const [surveyNotes, setSurveyNotes] = useState("");
   const [surveyDate, setSurveyDate] = useState("");
   const [surveyTime, setSurveyTime] = useState("");
+
+  // Emergency callout dialog state
+  const [emergencyDialogOpen, setEmergencyDialogOpen] = useState(false);
+  const [emergencyIncidentType, setEmergencyIncidentType] = useState<string>("leak");
+  const [emergencyPriority, setEmergencyPriority] = useState<string>("high");
+  const [emergencyDescription, setEmergencyDescription] = useState("");
+  const [selectedEmergencyPartners, setSelectedEmergencyPartners] = useState<string[]>([]);
+  const [emergencyCalloutDetailId, setEmergencyCalloutDetailId] = useState<string | null>(null);
+
+  // Fetch single emergency callout with responses (must be after state declaration)
+  const { data: emergencyCalloutDetail } = useQuery<EmergencyCalloutWithDetails>({
+    queryKey: ["/api/emergency-callouts", emergencyCalloutDetailId],
+    queryFn: async () => {
+      const response = await fetch(`/api/emergency-callouts/${emergencyCalloutDetailId}`);
+      if (!response.ok) throw new Error("Failed to fetch emergency callout");
+      return response.json();
+    },
+    enabled: Boolean(emergencyCalloutDetailId),
+  });
 
   const { uploadFile } = useUpload({
     onSuccess: (response) => {
@@ -482,6 +530,64 @@ export default function JobDetail() {
       toast({ title: "Error declining partner quote", variant: "destructive" });
     },
   });
+
+  // Emergency callout mutations
+  const createEmergencyCalloutMutation = useMutation({
+    mutationFn: async (data: { 
+      jobId: string; 
+      incidentType: string; 
+      priority: string; 
+      description?: string; 
+      partnerIds: string[] 
+    }) => {
+      return apiRequest("POST", "/api/emergency-callouts", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "emergency-callouts"] });
+      toast({ title: "Emergency callout broadcast sent" });
+      resetEmergencyDialog();
+    },
+    onError: () => {
+      toast({ title: "Error creating emergency callout", variant: "destructive" });
+    },
+  });
+
+  const assignEmergencyPartnerMutation = useMutation({
+    mutationFn: async ({ calloutId, responseId }: { calloutId: string; responseId: string }) => {
+      return apiRequest("POST", `/api/emergency-callouts/${calloutId}/assign`, { responseId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "emergency-callouts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/emergency-callouts", emergencyCalloutDetailId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      toast({ title: "Partner assigned to emergency callout" });
+      setEmergencyCalloutDetailId(null);
+    },
+    onError: () => {
+      toast({ title: "Error assigning partner", variant: "destructive" });
+    },
+  });
+
+  const resolveEmergencyCalloutMutation = useMutation({
+    mutationFn: async ({ calloutId, status, resolutionNotes }: { calloutId: string; status: string; resolutionNotes?: string }) => {
+      return apiRequest("POST", `/api/emergency-callouts/${calloutId}/resolve`, { status, resolutionNotes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "emergency-callouts"] });
+      toast({ title: "Emergency callout resolved" });
+    },
+    onError: () => {
+      toast({ title: "Error resolving callout", variant: "destructive" });
+    },
+  });
+
+  const resetEmergencyDialog = () => {
+    setEmergencyDialogOpen(false);
+    setEmergencyIncidentType("leak");
+    setEmergencyPriority("high");
+    setEmergencyDescription("");
+    setSelectedEmergencyPartners([]);
+  };
 
   const resetSurveyDialog = () => {
     setSurveyDialogOpen(false);
@@ -1453,6 +1559,89 @@ export default function JobDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* Emergency Callouts Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Siren className="w-4 h-4 text-destructive" />
+                  Emergency Callouts
+                </div>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setEmergencyDialogOpen(true)}
+                  data-testid="button-emergency-callout"
+                >
+                  <AlertTriangle className="w-4 h-4 mr-1" />
+                  Urgent
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(!emergencyCallouts || emergencyCallouts.length === 0) ? (
+                <p className="text-sm text-muted-foreground">No emergency callouts for this job.</p>
+              ) : (
+                <div className="space-y-3">
+                  {emergencyCallouts.map((callout) => (
+                    <div key={callout.id} className="p-3 rounded-md bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-sm font-medium">
+                          {EMERGENCY_INCIDENT_TYPES.find(t => t.value === callout.incidentType)?.label || callout.incidentType}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={
+                            callout.priority === "critical" ? "destructive" :
+                            callout.priority === "high" ? "destructive" :
+                            callout.priority === "medium" ? "secondary" :
+                            "outline"
+                          }>
+                            {EMERGENCY_PRIORITIES.find(p => p.value === callout.priority)?.label || callout.priority}
+                          </Badge>
+                          <Badge variant={
+                            callout.status === "assigned" || callout.status === "resolved" ? "default" :
+                            callout.status === "cancelled" ? "destructive" :
+                            "outline"
+                          }>
+                            {callout.status.charAt(0).toUpperCase() + callout.status.slice(1)}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {callout.description && (
+                        <p className="text-xs text-muted-foreground">{callout.description}</p>
+                      )}
+                      
+                      {callout.broadcastAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Broadcast: {new Date(callout.broadcastAt).toLocaleString()}
+                        </p>
+                      )}
+                      
+                      {callout.assignedPartnerId && callout.assignedAt && (
+                        <p className="text-xs text-green-700 dark:text-green-400">
+                          Partner assigned at {new Date(callout.assignedAt).toLocaleString()}
+                        </p>
+                      )}
+                      
+                      {callout.status === "open" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEmergencyCalloutDetailId(callout.id)}
+                          data-testid={`button-view-responses-${callout.id}`}
+                        >
+                          <Eye className="w-3 h-3 mr-1" />
+                          View Responses
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -1693,6 +1882,253 @@ export default function JobDetail() {
               {editingNote ? "Update" : "Add"} Note
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Emergency Callout Create Dialog */}
+      <Dialog open={emergencyDialogOpen} onOpenChange={(open) => !open && resetEmergencyDialog()}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Siren className="w-5 h-5" />
+              Emergency Callout
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Incident Type</Label>
+                <Select value={emergencyIncidentType} onValueChange={setEmergencyIncidentType}>
+                  <SelectTrigger data-testid="select-emergency-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMERGENCY_INCIDENT_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select value={emergencyPriority} onValueChange={setEmergencyPriority}>
+                  <SelectTrigger data-testid="select-emergency-priority">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMERGENCY_PRIORITIES.map((priority) => (
+                      <SelectItem key={priority.value} value={priority.value}>{priority.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={emergencyDescription}
+                onChange={(e) => setEmergencyDescription(e.target.value)}
+                placeholder="Describe the emergency situation..."
+                className="min-h-[80px]"
+                data-testid="textarea-emergency-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Select Partners to Alert</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Only partners marked as emergency-available will be shown
+              </p>
+              {(!emergencyPartners || emergencyPartners.length === 0) ? (
+                <p className="text-sm text-muted-foreground">No emergency-ready partners available.</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-2">
+                  {emergencyPartners.map((partner) => (
+                    <div key={partner.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`partner-${partner.id}`}
+                        checked={selectedEmergencyPartners.includes(partner.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedEmergencyPartners(prev => [...prev, partner.id]);
+                          } else {
+                            setSelectedEmergencyPartners(prev => prev.filter(id => id !== partner.id));
+                          }
+                        }}
+                        data-testid={`checkbox-partner-${partner.id}`}
+                      />
+                      <label
+                        htmlFor={`partner-${partner.id}`}
+                        className="text-sm cursor-pointer flex-1"
+                      >
+                        {partner.businessName}
+                        <span className="text-xs text-muted-foreground ml-2">
+                          ({partner.tradeCategory})
+                        </span>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetEmergencyDialog}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (selectedEmergencyPartners.length === 0) {
+                  toast({ title: "Please select at least one partner", variant: "destructive" });
+                  return;
+                }
+                createEmergencyCalloutMutation.mutate({
+                  jobId: id!,
+                  incidentType: emergencyIncidentType,
+                  priority: emergencyPriority,
+                  description: emergencyDescription || undefined,
+                  partnerIds: selectedEmergencyPartners,
+                });
+              }}
+              disabled={createEmergencyCalloutMutation.isPending}
+              data-testid="button-broadcast-emergency"
+            >
+              <Siren className="w-4 h-4 mr-1" />
+              {createEmergencyCalloutMutation.isPending ? "Broadcasting..." : "Broadcast Alert"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Emergency Response Board Dialog */}
+      <Dialog open={!!emergencyCalloutDetailId} onOpenChange={(open) => !open && setEmergencyCalloutDetailId(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Siren className="w-5 h-5 text-destructive" />
+              Emergency Response Board
+            </DialogTitle>
+          </DialogHeader>
+          {emergencyCalloutDetail && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Type: </span>
+                  <span className="font-medium">
+                    {EMERGENCY_INCIDENT_TYPES.find(t => t.value === emergencyCalloutDetail.incidentType)?.label || emergencyCalloutDetail.incidentType}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Priority: </span>
+                  <Badge variant={emergencyCalloutDetail.priority === "critical" || emergencyCalloutDetail.priority === "high" ? "destructive" : "secondary"}>
+                    {EMERGENCY_PRIORITIES.find(p => p.value === emergencyCalloutDetail.priority)?.label || emergencyCalloutDetail.priority}
+                  </Badge>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Broadcast: </span>
+                  <span>{emergencyCalloutDetail.broadcastAt ? new Date(emergencyCalloutDetail.broadcastAt).toLocaleString() : "N/A"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Status: </span>
+                  <Badge>{emergencyCalloutDetail.status}</Badge>
+                </div>
+              </div>
+              
+              {emergencyCalloutDetail.description && (
+                <div className="text-sm bg-muted p-2 rounded">
+                  {emergencyCalloutDetail.description}
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <Label className="text-base">Partner Responses</Label>
+                {(!emergencyCalloutDetail.responses || emergencyCalloutDetail.responses.length === 0) ? (
+                  <p className="text-sm text-muted-foreground">No responses yet. Waiting for partners...</p>
+                ) : (
+                  <div className="space-y-2">
+                    {emergencyCalloutDetail.responses.map((response) => (
+                      <div 
+                        key={response.id} 
+                        className={`p-3 rounded-md border ${
+                          response.status === "selected" ? "border-green-500 bg-green-50 dark:bg-green-950" :
+                          response.status === "responded" ? "border-blue-500 bg-blue-50 dark:bg-blue-950" :
+                          response.status === "declined" ? "border-red-300 bg-red-50 dark:bg-red-950" :
+                          "border-muted"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="font-medium">
+                            {response.partner?.businessName || "Unknown Partner"}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {response.proposedArrivalMinutes && (
+                              <Badge variant="outline" className="text-xs">
+                                <Clock className="w-3 h-3 mr-1" />
+                                ETA: {response.proposedArrivalMinutes} min
+                              </Badge>
+                            )}
+                            <Badge variant={
+                              response.status === "selected" ? "default" :
+                              response.status === "responded" ? "secondary" :
+                              response.status === "declined" ? "destructive" :
+                              response.status === "acknowledged" ? "outline" :
+                              "outline"
+                            }>
+                              {response.status.charAt(0).toUpperCase() + response.status.slice(1)}
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        {response.responseNotes && (
+                          <p className="text-xs text-muted-foreground mt-1">{response.responseNotes}</p>
+                        )}
+                        
+                        {response.declineReason && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                            Reason: {response.declineReason}
+                          </p>
+                        )}
+                        
+                        {response.status === "responded" && emergencyCalloutDetail.status === "open" && (
+                          <Button
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => assignEmergencyPartnerMutation.mutate({
+                              calloutId: emergencyCalloutDetail.id,
+                              responseId: response.id,
+                            })}
+                            disabled={assignEmergencyPartnerMutation.isPending}
+                            data-testid={`button-select-partner-${response.id}`}
+                          >
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Select This Partner
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {emergencyCalloutDetail.status === "open" && (
+                <div className="flex justify-end pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      resolveEmergencyCalloutMutation.mutate({
+                        calloutId: emergencyCalloutDetail.id,
+                        status: "cancelled",
+                      });
+                      setEmergencyCalloutDetailId(null);
+                    }}
+                    data-testid="button-cancel-callout"
+                  >
+                    Cancel Callout
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

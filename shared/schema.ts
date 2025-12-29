@@ -1791,6 +1791,14 @@ export const EMERGENCY_INCIDENT_TYPES = [
   { value: "other", label: "Other Emergency", icon: "alert-circle" },
 ] as const;
 
+// Emergency Priorities
+export const EMERGENCY_PRIORITIES = [
+  { value: "critical", label: "Critical - Life/Safety", color: "bg-red-600" },
+  { value: "high", label: "High - Urgent", color: "bg-red-500" },
+  { value: "medium", label: "Medium", color: "bg-yellow-500" },
+  { value: "low", label: "Low", color: "bg-gray-500" },
+] as const;
+
 // Emergency Callout Statuses
 export const EMERGENCY_CALLOUT_STATUSES = [
   { value: "open", label: "Open - Awaiting Responses", color: "bg-red-500" },
