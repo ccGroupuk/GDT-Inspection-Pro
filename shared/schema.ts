@@ -44,6 +44,9 @@ export const tradePartners = pgTable("trade_partners", {
   rating: integer("rating").default(5), // 1-5
   notes: text("notes"),
   isActive: boolean("is_active").default(true),
+  // Emergency callout availability
+  emergencyAvailable: boolean("emergency_available").default(false), // Available for emergency callouts
+  emergencyNote: text("emergency_note"), // Notes about availability
 });
 
 export const insertTradePartnerSchema = createInsertSchema(tradePartners).omit({ id: true });
@@ -1688,4 +1691,111 @@ export const ACCESS_AREAS = [
   { value: "employees", label: "Employee Management" },
   { value: "payroll", label: "Payroll" },
   { value: "help_center", label: "Help Center Admin" },
+] as const;
+
+// Emergency Callouts - for urgent jobs that need immediate partner response
+export const emergencyCallouts = pgTable("emergency_callouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  
+  // Emergency details
+  incidentType: text("incident_type").notNull(), // leak, flood, fire_damage, security, electrical, gas, structural, other
+  priority: text("priority").notNull().default("high"), // high, critical
+  description: text("description"),
+  
+  // Status tracking
+  status: text("status").notNull().default("open"), // open, assigned, in_progress, resolved, cancelled
+  
+  // Broadcast info
+  broadcastAt: timestamp("broadcast_at"),
+  
+  // Assignment
+  assignedPartnerId: varchar("assigned_partner_id").references(() => tradePartners.id),
+  assignedAt: timestamp("assigned_at"),
+  
+  // Resolution
+  resolvedAt: timestamp("resolved_at"),
+  resolutionNotes: text("resolution_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  createdBy: varchar("created_by"),
+});
+
+export const emergencyCalloutsRelations = relations(emergencyCallouts, ({ one, many }) => ({
+  job: one(jobs, {
+    fields: [emergencyCallouts.jobId],
+    references: [jobs.id],
+  }),
+  assignedPartner: one(tradePartners, {
+    fields: [emergencyCallouts.assignedPartnerId],
+    references: [tradePartners.id],
+  }),
+  responses: many(emergencyCalloutResponses),
+}));
+
+export const insertEmergencyCalloutSchema = createInsertSchema(emergencyCallouts).omit({ id: true, createdAt: true });
+export type InsertEmergencyCallout = z.infer<typeof insertEmergencyCalloutSchema>;
+export type EmergencyCallout = typeof emergencyCallouts.$inferSelect;
+
+// Emergency Callout Responses - partner responses to emergency broadcasts
+export const emergencyCalloutResponses = pgTable("emergency_callout_responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  calloutId: varchar("callout_id").notNull().references(() => emergencyCallouts.id, { onDelete: "cascade" }),
+  partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
+  
+  // Response status
+  status: text("status").notNull().default("pending"), // pending, acknowledged, responded, declined, selected, not_selected
+  
+  // Partner response
+  acknowledgedAt: timestamp("acknowledged_at"),
+  respondedAt: timestamp("responded_at"),
+  proposedArrivalMinutes: integer("proposed_arrival_minutes"), // ETA in minutes
+  proposedArrivalTime: timestamp("proposed_arrival_time"), // or specific time
+  responseNotes: text("response_notes"),
+  
+  // Decline reason
+  declinedAt: timestamp("declined_at"),
+  declineReason: text("decline_reason"),
+  
+  // Selection
+  selectedAt: timestamp("selected_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const emergencyCalloutResponsesRelations = relations(emergencyCalloutResponses, ({ one }) => ({
+  callout: one(emergencyCallouts, {
+    fields: [emergencyCalloutResponses.calloutId],
+    references: [emergencyCallouts.id],
+  }),
+  partner: one(tradePartners, {
+    fields: [emergencyCalloutResponses.partnerId],
+    references: [tradePartners.id],
+  }),
+}));
+
+export const insertEmergencyCalloutResponseSchema = createInsertSchema(emergencyCalloutResponses).omit({ id: true, createdAt: true });
+export type InsertEmergencyCalloutResponse = z.infer<typeof insertEmergencyCalloutResponseSchema>;
+export type EmergencyCalloutResponse = typeof emergencyCalloutResponses.$inferSelect;
+
+// Emergency Incident Types
+export const EMERGENCY_INCIDENT_TYPES = [
+  { value: "leak", label: "Water Leak", icon: "droplet" },
+  { value: "flood", label: "Flooding", icon: "waves" },
+  { value: "fire_damage", label: "Fire Damage", icon: "flame" },
+  { value: "security", label: "Security Issue", icon: "shield" },
+  { value: "electrical", label: "Electrical Emergency", icon: "zap" },
+  { value: "gas", label: "Gas Leak", icon: "alert-triangle" },
+  { value: "structural", label: "Structural Damage", icon: "home" },
+  { value: "roof", label: "Roof Damage", icon: "cloud-rain" },
+  { value: "other", label: "Other Emergency", icon: "alert-circle" },
+] as const;
+
+// Emergency Callout Statuses
+export const EMERGENCY_CALLOUT_STATUSES = [
+  { value: "open", label: "Open - Awaiting Responses", color: "bg-red-500" },
+  { value: "assigned", label: "Partner Assigned", color: "bg-blue-500" },
+  { value: "in_progress", label: "In Progress", color: "bg-yellow-500" },
+  { value: "resolved", label: "Resolved", color: "bg-green-500" },
+  { value: "cancelled", label: "Cancelled", color: "bg-gray-500" },
 ] as const;
