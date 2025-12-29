@@ -18,6 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -490,6 +491,7 @@ export default function EmergencyCallouts() {
                             <Checkbox 
                               checked={field.value.includes(partner.id)}
                               onCheckedChange={() => togglePartner(partner.id)}
+                              onClick={(e) => e.stopPropagation()}
                             />
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-sm truncate">{partner.businessName}</div>
