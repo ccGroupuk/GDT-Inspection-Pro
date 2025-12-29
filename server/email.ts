@@ -377,6 +377,63 @@ export async function sendQuoteNotification(
   return sendEmail(to, subject, html);
 }
 
+export async function sendMotReminder(
+  to: string,
+  employeeName: string,
+  assetName: string,
+  registrationNumber: string,
+  motDate: string,
+  daysUntilDue: number
+): Promise<EmailResult> {
+  const urgencyText = daysUntilDue < 0 
+    ? `is ${Math.abs(daysUntilDue)} days overdue` 
+    : daysUntilDue === 0 
+    ? 'expires today' 
+    : `expires in ${daysUntilDue} days`;
+  
+  const subject = `MOT Reminder: ${assetName} ${urgencyText}`;
+  
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #1a1a2e; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0;">CCC Group</h1>
+        <p style="color: #cccccc; margin: 5px 0 0 0;">Asset Management</p>
+      </div>
+      
+      <div style="padding: 30px; background-color: #f9f9f9;">
+        <h2 style="color: #333; margin-top: 0;">MOT Reminder</h2>
+        
+        <p style="color: #555; line-height: 1.6;">
+          Hi ${employeeName},
+        </p>
+        
+        <p style="color: #555; line-height: 1.6;">
+          This is a reminder that the MOT for the following vehicle ${urgencyText}:
+        </p>
+        
+        <div style="background-color: #ffffff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 10px 0;"><strong>Vehicle:</strong> ${assetName}</p>
+          <p style="margin: 10px 0;"><strong>Registration:</strong> ${registrationNumber}</p>
+          <p style="margin: 10px 0;"><strong>MOT Expiry:</strong> ${motDate}</p>
+          <p style="margin: 10px 0; color: ${daysUntilDue <= 7 ? '#dc2626' : '#d97706'};"><strong>Status:</strong> ${daysUntilDue < 0 ? 'OVERDUE' : daysUntilDue === 0 ? 'EXPIRES TODAY' : `${daysUntilDue} days remaining`}</p>
+        </div>
+        
+        <p style="color: #555; line-height: 1.6;">
+          Please ensure the MOT is renewed promptly to avoid any disruption to vehicle use.
+        </p>
+      </div>
+      
+      <div style="background-color: #333; padding: 15px; text-align: center;">
+        <p style="color: #888; font-size: 12px; margin: 0;">
+          Cardiff & Caerphilly Carpentry | CCC Group
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(to, subject, html);
+}
+
 export async function sendGenericEmail(
   to: string,
   subject: string,

@@ -29,7 +29,7 @@ import {
   FileWarning,
   User
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 
 const assetFormSchema = z.object({
   type: z.enum(["vehicle", "tool", "equipment"]),
@@ -69,6 +69,27 @@ const statusColors: Record<string, string> = {
   faulty: "bg-red-500/10 text-red-600 dark:text-red-400",
   retired: "bg-muted text-muted-foreground",
 };
+
+function getMotCountdown(motDate: string | Date | null | undefined): { days: number; label: string; color: string } | null {
+  if (!motDate) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const mot = typeof motDate === 'string' ? new Date(motDate) : new Date(motDate);
+  mot.setHours(0, 0, 0, 0);
+  const days = differenceInDays(mot, today);
+  
+  if (days < 0) {
+    return { days: Math.abs(days), label: `${Math.abs(days)}d overdue`, color: "bg-red-500 text-white" };
+  } else if (days === 0) {
+    return { days: 0, label: "Due today", color: "bg-red-500 text-white" };
+  } else if (days <= 7) {
+    return { days, label: `${days}d left`, color: "bg-red-500/10 text-red-600 dark:text-red-400" };
+  } else if (days <= 30) {
+    return { days, label: `${days}d left`, color: "bg-amber-500/10 text-amber-600 dark:text-amber-400" };
+  } else {
+    return { days, label: `${days}d left`, color: "bg-green-500/10 text-green-600 dark:text-green-400" };
+  }
+}
 
 export default function AssetsPage() {
   const { toast } = useToast();
@@ -363,12 +384,22 @@ export default function AssetsPage() {
                           <span>{assignee}</span>
                         </div>
                       )}
-                      {asset.type === "vehicle" && asset.motDate && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="w-4 h-4 text-muted-foreground" />
-                          <span>MOT: {format(new Date(asset.motDate), "dd MMM yyyy")}</span>
-                        </div>
-                      )}
+                      {asset.type === "vehicle" && asset.motDate && (() => {
+                        const motCountdown = getMotCountdown(asset.motDate);
+                        return (
+                          <div className="flex items-center justify-between gap-2 text-sm">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-muted-foreground" />
+                              <span>MOT: {format(new Date(asset.motDate), "dd MMM yyyy")}</span>
+                            </div>
+                            {motCountdown && (
+                              <Badge variant="secondary" className={motCountdown.color}>
+                                {motCountdown.label}
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })()}
                       
                       <div className="flex items-center gap-2 pt-2 border-t">
                         <Button variant="outline" size="sm" onClick={() => handleEdit(asset)} data-testid={`button-edit-${asset.id}`}>

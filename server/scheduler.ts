@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { storage } from "./storage";
 import { log } from "./index";
+import { sendMotReminder, isEmailConfigured } from "./email";
 
 interface AutopilotGenerationResult {
   slotsCreated: number;
@@ -240,12 +241,108 @@ function buildContentPrompt(params: {
   return prompt;
 }
 
+async function runMotReminderCheck(): Promise<{ tasksCreated: number; emailsSent: number }> {
+  const result = { tasksCreated: 0, emailsSent: 0 };
+  
+  try {
+    // Prefetch all data once to avoid O(n^2) queries
+    const assets = await storage.getAssets();
+    const vehicles = assets.filter(a => a.type === "vehicle" && a.motDate);
+    const employees = await storage.getEmployees();
+    const existingTasks = await storage.getTasks();
+    const allReminders = await storage.getAssetReminders();
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const oneWeekAgo = new Date(today.getTime() - (7 * 24 * 60 * 60 * 1000));
+    
+    for (const vehicle of vehicles) {
+      if (!vehicle.motDate) continue;
+      
+      const motDate = new Date(vehicle.motDate);
+      motDate.setHours(0, 0, 0, 0);
+      const daysUntilDue = Math.ceil((motDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Only process if within 7 days or overdue
+      if (daysUntilDue > 7) continue;
+      
+      // Check if task already exists for this MOT (prefetched)
+      const hasExistingTask = existingTasks.some(t => 
+        t.title?.includes(`MOT: ${vehicle.name}`) && 
+        t.status !== "completed"
+      );
+      
+      if (!hasExistingTask) {
+        // Create a task for the MOT reminder with dueDate set to MOT date
+        await storage.createTask({
+          title: `MOT: ${vehicle.name} ${daysUntilDue < 0 ? '(OVERDUE)' : `due in ${daysUntilDue} days`}`,
+          description: `Vehicle ${vehicle.registrationNumber || vehicle.name} has an MOT expiring on ${motDate.toLocaleDateString('en-GB')}. Please schedule the MOT test.`,
+          priority: daysUntilDue <= 0 ? "urgent" : daysUntilDue <= 3 ? "high" : "medium",
+          status: "pending",
+          dueDate: motDate,
+          assignedTo: vehicle.assignedToId || null,
+        });
+        result.tasksCreated++;
+        log(`Created MOT reminder task for ${vehicle.name}`, "scheduler");
+      }
+      
+      // Send email if assigned to an employee and email is configured
+      if (isEmailConfigured() && vehicle.assignedToId) {
+        const assignee = employees.find(e => e.id === vehicle.assignedToId);
+        if (assignee?.email) {
+          // Only send email once per week - check using notifiedAt field (prefetched)
+          const hasRecentEmail = allReminders.some(r => 
+            r.assetId === vehicle.id && 
+            r.reminderType === "mot_expiry" &&
+            r.notifiedAt && 
+            new Date(r.notifiedAt).getTime() > oneWeekAgo.getTime()
+          );
+          
+          if (!hasRecentEmail) {
+            const emailResult = await sendMotReminder(
+              assignee.email,
+              assignee.firstName,
+              vehicle.name,
+              vehicle.registrationNumber || "N/A",
+              motDate.toLocaleDateString('en-GB'),
+              daysUntilDue
+            );
+            
+            if (emailResult.success) {
+              // Create a reminder record to track we sent an email
+              await storage.createAssetReminder({
+                assetId: vehicle.id,
+                reminderType: "mot_expiry",
+                dueDate: motDate,
+                notified: true,
+                notifiedAt: new Date(),
+              });
+              result.emailsSent++;
+              log(`Sent MOT reminder email to ${assignee.email} for ${vehicle.name}`, "scheduler");
+            }
+          }
+        }
+      }
+    }
+    
+    log(`MOT reminder check complete: ${result.tasksCreated} tasks created, ${result.emailsSent} emails sent`, "scheduler");
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    log(`MOT reminder check failed: ${errorMessage}`, "scheduler");
+    return result;
+  }
+}
+
 export function initializeScheduler(): void {
   log("Initializing autopilot scheduler...", "scheduler");
   
   cron.schedule("0 6 * * *", async () => {
     log("Running scheduled autopilot generation (6 AM daily)", "scheduler");
     await runAutopilotGeneration();
+    
+    log("Running MOT reminder check (6 AM daily)", "scheduler");
+    await runMotReminderCheck();
   });
 
   cron.schedule("0 12 * * *", async () => {
@@ -266,5 +363,7 @@ export function initializeScheduler(): void {
 
   log("Scheduler initialized: autopilot runs daily at 6 AM, reminders at 12 PM", "scheduler");
 }
+
+export { runMotReminderCheck };
 
 export { runAutopilotGeneration };
