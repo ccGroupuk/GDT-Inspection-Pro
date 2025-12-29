@@ -74,6 +74,25 @@ interface PartnerJobVolume {
   partners: PartnerVolume[];
 }
 
+interface OutstandingFee {
+  id: string;
+  incidentType: string;
+  completedAt: string;
+  totalCollected: string;
+  calloutFeeAmount: string;
+  partner: { id: string; businessName: string } | null;
+  job: { id: string; jobNumber: string } | null;
+}
+
+interface PartnerFeeBalance {
+  partnerId: string;
+  partnerName: string;
+  outstandingCount: number;
+  totalOutstanding: string;
+  paidCount: number;
+  totalPaid: string;
+}
+
 interface ScannedReceiptData {
   vendor: string;
   date: string;
@@ -136,6 +155,34 @@ export default function Finance() {
       return res.json();
     },
   });
+
+  const { data: outstandingFees = [] } = useQuery<OutstandingFee[]>({
+    queryKey: ["/api/partner-fees"],
+  });
+
+  const { data: partnerFeeBalances = [] } = useQuery<PartnerFeeBalance[]>({
+    queryKey: ["/api/partner-fees/balances"],
+  });
+
+  const markFeePaidMutation = useMutation({
+    mutationFn: async (calloutId: string) => {
+      return apiRequest("POST", `/api/partner-fees/${calloutId}/mark-paid`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-fees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-fees/balances"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/financial-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/financial-summary"] });
+      toast({ title: "Fee marked as paid" });
+    },
+    onError: () => {
+      toast({ title: "Failed to mark fee as paid", variant: "destructive" });
+    },
+  });
+
+  const totalOutstandingFees = outstandingFees.reduce((sum, fee) => 
+    sum + parseFloat(fee.calloutFeeAmount || "0"), 0
+  );
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<FinancialTransaction>) => {
@@ -424,6 +471,67 @@ export default function Finance() {
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {outstandingFees.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-4">
+              <CardTitle className="text-base font-semibold">Partner Fees Outstanding</CardTitle>
+              <Badge variant="destructive" data-testid="badge-total-outstanding">
+                £{totalOutstandingFees.toFixed(2)} owed
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {partnerFeeBalances.filter(b => parseFloat(b.totalOutstanding) > 0).map(balance => (
+                <div key={balance.partnerId} className="space-y-2">
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-md bg-amber-100 dark:bg-amber-900/50" data-testid={`partner-balance-${balance.partnerId}`}>
+                    <div>
+                      <p className="font-medium">{balance.partnerName}</p>
+                      <p className="text-sm text-muted-foreground">{balance.outstandingCount} unpaid callout{balance.outstandingCount !== 1 ? "s" : ""}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-amber-600 dark:text-amber-400" data-testid={`text-balance-${balance.partnerId}`}>
+                        £{balance.totalOutstanding} outstanding
+                      </p>
+                    </div>
+                  </div>
+                  {outstandingFees.filter(fee => fee.partner?.id === balance.partnerId).map(fee => (
+                    <div key={fee.id} className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/30 ml-4" data-testid={`fee-row-${fee.id}`}>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-sm font-medium">{fee.incidentType}</span>
+                        {fee.job && (
+                          <Link href={`/jobs/${fee.job.id}`}>
+                            <Badge variant="outline" className="text-xs cursor-pointer">{fee.job.jobNumber}</Badge>
+                          </Link>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {fee.completedAt && format(new Date(fee.completedAt), "dd MMM yyyy")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-sm">Collected: £{parseFloat(fee.totalCollected || "0").toFixed(2)}</p>
+                          <p className="text-sm font-medium">Fee: £{parseFloat(fee.calloutFeeAmount || "0").toFixed(2)}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => markFeePaidMutation.mutate(fee.id)}
+                          disabled={markFeePaidMutation.isPending}
+                          data-testid={`button-mark-paid-${fee.id}`}
+                        >
+                          Mark Paid
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
