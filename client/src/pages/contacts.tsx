@@ -18,7 +18,9 @@ import { TableRowSkeleton } from "@/components/loading-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2, UserPlus, CheckCircle, Copy, ExternalLink, MessageSquare } from "lucide-react";
+import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2, UserPlus, CheckCircle, Copy, ExternalLink, MessageSquare, Upload, FileSpreadsheet, ArrowRight, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SendMessageDialog } from "@/components/send-message-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -46,11 +48,38 @@ const formSchema = insertContactSchema.extend({
 
 type FormData = z.infer<typeof formSchema>;
 
+// Import dialog types
+interface ImportParseResult {
+  headers: string[];
+  previewRows: Record<string, string>[];
+  totalRows: number;
+  autoMapping: Record<string, string>;
+  contactFields: string[];
+}
+
+interface ImportResult {
+  success: boolean;
+  imported: number;
+  skipped: number;
+  errors: string[];
+  totalErrors: number;
+}
+
 export default function Contacts() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const { toast } = useToast();
+  
+  // Import dialog state
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importStep, setImportStep] = useState<"upload" | "mapping" | "result">("upload");
+  const [importFile, setImportFile] = useState<{ name: string; content: string } | null>(null);
+  const [importParseResult, setImportParseResult] = useState<ImportParseResult | null>(null);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const { data: contacts = [], isLoading } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
@@ -209,17 +238,121 @@ export default function Contacts() {
     setIsDialogOpen(true);
   };
 
+  // Import functions
+  const resetImportState = () => {
+    setImportStep("upload");
+    setImportFile(null);
+    setImportParseResult(null);
+    setColumnMapping({});
+    setImportResult(null);
+    setIsImporting(false);
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file type
+    const validTypes = [".csv", ".xlsx", ".xls"];
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    if (!validTypes.includes(ext)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a CSV or Excel file (.csv, .xlsx, .xls)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Read file as base64
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = (event.target?.result as string).split(",")[1];
+      setImportFile({ name: file.name, content: base64 });
+
+      // Parse file to get headers and preview
+      try {
+        const response = await apiRequest("POST", "/api/contacts/import/parse", {
+          fileContent: base64,
+          fileName: file.name,
+        });
+        const result = await response.json();
+        setImportParseResult(result);
+        setColumnMapping(result.autoMapping || {});
+        setImportStep("mapping");
+      } catch (err) {
+        toast({
+          title: "Failed to parse file",
+          description: err instanceof Error ? err.message : "Please check the file format",
+          variant: "destructive",
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImportExecute = async () => {
+    if (!importFile) return;
+    
+    setIsImporting(true);
+    try {
+      const response = await apiRequest("POST", "/api/contacts/import/execute", {
+        fileContent: importFile.content,
+        fileName: importFile.name,
+        columnMapping,
+        skipDuplicates,
+      });
+      const result: ImportResult = await response.json();
+      setImportResult(result);
+      setImportStep("result");
+      
+      // Refresh contacts list
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+    } catch (err) {
+      toast({
+        title: "Import failed",
+        description: err instanceof Error ? err.message : "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const getFieldLabel = (field: string) => {
+    const labels: Record<string, string> = {
+      name: "Name *",
+      email: "Email",
+      phone: "Phone *",
+      address: "Address",
+      postcode: "Postcode",
+      notes: "Notes",
+    };
+    return labels[field] || field;
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
         <h1 className="text-2xl font-semibold">Contacts</h1>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2" onClick={openCreateDialog} data-testid="button-add-contact">
-              <Plus className="w-4 h-4" />
-              Add Contact
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => { resetImportState(); setIsImportDialogOpen(true); }}
+            data-testid="button-import-contacts"
+          >
+            <Upload className="w-4 h-4" />
+            Import
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" onClick={openCreateDialog} data-testid="button-add-contact">
+                <Plus className="w-4 h-4" />
+                Add Contact
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>{editingContact ? "Edit Contact" : "Add New Contact"}</DialogTitle>
@@ -293,7 +426,195 @@ export default function Contacts() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
+
+      {/* Import Clients Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={(open) => { setIsImportDialogOpen(open); if (!open) resetImportState(); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5" />
+              Import Clients
+            </DialogTitle>
+          </DialogHeader>
+
+          {importStep === "upload" && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Upload a CSV or Excel file containing your client data. The file should have column headers in the first row.
+              </p>
+              <div className="border-2 border-dashed border-muted rounded-lg p-8 text-center">
+                <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mb-4">
+                  Drag and drop your file here, or click to browse
+                </p>
+                <Input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileSelect}
+                  className="max-w-xs mx-auto"
+                  data-testid="input-import-file"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Supported formats: CSV, Excel (.xlsx, .xls)
+              </p>
+            </div>
+          )}
+
+          {importStep === "mapping" && importParseResult && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Found <strong>{importParseResult.totalRows}</strong> rows to import from <strong>{importFile?.name}</strong>
+                </p>
+                <Button variant="ghost" size="sm" onClick={() => { setImportStep("upload"); setImportFile(null); }} data-testid="button-import-choose-different">
+                  <ArrowLeft className="w-4 h-4 mr-1" />
+                  Choose different file
+                </Button>
+              </div>
+              
+              <div className="space-y-3">
+                <h4 className="font-medium text-sm">Map your columns to contact fields:</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {importParseResult.headers.map(header => (
+                    <div key={header} className="flex items-center gap-2">
+                      <span className="text-sm w-32 truncate" title={header}>{header}</span>
+                      <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <Select
+                        value={columnMapping[header] || "skip"}
+                        onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [header]: value }))}
+                      >
+                        <SelectTrigger className="flex-1" data-testid={`select-mapping-${header}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="skip">Skip this column</SelectItem>
+                          {importParseResult.contactFields.map(field => (
+                            <SelectItem key={field} value={field}>{getFieldLabel(field)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm">Preview (first 5 rows):</h4>
+                <div className="border rounded-md overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-muted">
+                        {importParseResult.headers.map(header => (
+                          <th key={header} className="px-2 py-1 text-left font-medium">{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importParseResult.previewRows.map((row, i) => (
+                        <tr key={i} className="border-t">
+                          {importParseResult.headers.map(header => (
+                            <td key={header} className="px-2 py-1 truncate max-w-[150px]" title={row[header]}>
+                              {row[header] || "-"}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="skipDuplicates"
+                  checked={skipDuplicates}
+                  onCheckedChange={(checked) => setSkipDuplicates(checked === true)}
+                  data-testid="checkbox-skip-duplicates"
+                />
+                <label htmlFor="skipDuplicates" className="text-sm">
+                  Skip duplicates (matching email or phone)
+                </label>
+              </div>
+
+              {!Object.values(columnMapping).includes("name") && (
+                <div className="flex items-center gap-2 text-amber-600 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  Name field must be mapped to continue
+                </div>
+              )}
+              {!Object.values(columnMapping).includes("phone") && (
+                <div className="flex items-center gap-2 text-amber-600 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  Phone field must be mapped to continue
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="outline" onClick={() => setIsImportDialogOpen(false)} data-testid="button-import-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleImportExecute}
+                  disabled={isImporting || !Object.values(columnMapping).includes("name") || !Object.values(columnMapping).includes("phone")}
+                  data-testid="button-execute-import"
+                >
+                  {isImporting ? "Importing..." : `Import ${importParseResult.totalRows} Contacts`}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {importStep === "result" && importResult && (
+            <div className="space-y-4">
+              <div className="text-center py-4">
+                <CheckCircle2 className="w-16 h-16 mx-auto mb-4 text-green-500" />
+                <h3 className="text-xl font-semibold mb-2">Import Complete</h3>
+                <p className="text-muted-foreground">
+                  Successfully imported {importResult.imported} contact{importResult.imported !== 1 ? "s" : ""}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                  <p className="text-2xl font-bold text-green-600">{importResult.imported}</p>
+                  <p className="text-sm text-muted-foreground">Imported</p>
+                </div>
+                <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
+                  <p className="text-2xl font-bold text-amber-600">{importResult.skipped}</p>
+                  <p className="text-sm text-muted-foreground">Skipped (Duplicates)</p>
+                </div>
+                <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
+                  <p className="text-2xl font-bold text-red-600">{importResult.totalErrors}</p>
+                  <p className="text-sm text-muted-foreground">Errors</p>
+                </div>
+              </div>
+
+              {importResult.errors.length > 0 && (
+                <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
+                  <h4 className="font-medium text-red-600 mb-2">Errors:</h4>
+                  <ul className="text-sm text-red-600 space-y-1">
+                    {importResult.errors.map((error, i) => (
+                      <li key={i}>{error}</li>
+                    ))}
+                    {importResult.totalErrors > importResult.errors.length && (
+                      <li className="text-muted-foreground">...and {importResult.totalErrors - importResult.errors.length} more</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-4">
+                <Button onClick={() => setIsImportDialogOpen(false)} data-testid="button-close-import">
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="mb-6">
         <div className="relative max-w-sm">

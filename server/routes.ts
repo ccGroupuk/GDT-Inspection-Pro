@@ -489,6 +489,180 @@ export async function registerRoutes(
     }
   });
 
+  // Contact Import - Parse uploaded file and detect columns
+  app.post("/api/contacts/import/parse", async (req, res) => {
+    try {
+      const { fileContent, fileName } = req.body;
+      if (!fileContent || !fileName) {
+        return res.status(400).json({ message: "File content and name are required" });
+      }
+
+      const xlsx = await import("xlsx");
+      
+      // Decode base64 file content
+      const buffer = Buffer.from(fileContent, "base64");
+      
+      // Parse the file
+      const workbook = xlsx.read(buffer, { type: "buffer" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawData = xlsx.utils.sheet_to_json<unknown[]>(firstSheet, { header: 1 });
+      
+      if (rawData.length < 2) {
+        return res.status(400).json({ message: "File must have at least a header row and one data row" });
+      }
+
+      // First row is headers (sheet_to_json with header: 1 returns array of arrays)
+      const headerRow = rawData[0] as unknown[];
+      const headers = headerRow.map(h => String(h || "").trim());
+      
+      // Get first 5 data rows for preview
+      const previewRows = rawData.slice(1, 6).map(row => {
+        const rowArray = row as unknown[];
+        const obj: Record<string, string> = {};
+        headers.forEach((h, i) => {
+          obj[h] = String(rowArray[i] || "");
+        });
+        return obj;
+      });
+
+      // Auto-detect column mappings based on header names
+      const contactFields = ["name", "email", "phone", "address", "postcode", "notes"];
+      const autoMapping: Record<string, string> = {};
+      
+      headers.forEach(header => {
+        const lowerHeader = header.toLowerCase();
+        if (lowerHeader.includes("name") && !autoMapping.name) {
+          autoMapping[header] = "name";
+        } else if (lowerHeader.includes("email") && !autoMapping.email) {
+          autoMapping[header] = "email";
+        } else if ((lowerHeader.includes("phone") || lowerHeader.includes("tel") || lowerHeader.includes("mobile")) && !autoMapping.phone) {
+          autoMapping[header] = "phone";
+        } else if ((lowerHeader.includes("address") || lowerHeader.includes("street")) && !autoMapping.address) {
+          autoMapping[header] = "address";
+        } else if ((lowerHeader.includes("postcode") || lowerHeader.includes("zip") || lowerHeader.includes("postal")) && !autoMapping.postcode) {
+          autoMapping[header] = "postcode";
+        } else if ((lowerHeader.includes("note") || lowerHeader.includes("comment")) && !autoMapping.notes) {
+          autoMapping[header] = "notes";
+        }
+      });
+
+      res.json({
+        headers,
+        previewRows,
+        totalRows: rawData.length - 1,
+        autoMapping,
+        contactFields,
+      });
+    } catch (error) {
+      console.error("Parse import file error:", error);
+      res.status(500).json({ message: "Failed to parse file. Please ensure it's a valid CSV or Excel file." });
+    }
+  });
+
+  // Contact Import - Execute the import with column mapping
+  app.post("/api/contacts/import/execute", async (req, res) => {
+    try {
+      const { fileContent, fileName, columnMapping, skipDuplicates } = req.body;
+      if (!fileContent || !columnMapping) {
+        return res.status(400).json({ message: "File content and column mapping are required" });
+      }
+
+      // Validate that required fields are mapped
+      const mappedFields = Object.values(columnMapping);
+      if (!mappedFields.includes("name")) {
+        return res.status(400).json({ message: "Name field must be mapped" });
+      }
+      if (!mappedFields.includes("phone")) {
+        return res.status(400).json({ message: "Phone field must be mapped" });
+      }
+
+      const xlsx = await import("xlsx");
+      const buffer = Buffer.from(fileContent, "base64");
+      const workbook = xlsx.read(buffer, { type: "buffer" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawData = xlsx.utils.sheet_to_json<unknown[]>(firstSheet, { header: 1 });
+
+      const headerRow = rawData[0] as unknown[];
+      const headers = headerRow.map(h => String(h || "").trim());
+      const dataRows = rawData.slice(1);
+
+      // Get existing contacts for duplicate detection
+      const existingContacts = await storage.getContacts();
+      const existingEmails = new Set(existingContacts.filter(c => c.email).map(c => c.email!.toLowerCase()));
+      const existingPhones = new Set(existingContacts.map(c => c.phone.replace(/\D/g, "")));
+
+      let imported = 0;
+      let skipped = 0;
+      let errors: string[] = [];
+
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i] as unknown[];
+        const rowNum = i + 2; // Account for 1-indexed and header row
+
+        try {
+          // Build contact from mapped columns
+          const contact: Record<string, string> = {};
+          for (const [sourceCol, targetField] of Object.entries(columnMapping as Record<string, string>)) {
+            if (targetField && targetField !== "skip") {
+              const colIndex = headers.indexOf(sourceCol);
+              if (colIndex >= 0 && row[colIndex] !== undefined && row[colIndex] !== null) {
+                contact[targetField] = String(row[colIndex]).trim();
+              }
+            }
+          }
+
+          // Skip empty rows
+          if (!contact.name || !contact.phone) {
+            continue;
+          }
+
+          // Check for duplicates
+          const phoneNormalized = contact.phone.replace(/\D/g, "");
+          const emailNormalized = contact.email?.toLowerCase();
+
+          if (skipDuplicates) {
+            if (emailNormalized && existingEmails.has(emailNormalized)) {
+              skipped++;
+              continue;
+            }
+            if (existingPhones.has(phoneNormalized)) {
+              skipped++;
+              continue;
+            }
+          }
+
+          // Create the contact
+          await storage.createContact({
+            name: contact.name,
+            email: contact.email || undefined,
+            phone: contact.phone,
+            address: contact.address || undefined,
+            postcode: contact.postcode || undefined,
+            notes: contact.notes || undefined,
+          });
+
+          // Add to existing sets for duplicate detection within batch
+          if (emailNormalized) existingEmails.add(emailNormalized);
+          existingPhones.add(phoneNormalized);
+          imported++;
+        } catch (err) {
+          errors.push(`Row ${rowNum}: ${err instanceof Error ? err.message : "Unknown error"}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        imported,
+        skipped,
+        errors: errors.slice(0, 10), // Only return first 10 errors
+        totalErrors: errors.length,
+      });
+    } catch (error) {
+      console.error("Execute import error:", error);
+      res.status(500).json({ message: "Failed to import contacts" });
+    }
+  });
+
   // Trade Partners
   app.get("/api/partners", async (req, res) => {
     try {
