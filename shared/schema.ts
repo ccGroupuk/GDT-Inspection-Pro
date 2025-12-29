@@ -1992,6 +1992,62 @@ export const UNITS_OF_MEASURE = [
   { value: "fixed", label: "Fixed Price" },
 ] as const;
 
+// ===============================
+// SUPPLIERS
+// ===============================
+
+export const suppliers = pgTable("suppliers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  contactName: text("contact_name"),
+  email: text("email"),
+  phone: text("phone"),
+  address: text("address"),
+  accountNumber: text("account_number"), // Your account with this supplier
+  website: text("website"),
+  leadTimeDays: integer("lead_time_days"), // Typical delivery time
+  notes: text("notes"),
+  isPreferred: boolean("is_preferred").default(false), // Preferred supplier flag
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSupplierSchema = createInsertSchema(suppliers).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
+export type Supplier = typeof suppliers.$inferSelect;
+
+// Supplier-Catalog Item link (same material can have different suppliers with different prices)
+export const supplierCatalogItems = pgTable("supplier_catalog_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  supplierId: varchar("supplier_id").notNull().references(() => suppliers.id, { onDelete: "cascade" }),
+  catalogItemId: varchar("catalog_item_id").notNull().references(() => catalogItems.id, { onDelete: "cascade" }),
+  supplierSku: text("supplier_sku"), // Supplier's SKU/product code
+  supplierPrice: decimal("supplier_price", { precision: 10, scale: 2 }), // Cost from this supplier
+  minOrderQty: decimal("min_order_qty", { precision: 10, scale: 2 }), // Minimum order quantity
+  leadTimeDays: integer("lead_time_days"), // Override supplier default lead time
+  isPreferred: boolean("is_preferred").default(false), // Preferred supplier for this item
+  isActive: boolean("is_active").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const supplierCatalogItemsRelations = relations(supplierCatalogItems, ({ one }) => ({
+  supplier: one(suppliers, {
+    fields: [supplierCatalogItems.supplierId],
+    references: [suppliers.id],
+  }),
+  catalogItem: one(catalogItems, {
+    fields: [supplierCatalogItems.catalogItemId],
+    references: [catalogItems.id],
+  }),
+}));
+
+export const insertSupplierCatalogItemSchema = createInsertSchema(supplierCatalogItems).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSupplierCatalogItem = z.infer<typeof insertSupplierCatalogItemSchema>;
+export type SupplierCatalogItem = typeof supplierCatalogItems.$inferSelect;
+
 // Connection Links (unified job hub access for clients, partners, internal team)
 export const connectionLinks = pgTable("connection_links", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
