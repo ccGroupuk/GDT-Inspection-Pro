@@ -2383,6 +2383,87 @@ export async function registerRoutes(
     }
   });
 
+  // Complete emergency callout with payment (partner portal)
+  // Partner collects full payment from client, then owes CCC the 20% callout fee
+  app.post("/api/partner-portal/emergency-callouts/:calloutId/complete", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const callout = await storage.getEmergencyCallout(req.params.calloutId);
+      if (!callout) {
+        return res.status(404).json({ message: "Emergency callout not found" });
+      }
+      
+      // Verify this partner is assigned to this callout
+      if (callout.assignedPartnerId !== access.partnerId) {
+        return res.status(403).json({ message: "You are not assigned to this emergency callout" });
+      }
+      
+      // Verify callout is in assigned or in_progress status
+      if (callout.status !== "assigned" && callout.status !== "in_progress") {
+        return res.status(400).json({ message: "Callout cannot be completed in its current status" });
+      }
+      
+      const { totalCollected, completionNotes } = req.body;
+      
+      if (!totalCollected || isNaN(parseFloat(totalCollected)) || parseFloat(totalCollected) <= 0) {
+        return res.status(400).json({ message: "Total amount collected from client is required" });
+      }
+      
+      const totalAmount = parseFloat(totalCollected);
+      const feePercent = parseFloat(String(callout.calloutFeePercent || "20.00"));
+      const feeAmount = (totalAmount * feePercent) / 100;
+      
+      // Get partner info for finance transaction
+      const partner = await storage.getTradePartner(access.partnerId);
+      
+      // Create finance transaction for the callout fee (income to CCC)
+      const feeTransaction = await storage.createFinancialTransaction({
+        date: new Date(),
+        type: "income",
+        amount: feeAmount.toFixed(2),
+        description: `Emergency Callout Fee - ${partner?.businessName || "Partner"} - ${callout.incidentType}`,
+        jobId: callout.jobId || null,
+        partnerId: access.partnerId,
+        sourceType: "emergency_callout_fee",
+        grossAmount: totalAmount.toFixed(2),
+        partnerCost: (totalAmount - feeAmount).toFixed(2),
+        profitAmount: feeAmount.toFixed(2),
+        notes: completionNotes || null,
+      });
+      
+      // Update the callout
+      const updated = await storage.updateEmergencyCallout(req.params.calloutId, {
+        status: "resolved",
+        resolvedAt: new Date(),
+        resolutionNotes: completionNotes || null,
+        completedAt: new Date(),
+        completedByPartnerId: access.partnerId,
+        totalCollected: totalAmount.toFixed(2),
+        calloutFeeAmount: feeAmount.toFixed(2),
+        feeTransactionId: feeTransaction.id,
+      });
+      
+      res.json({ 
+        callout: updated, 
+        feeAmount: feeAmount.toFixed(2),
+        feePercent,
+        message: `Emergency completed. You owe CCC £${feeAmount.toFixed(2)} (${feePercent}% callout fee surcharge).`
+      });
+    } catch (error) {
+      console.error("Partner portal complete callout error:", error);
+      res.status(500).json({ message: "Failed to complete callout" });
+    }
+  });
+
   // ==================== PARTNER PORTAL QUOTES API ====================
 
   // Get quotes by this partner
