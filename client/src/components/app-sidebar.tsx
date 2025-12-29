@@ -18,6 +18,7 @@ import {
   Package,
   FileText,
   Truck,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -88,6 +89,11 @@ const menuItems = [
     title: "Tools & Vehicles",
     url: "/assets",
     icon: Truck,
+  },
+  {
+    title: "Checklists",
+    url: "/checklists",
+    icon: ClipboardCheck,
   },
   {
     title: "Quote Templates",

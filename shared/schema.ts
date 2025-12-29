@@ -2181,11 +2181,10 @@ export const checklistItems = pgTable("checklist_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   templateId: varchar("template_id").notNull().references(() => checklistTemplates.id, { onDelete: "cascade" }),
   label: text("label").notNull(),
-  description: text("description"),
+  itemType: text("item_type").notNull().default("checkbox"), // checkbox, text, photo, signature, number
+  helpText: text("help_text"),
   itemOrder: integer("item_order").notNull().default(0),
   isRequired: boolean("is_required").default(true),
-  requiresNote: boolean("requires_note").default(false),
-  requiresPhoto: boolean("requires_photo").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
