@@ -49,6 +49,8 @@ import {
   emergencyCalloutResponses, type EmergencyCalloutResponse, type InsertEmergencyCalloutResponse,
   productCategories, type ProductCategory, type InsertProductCategory,
   catalogItems, type CatalogItem, type InsertCatalogItem,
+  suppliers, type Supplier, type InsertSupplier,
+  supplierCatalogItems, type SupplierCatalogItem, type InsertSupplierCatalogItem,
   quoteTemplates, type QuoteTemplate, type InsertQuoteTemplate,
   quoteTemplateItems, type QuoteTemplateItem, type InsertQuoteTemplateItem,
   connectionLinks, type ConnectionLink, type InsertConnectionLink,
@@ -397,6 +399,22 @@ export interface IStorage {
   createCatalogItem(item: InsertCatalogItem): Promise<CatalogItem>;
   updateCatalogItem(id: string, item: Partial<InsertCatalogItem>): Promise<CatalogItem | undefined>;
   deleteCatalogItem(id: string): Promise<boolean>;
+
+  // Suppliers
+  getSuppliers(): Promise<Supplier[]>;
+  getSupplier(id: string): Promise<Supplier | undefined>;
+  getActiveSuppliers(): Promise<Supplier[]>;
+  createSupplier(supplier: InsertSupplier): Promise<Supplier>;
+  updateSupplier(id: string, supplier: Partial<InsertSupplier>): Promise<Supplier | undefined>;
+  deleteSupplier(id: string): Promise<boolean>;
+
+  // Supplier Catalog Items
+  getSupplierCatalogItems(supplierId: string): Promise<SupplierCatalogItem[]>;
+  getSupplierCatalogItemsByCatalogItem(catalogItemId: string): Promise<SupplierCatalogItem[]>;
+  getSupplierCatalogItem(id: string): Promise<SupplierCatalogItem | undefined>;
+  createSupplierCatalogItem(item: InsertSupplierCatalogItem): Promise<SupplierCatalogItem>;
+  updateSupplierCatalogItem(id: string, item: Partial<InsertSupplierCatalogItem>): Promise<SupplierCatalogItem | undefined>;
+  deleteSupplierCatalogItem(id: string): Promise<boolean>;
 
   // Quote Templates
   getQuoteTemplates(): Promise<QuoteTemplate[]>;
@@ -2010,6 +2028,64 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCatalogItem(id: string): Promise<boolean> {
     await db.delete(catalogItems).where(eq(catalogItems.id, id));
+    return true;
+  }
+
+  // Suppliers
+  async getSuppliers(): Promise<Supplier[]> {
+    return db.select().from(suppliers).orderBy(asc(suppliers.name));
+  }
+
+  async getSupplier(id: string): Promise<Supplier | undefined> {
+    const [supplier] = await db.select().from(suppliers).where(eq(suppliers.id, id));
+    return supplier || undefined;
+  }
+
+  async getActiveSuppliers(): Promise<Supplier[]> {
+    return db.select().from(suppliers).where(eq(suppliers.isActive, true)).orderBy(asc(suppliers.name));
+  }
+
+  async createSupplier(supplier: InsertSupplier): Promise<Supplier> {
+    const [created] = await db.insert(suppliers).values(supplier).returning();
+    return created;
+  }
+
+  async updateSupplier(id: string, supplier: Partial<InsertSupplier>): Promise<Supplier | undefined> {
+    const [updated] = await db.update(suppliers).set({ ...supplier, updatedAt: new Date() }).where(eq(suppliers.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteSupplier(id: string): Promise<boolean> {
+    await db.delete(suppliers).where(eq(suppliers.id, id));
+    return true;
+  }
+
+  // Supplier Catalog Items
+  async getSupplierCatalogItems(supplierId: string): Promise<SupplierCatalogItem[]> {
+    return db.select().from(supplierCatalogItems).where(eq(supplierCatalogItems.supplierId, supplierId));
+  }
+
+  async getSupplierCatalogItemsByCatalogItem(catalogItemId: string): Promise<SupplierCatalogItem[]> {
+    return db.select().from(supplierCatalogItems).where(eq(supplierCatalogItems.catalogItemId, catalogItemId));
+  }
+
+  async getSupplierCatalogItem(id: string): Promise<SupplierCatalogItem | undefined> {
+    const [item] = await db.select().from(supplierCatalogItems).where(eq(supplierCatalogItems.id, id));
+    return item || undefined;
+  }
+
+  async createSupplierCatalogItem(item: InsertSupplierCatalogItem): Promise<SupplierCatalogItem> {
+    const [created] = await db.insert(supplierCatalogItems).values(item).returning();
+    return created;
+  }
+
+  async updateSupplierCatalogItem(id: string, item: Partial<InsertSupplierCatalogItem>): Promise<SupplierCatalogItem | undefined> {
+    const [updated] = await db.update(supplierCatalogItems).set({ ...item, updatedAt: new Date() }).where(eq(supplierCatalogItems.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteSupplierCatalogItem(id: string): Promise<boolean> {
+    await db.delete(supplierCatalogItems).where(eq(supplierCatalogItems.id, id));
     return true;
   }
 

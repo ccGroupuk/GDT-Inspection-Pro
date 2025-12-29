@@ -7082,6 +7082,127 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     }
   });
 
+  // Suppliers
+  app.get("/api/suppliers", async (req, res) => {
+    try {
+      const suppliers = await storage.getSuppliers();
+      res.json(suppliers);
+    } catch (error) {
+      console.error("Get suppliers error:", error);
+      res.status(500).json({ message: "Failed to load suppliers" });
+    }
+  });
+
+  app.get("/api/suppliers/active", async (req, res) => {
+    try {
+      const suppliers = await storage.getActiveSuppliers();
+      res.json(suppliers);
+    } catch (error) {
+      console.error("Get active suppliers error:", error);
+      res.status(500).json({ message: "Failed to load active suppliers" });
+    }
+  });
+
+  app.get("/api/suppliers/:id", async (req, res) => {
+    try {
+      const supplier = await storage.getSupplier(req.params.id);
+      if (!supplier) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      res.json(supplier);
+    } catch (error) {
+      console.error("Get supplier error:", error);
+      res.status(500).json({ message: "Failed to load supplier" });
+    }
+  });
+
+  app.post("/api/suppliers", async (req, res) => {
+    try {
+      const supplier = await storage.createSupplier(req.body);
+      res.status(201).json(supplier);
+    } catch (error) {
+      console.error("Create supplier error:", error);
+      res.status(500).json({ message: "Failed to create supplier" });
+    }
+  });
+
+  app.patch("/api/suppliers/:id", async (req, res) => {
+    try {
+      const supplier = await storage.updateSupplier(req.params.id, req.body);
+      if (!supplier) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      res.json(supplier);
+    } catch (error) {
+      console.error("Update supplier error:", error);
+      res.status(500).json({ message: "Failed to update supplier" });
+    }
+  });
+
+  app.delete("/api/suppliers/:id", async (req, res) => {
+    try {
+      await storage.deleteSupplier(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete supplier error:", error);
+      res.status(500).json({ message: "Failed to delete supplier" });
+    }
+  });
+
+  // Supplier Catalog Items (linking suppliers to catalog items with pricing)
+  app.get("/api/suppliers/:supplierId/catalog-items", async (req, res) => {
+    try {
+      const items = await storage.getSupplierCatalogItems(req.params.supplierId);
+      res.json(items);
+    } catch (error) {
+      console.error("Get supplier catalog items error:", error);
+      res.status(500).json({ message: "Failed to load supplier catalog items" });
+    }
+  });
+
+  app.get("/api/catalog-items/:catalogItemId/suppliers", async (req, res) => {
+    try {
+      const items = await storage.getSupplierCatalogItemsByCatalogItem(req.params.catalogItemId);
+      res.json(items);
+    } catch (error) {
+      console.error("Get catalog item suppliers error:", error);
+      res.status(500).json({ message: "Failed to load catalog item suppliers" });
+    }
+  });
+
+  app.post("/api/supplier-catalog-items", async (req, res) => {
+    try {
+      const item = await storage.createSupplierCatalogItem(req.body);
+      res.status(201).json(item);
+    } catch (error) {
+      console.error("Create supplier catalog item error:", error);
+      res.status(500).json({ message: "Failed to create supplier catalog item link" });
+    }
+  });
+
+  app.patch("/api/supplier-catalog-items/:id", async (req, res) => {
+    try {
+      const item = await storage.updateSupplierCatalogItem(req.params.id, req.body);
+      if (!item) {
+        return res.status(404).json({ message: "Supplier catalog item link not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Update supplier catalog item error:", error);
+      res.status(500).json({ message: "Failed to update supplier catalog item link" });
+    }
+  });
+
+  app.delete("/api/supplier-catalog-items/:id", async (req, res) => {
+    try {
+      await storage.deleteSupplierCatalogItem(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete supplier catalog item error:", error);
+      res.status(500).json({ message: "Failed to delete supplier catalog item link" });
+    }
+  });
+
   // Quote Templates
   app.get("/api/quote-templates", async (req, res) => {
     try {
