@@ -15,6 +15,8 @@ import {
   UserCog,
   LogOut,
   Siren,
+  Package,
+  FileText,
 } from "lucide-react";
 import {
   Sidebar,
@@ -75,6 +77,16 @@ const menuItems = [
     title: "Emergency Callouts",
     url: "/emergency-callouts",
     icon: Siren,
+  },
+  {
+    title: "Product Catalog",
+    url: "/catalog",
+    icon: Package,
+  },
+  {
+    title: "Quote Templates",
+    url: "/templates",
+    icon: FileText,
   },
   {
     title: "SEO Power House",

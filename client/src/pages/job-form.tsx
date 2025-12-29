@@ -14,9 +14,12 @@ import { Switch } from "@/components/ui/switch";
 import { FormSkeleton } from "@/components/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Save, CheckCircle, Handshake, RefreshCw, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle, Handshake, RefreshCw, Plus, Trash2, Package, FileStack, Search, X, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
-import type { Job, Contact, TradePartner, InsertJob, QuoteItem } from "@shared/schema";
+import type { Job, Contact, TradePartner, InsertJob, QuoteItem, CatalogItem, ProductCategory, QuoteTemplate, QuoteTemplateItem } from "@shared/schema";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   insertJobSchema, 
   SERVICE_TYPES, 
@@ -62,6 +65,29 @@ export default function JobForm() {
   const [taxRate, setTaxRate] = useState("20");
   const [discountType, setDiscountType] = useState<string | null>(null);
   const [discountValue, setDiscountValue] = useState("");
+  
+  // Catalog & Template picker states
+  const [showCatalogPicker, setShowCatalogPicker] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogTypeFilter, setCatalogTypeFilter] = useState<string>("all");
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string>("all");
+  const [templateSearch, setTemplateSearch] = useState("");
+  
+  // Fetch catalog items
+  const { data: catalogItems = [] } = useQuery<CatalogItem[]>({
+    queryKey: ["/api/catalog-items"],
+  });
+  
+  // Fetch product categories
+  const { data: productCategories = [] } = useQuery<ProductCategory[]>({
+    queryKey: ["/api/product-categories"],
+  });
+  
+  // Fetch quote templates with their items
+  const { data: templates = [] } = useQuery<QuoteTemplate[]>({
+    queryKey: ["/api/quote-templates"],
+  });
 
   const { data: editData, isLoading: editLoading } = useQuery<JobFormData>({
     queryKey: ["/api/jobs", id],
@@ -186,6 +212,101 @@ export default function JobForm() {
     
     setQuoteItems(updated);
   };
+  
+  // Add catalog item to quote
+  const addCatalogItemToQuote = (item: CatalogItem, quantityOverride?: number) => {
+    const qty = quantityOverride || parseFloat(item.defaultQuantity || "1");
+    const price = parseFloat(item.unitPrice);
+    const lineTotal = (qty * price).toFixed(2);
+    
+    setQuoteItems([...quoteItems, {
+      description: item.name,
+      quantity: qty.toString(),
+      unitPrice: item.unitPrice,
+      lineTotal,
+    }]);
+    
+    toast({
+      title: "Item added",
+      description: `${item.name} added to quote`,
+    });
+  };
+  
+  // Apply template - adds all template items to the quote
+  const applyTemplate = async (template: QuoteTemplate) => {
+    try {
+      // Fetch template items
+      const response = await fetch(`/api/quote-templates/${template.id}/items`);
+      if (!response.ok) throw new Error("Failed to fetch template items");
+      const templateItems: QuoteTemplateItem[] = await response.json();
+      
+      // Add all template items to quote
+      const newItems = templateItems.map(item => {
+        const qty = parseFloat(item.quantity);
+        const price = parseFloat(item.unitPrice);
+        return {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: (qty * price).toFixed(2),
+        };
+      });
+      
+      setQuoteItems([...quoteItems, ...newItems]);
+      setShowTemplatePicker(false);
+      
+      toast({
+        title: "Template applied",
+        description: `${newItems.length} items from "${template.name}" added to quote`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to apply template",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Filtered catalog items
+  const filteredCatalogItems = useMemo(() => {
+    return catalogItems.filter(item => {
+      if (!item.isActive) return false;
+      if (catalogTypeFilter !== "all" && item.type !== catalogTypeFilter) return false;
+      if (catalogCategoryFilter !== "all" && item.categoryId !== catalogCategoryFilter) return false;
+      if (catalogSearch) {
+        const search = catalogSearch.toLowerCase();
+        return item.name.toLowerCase().includes(search) || 
+               (item.description?.toLowerCase().includes(search) || false);
+      }
+      return true;
+    });
+  }, [catalogItems, catalogTypeFilter, catalogCategoryFilter, catalogSearch]);
+  
+  // Filtered templates
+  const filteredTemplates = useMemo(() => {
+    return templates.filter(t => {
+      if (!t.isActive) return false;
+      if (templateSearch) {
+        const search = templateSearch.toLowerCase();
+        return t.name.toLowerCase().includes(search) || 
+               (t.description?.toLowerCase().includes(search) || false);
+      }
+      return true;
+    });
+  }, [templates, templateSearch]);
+  
+  // Group catalog items by category
+  const catalogByCategory = useMemo(() => {
+    const groups: Record<string, CatalogItem[]> = {};
+    filteredCatalogItems.forEach(item => {
+      const cat = productCategories.find(c => c.id === item.categoryId);
+      const catName = cat?.name || "Uncategorized";
+      if (!groups[catName]) groups[catName] = [];
+      groups[catName].push(item);
+    });
+    return groups;
+  }, [filteredCatalogItems, productCategories]);
 
   // Calculate quote totals
   const quoteTotals = useMemo(() => {
@@ -496,22 +617,46 @@ export default function JobForm() {
           <CardHeader>
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <CardTitle className="text-base">Quote Builder</CardTitle>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addQuoteItem}
-                data-testid="button-add-quote-item"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Item
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTemplatePicker(true)}
+                  data-testid="button-apply-template"
+                >
+                  <FileStack className="w-4 h-4 mr-2" />
+                  Apply Template
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCatalogPicker(true)}
+                  data-testid="button-add-from-catalog"
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  From Catalog
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addQuoteItem}
+                  data-testid="button-add-quote-item"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Manual Item
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {quoteItems.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <p>No items added yet. Click "Add Item" to build your quote.</p>
+                <Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p className="mb-2">No items added yet.</p>
+                <p className="text-sm">Use the buttons above to add items from your catalog, apply a template, or add manually.</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -789,6 +934,212 @@ export default function JobForm() {
           </Link>
         </div>
       </form>
+      
+      {/* Catalog Picker Dialog */}
+      <Dialog open={showCatalogPicker} onOpenChange={setShowCatalogPicker}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Add from Catalog
+            </DialogTitle>
+            <DialogDescription>
+              Select items from your catalog to add to the quote
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search catalog..."
+                value={catalogSearch}
+                onChange={(e) => setCatalogSearch(e.target.value)}
+                className="pl-9"
+                data-testid="input-catalog-search"
+              />
+              {catalogSearch && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2"
+                  onClick={() => setCatalogSearch("")}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+            <Select value={catalogTypeFilter} onValueChange={setCatalogTypeFilter}>
+              <SelectTrigger className="w-36" data-testid="select-catalog-type-filter">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="product">Products</SelectItem>
+                <SelectItem value="labour">Labour</SelectItem>
+                <SelectItem value="material">Materials</SelectItem>
+                <SelectItem value="consumable">Consumables</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={catalogCategoryFilter} onValueChange={setCatalogCategoryFilter}>
+              <SelectTrigger className="w-40" data-testid="select-catalog-category-filter">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {productCategories.map(cat => (
+                  <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <ScrollArea className="flex-1 -mx-6 px-6">
+            {filteredCatalogItems.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p>No items found</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(catalogByCategory).map(([categoryName, items]) => (
+                  <div key={categoryName}>
+                    <h4 className="font-medium text-sm text-muted-foreground mb-2">{categoryName}</h4>
+                    <div className="space-y-2">
+                      {items.map(item => (
+                        <div 
+                          key={item.id} 
+                          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border hover-elevate"
+                          data-testid={`catalog-item-${item.id}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium truncate">{item.name}</span>
+                              <Badge variant="outline" className="capitalize text-xs">{item.type}</Badge>
+                            </div>
+                            {item.description && (
+                              <p className="text-sm text-muted-foreground truncate">{item.description}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-sm whitespace-nowrap">
+                              £{parseFloat(item.unitPrice).toFixed(2)}/{item.unitOfMeasure || "each"}
+                            </span>
+                            <Button 
+                              type="button"
+                              size="sm" 
+                              onClick={() => addCatalogItemToQuote(item)}
+                              data-testid={`button-add-catalog-item-${item.id}`}
+                            >
+                              <Plus className="w-4 h-4 mr-1" />
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+          
+          <div className="flex items-center justify-between pt-4 border-t border-border">
+            <p className="text-sm text-muted-foreground">{filteredCatalogItems.length} items</p>
+            <Button type="button" variant="outline" onClick={() => setShowCatalogPicker(false)}>
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Template Picker Dialog */}
+      <Dialog open={showTemplatePicker} onOpenChange={setShowTemplatePicker}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileStack className="w-5 h-5" />
+              Apply Quote Template
+            </DialogTitle>
+            <DialogDescription>
+              Select a template to add all its items to your quote
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search templates..."
+              value={templateSearch}
+              onChange={(e) => setTemplateSearch(e.target.value)}
+              className="pl-9"
+              data-testid="input-template-search"
+            />
+            {templateSearch && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2"
+                onClick={() => setTemplateSearch("")}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+          
+          <ScrollArea className="flex-1 -mx-6 px-6">
+            {filteredTemplates.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileStack className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p>No templates found</p>
+                <Link href="/templates">
+                  <Button type="button" variant="link" className="mt-2">
+                    Create your first template
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredTemplates.map(template => {
+                  const category = productCategories.find(c => c.id === template.categoryId);
+                  return (
+                    <div 
+                      key={template.id} 
+                      className="p-4 rounded-lg border border-border hover-elevate cursor-pointer"
+                      onClick={() => applyTemplate(template)}
+                      data-testid={`template-option-${template.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium">{template.name}</span>
+                            {category && (
+                              <Badge variant="outline" className="text-xs">{category.name}</Badge>
+                            )}
+                          </div>
+                          {template.description && (
+                            <p className="text-sm text-muted-foreground mt-1">{template.description}</p>
+                          )}
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+          
+          <div className="flex items-center justify-between pt-4 border-t border-border">
+            <p className="text-sm text-muted-foreground">{filteredTemplates.length} templates</p>
+            <Button type="button" variant="outline" onClick={() => setShowTemplatePicker(false)}>
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

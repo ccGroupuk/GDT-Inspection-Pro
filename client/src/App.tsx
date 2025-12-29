@@ -49,6 +49,8 @@ import EmployeePortalChangePassword from "@/pages/employee-portal-change-passwor
 import EmployeePortalAdminView from "@/pages/employee-portal-admin-view";
 import EmployeesAdmin from "@/pages/employees-admin";
 import EmergencyCallouts from "@/pages/emergency-callouts";
+import Catalog from "@/pages/catalog";
+import QuoteTemplates from "@/pages/quote-templates";
 
 function AdminRouter() {
   return (
@@ -67,6 +69,8 @@ function AdminRouter() {
       <Route path="/employees" component={EmployeesAdmin} />
       <Route path="/employees/:employeeId/portal" component={EmployeePortalAdminView} />
       <Route path="/emergency-callouts" component={EmergencyCallouts} />
+      <Route path="/catalog" component={Catalog} />
+      <Route path="/templates" component={QuoteTemplates} />
       <Route path="/seo" component={SEOPowerHouse} />
       <Route path="/help-center" component={HelpCenterAdmin} />
       <Route path="/settings" component={Settings} />
