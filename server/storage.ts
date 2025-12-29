@@ -45,6 +45,10 @@ import {
   partnerQuoteItems, type PartnerQuoteItem, type InsertPartnerQuoteItem,
   emergencyCallouts, type EmergencyCallout, type InsertEmergencyCallout,
   emergencyCalloutResponses, type EmergencyCalloutResponse, type InsertEmergencyCalloutResponse,
+  productCategories, type ProductCategory, type InsertProductCategory,
+  catalogItems, type CatalogItem, type InsertCatalogItem,
+  quoteTemplates, type QuoteTemplate, type InsertQuoteTemplate,
+  quoteTemplateItems, type QuoteTemplateItem, type InsertQuoteTemplateItem,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -349,6 +353,36 @@ export interface IStorage {
   getPendingEmergencyCalloutsByPartner(partnerId: string): Promise<EmergencyCalloutResponse[]>;
   createEmergencyCalloutResponse(response: InsertEmergencyCalloutResponse): Promise<EmergencyCalloutResponse>;
   updateEmergencyCalloutResponse(id: string, response: Partial<InsertEmergencyCalloutResponse>): Promise<EmergencyCalloutResponse | undefined>;
+
+  // Product Categories
+  getProductCategories(): Promise<ProductCategory[]>;
+  getProductCategory(id: string): Promise<ProductCategory | undefined>;
+  createProductCategory(category: InsertProductCategory): Promise<ProductCategory>;
+  updateProductCategory(id: string, category: Partial<InsertProductCategory>): Promise<ProductCategory | undefined>;
+  deleteProductCategory(id: string): Promise<boolean>;
+
+  // Catalog Items
+  getCatalogItems(): Promise<CatalogItem[]>;
+  getCatalogItemsByCategory(categoryId: string): Promise<CatalogItem[]>;
+  getCatalogItemsByType(type: string): Promise<CatalogItem[]>;
+  getCatalogItem(id: string): Promise<CatalogItem | undefined>;
+  createCatalogItem(item: InsertCatalogItem): Promise<CatalogItem>;
+  updateCatalogItem(id: string, item: Partial<InsertCatalogItem>): Promise<CatalogItem | undefined>;
+  deleteCatalogItem(id: string): Promise<boolean>;
+
+  // Quote Templates
+  getQuoteTemplates(): Promise<QuoteTemplate[]>;
+  getQuoteTemplate(id: string): Promise<QuoteTemplate | undefined>;
+  createQuoteTemplate(template: InsertQuoteTemplate): Promise<QuoteTemplate>;
+  updateQuoteTemplate(id: string, template: Partial<InsertQuoteTemplate>): Promise<QuoteTemplate | undefined>;
+  deleteQuoteTemplate(id: string): Promise<boolean>;
+
+  // Quote Template Items
+  getQuoteTemplateItems(templateId: string): Promise<QuoteTemplateItem[]>;
+  createQuoteTemplateItem(item: InsertQuoteTemplateItem): Promise<QuoteTemplateItem>;
+  updateQuoteTemplateItem(id: string, item: Partial<InsertQuoteTemplateItem>): Promise<QuoteTemplateItem | undefined>;
+  deleteQuoteTemplateItem(id: string): Promise<boolean>;
+  deleteQuoteTemplateItemsByTemplate(templateId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1730,6 +1764,114 @@ export class DatabaseStorage implements IStorage {
   async updateEmergencyCalloutResponse(id: string, response: Partial<InsertEmergencyCalloutResponse>): Promise<EmergencyCalloutResponse | undefined> {
     const [updated] = await db.update(emergencyCalloutResponses).set(response).where(eq(emergencyCalloutResponses.id, id)).returning();
     return updated || undefined;
+  }
+
+  // Product Categories
+  async getProductCategories(): Promise<ProductCategory[]> {
+    return db.select().from(productCategories).orderBy(asc(productCategories.displayOrder), asc(productCategories.name));
+  }
+
+  async getProductCategory(id: string): Promise<ProductCategory | undefined> {
+    const [category] = await db.select().from(productCategories).where(eq(productCategories.id, id));
+    return category || undefined;
+  }
+
+  async createProductCategory(category: InsertProductCategory): Promise<ProductCategory> {
+    const [created] = await db.insert(productCategories).values(category).returning();
+    return created;
+  }
+
+  async updateProductCategory(id: string, category: Partial<InsertProductCategory>): Promise<ProductCategory | undefined> {
+    const [updated] = await db.update(productCategories).set({ ...category, updatedAt: new Date() }).where(eq(productCategories.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteProductCategory(id: string): Promise<boolean> {
+    await db.delete(productCategories).where(eq(productCategories.id, id));
+    return true;
+  }
+
+  // Catalog Items
+  async getCatalogItems(): Promise<CatalogItem[]> {
+    return db.select().from(catalogItems).orderBy(asc(catalogItems.name));
+  }
+
+  async getCatalogItemsByCategory(categoryId: string): Promise<CatalogItem[]> {
+    return db.select().from(catalogItems).where(eq(catalogItems.categoryId, categoryId)).orderBy(asc(catalogItems.name));
+  }
+
+  async getCatalogItemsByType(type: string): Promise<CatalogItem[]> {
+    return db.select().from(catalogItems).where(eq(catalogItems.type, type)).orderBy(asc(catalogItems.name));
+  }
+
+  async getCatalogItem(id: string): Promise<CatalogItem | undefined> {
+    const [item] = await db.select().from(catalogItems).where(eq(catalogItems.id, id));
+    return item || undefined;
+  }
+
+  async createCatalogItem(item: InsertCatalogItem): Promise<CatalogItem> {
+    const [created] = await db.insert(catalogItems).values(item).returning();
+    return created;
+  }
+
+  async updateCatalogItem(id: string, item: Partial<InsertCatalogItem>): Promise<CatalogItem | undefined> {
+    const [updated] = await db.update(catalogItems).set({ ...item, updatedAt: new Date() }).where(eq(catalogItems.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteCatalogItem(id: string): Promise<boolean> {
+    await db.delete(catalogItems).where(eq(catalogItems.id, id));
+    return true;
+  }
+
+  // Quote Templates
+  async getQuoteTemplates(): Promise<QuoteTemplate[]> {
+    return db.select().from(quoteTemplates).orderBy(asc(quoteTemplates.name));
+  }
+
+  async getQuoteTemplate(id: string): Promise<QuoteTemplate | undefined> {
+    const [template] = await db.select().from(quoteTemplates).where(eq(quoteTemplates.id, id));
+    return template || undefined;
+  }
+
+  async createQuoteTemplate(template: InsertQuoteTemplate): Promise<QuoteTemplate> {
+    const [created] = await db.insert(quoteTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateQuoteTemplate(id: string, template: Partial<InsertQuoteTemplate>): Promise<QuoteTemplate | undefined> {
+    const [updated] = await db.update(quoteTemplates).set({ ...template, updatedAt: new Date() }).where(eq(quoteTemplates.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteQuoteTemplate(id: string): Promise<boolean> {
+    await db.delete(quoteTemplates).where(eq(quoteTemplates.id, id));
+    return true;
+  }
+
+  // Quote Template Items
+  async getQuoteTemplateItems(templateId: string): Promise<QuoteTemplateItem[]> {
+    return db.select().from(quoteTemplateItems).where(eq(quoteTemplateItems.templateId, templateId)).orderBy(asc(quoteTemplateItems.sortOrder));
+  }
+
+  async createQuoteTemplateItem(item: InsertQuoteTemplateItem): Promise<QuoteTemplateItem> {
+    const [created] = await db.insert(quoteTemplateItems).values(item).returning();
+    return created;
+  }
+
+  async updateQuoteTemplateItem(id: string, item: Partial<InsertQuoteTemplateItem>): Promise<QuoteTemplateItem | undefined> {
+    const [updated] = await db.update(quoteTemplateItems).set(item).where(eq(quoteTemplateItems.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteQuoteTemplateItem(id: string): Promise<boolean> {
+    await db.delete(quoteTemplateItems).where(eq(quoteTemplateItems.id, id));
+    return true;
+  }
+
+  async deleteQuoteTemplateItemsByTemplate(templateId: string): Promise<boolean> {
+    await db.delete(quoteTemplateItems).where(eq(quoteTemplateItems.templateId, templateId));
+    return true;
   }
 }
 

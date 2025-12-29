@@ -6409,6 +6409,277 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     }
   });
 
+  // ==============================
+  // PRODUCT CATALOG & QUOTE TEMPLATES
+  // ==============================
+
+  // Product Categories
+  app.get("/api/product-categories", async (req, res) => {
+    try {
+      const categories = await storage.getProductCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Get product categories error:", error);
+      res.status(500).json({ message: "Failed to load categories" });
+    }
+  });
+
+  app.post("/api/product-categories", async (req, res) => {
+    try {
+      const category = await storage.createProductCategory(req.body);
+      res.status(201).json(category);
+    } catch (error) {
+      console.error("Create product category error:", error);
+      res.status(500).json({ message: "Failed to create category" });
+    }
+  });
+
+  app.patch("/api/product-categories/:id", async (req, res) => {
+    try {
+      const category = await storage.updateProductCategory(req.params.id, req.body);
+      if (!category) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+      res.json(category);
+    } catch (error) {
+      console.error("Update product category error:", error);
+      res.status(500).json({ message: "Failed to update category" });
+    }
+  });
+
+  app.delete("/api/product-categories/:id", async (req, res) => {
+    try {
+      await storage.deleteProductCategory(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete product category error:", error);
+      res.status(500).json({ message: "Failed to delete category" });
+    }
+  });
+
+  // Catalog Items
+  app.get("/api/catalog-items", async (req, res) => {
+    try {
+      const { categoryId, type } = req.query;
+      let items;
+      if (categoryId) {
+        items = await storage.getCatalogItemsByCategory(categoryId as string);
+      } else if (type) {
+        items = await storage.getCatalogItemsByType(type as string);
+      } else {
+        items = await storage.getCatalogItems();
+      }
+      res.json(items);
+    } catch (error) {
+      console.error("Get catalog items error:", error);
+      res.status(500).json({ message: "Failed to load catalog items" });
+    }
+  });
+
+  app.get("/api/catalog-items/:id", async (req, res) => {
+    try {
+      const item = await storage.getCatalogItem(req.params.id);
+      if (!item) {
+        return res.status(404).json({ message: "Catalog item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Get catalog item error:", error);
+      res.status(500).json({ message: "Failed to load catalog item" });
+    }
+  });
+
+  app.post("/api/catalog-items", async (req, res) => {
+    try {
+      const item = await storage.createCatalogItem(req.body);
+      res.status(201).json(item);
+    } catch (error) {
+      console.error("Create catalog item error:", error);
+      res.status(500).json({ message: "Failed to create catalog item" });
+    }
+  });
+
+  app.patch("/api/catalog-items/:id", async (req, res) => {
+    try {
+      const item = await storage.updateCatalogItem(req.params.id, req.body);
+      if (!item) {
+        return res.status(404).json({ message: "Catalog item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Update catalog item error:", error);
+      res.status(500).json({ message: "Failed to update catalog item" });
+    }
+  });
+
+  app.delete("/api/catalog-items/:id", async (req, res) => {
+    try {
+      await storage.deleteCatalogItem(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete catalog item error:", error);
+      res.status(500).json({ message: "Failed to delete catalog item" });
+    }
+  });
+
+  // Quote Templates
+  app.get("/api/quote-templates", async (req, res) => {
+    try {
+      const templates = await storage.getQuoteTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Get quote templates error:", error);
+      res.status(500).json({ message: "Failed to load quote templates" });
+    }
+  });
+
+  app.get("/api/quote-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getQuoteTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Quote template not found" });
+      }
+      const items = await storage.getQuoteTemplateItems(req.params.id);
+      res.json({ ...template, items });
+    } catch (error) {
+      console.error("Get quote template error:", error);
+      res.status(500).json({ message: "Failed to load quote template" });
+    }
+  });
+
+  app.post("/api/quote-templates", async (req, res) => {
+    try {
+      const { items, ...templateData } = req.body;
+      const template = await storage.createQuoteTemplate(templateData);
+      
+      // Create template items if provided
+      if (items && Array.isArray(items)) {
+        for (let i = 0; i < items.length; i++) {
+          await storage.createQuoteTemplateItem({
+            ...items[i],
+            templateId: template.id,
+            sortOrder: i,
+          });
+        }
+      }
+      
+      const createdItems = await storage.getQuoteTemplateItems(template.id);
+      res.status(201).json({ ...template, items: createdItems });
+    } catch (error) {
+      console.error("Create quote template error:", error);
+      res.status(500).json({ message: "Failed to create quote template" });
+    }
+  });
+
+  app.patch("/api/quote-templates/:id", async (req, res) => {
+    try {
+      const { items, ...templateData } = req.body;
+      const template = await storage.updateQuoteTemplate(req.params.id, templateData);
+      if (!template) {
+        return res.status(404).json({ message: "Quote template not found" });
+      }
+      
+      // If items provided, replace all items
+      if (items && Array.isArray(items)) {
+        await storage.deleteQuoteTemplateItemsByTemplate(req.params.id);
+        for (let i = 0; i < items.length; i++) {
+          await storage.createQuoteTemplateItem({
+            ...items[i],
+            templateId: template.id,
+            sortOrder: i,
+          });
+        }
+      }
+      
+      const updatedItems = await storage.getQuoteTemplateItems(template.id);
+      res.json({ ...template, items: updatedItems });
+    } catch (error) {
+      console.error("Update quote template error:", error);
+      res.status(500).json({ message: "Failed to update quote template" });
+    }
+  });
+
+  app.delete("/api/quote-templates/:id", async (req, res) => {
+    try {
+      await storage.deleteQuoteTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete quote template error:", error);
+      res.status(500).json({ message: "Failed to delete quote template" });
+    }
+  });
+
+  // Apply template to a job quote
+  app.post("/api/jobs/:jobId/apply-template/:templateId", async (req, res) => {
+    try {
+      const template = await storage.getQuoteTemplate(req.params.templateId);
+      if (!template) {
+        return res.status(404).json({ message: "Quote template not found" });
+      }
+      
+      const templateItems = await storage.getQuoteTemplateItems(req.params.templateId);
+      const existingItems = await storage.getQuoteItemsByJob(req.params.jobId);
+      const maxSortOrder = existingItems.length > 0 
+        ? Math.max(...existingItems.map(i => i.sortOrder || 0)) + 1 
+        : 0;
+      
+      const createdItems = [];
+      for (let i = 0; i < templateItems.length; i++) {
+        const item = templateItems[i];
+        const lineTotal = parseFloat(String(item.quantity)) * parseFloat(String(item.unitPrice));
+        const created = await storage.createQuoteItem({
+          jobId: req.params.jobId,
+          catalogItemId: item.catalogItemId,
+          description: item.description,
+          quantity: String(item.quantity),
+          unitPrice: String(item.unitPrice),
+          lineTotal: String(lineTotal),
+          sortOrder: maxSortOrder + i,
+        });
+        createdItems.push(created);
+      }
+      
+      res.status(201).json({ applied: createdItems.length, items: createdItems });
+    } catch (error) {
+      console.error("Apply template error:", error);
+      res.status(500).json({ message: "Failed to apply template" });
+    }
+  });
+
+  // Add catalog item to a job quote
+  app.post("/api/jobs/:jobId/add-catalog-item/:catalogItemId", async (req, res) => {
+    try {
+      const catalogItem = await storage.getCatalogItem(req.params.catalogItemId);
+      if (!catalogItem) {
+        return res.status(404).json({ message: "Catalog item not found" });
+      }
+      
+      const existingItems = await storage.getQuoteItemsByJob(req.params.jobId);
+      const maxSortOrder = existingItems.length > 0 
+        ? Math.max(...existingItems.map(i => i.sortOrder || 0)) + 1 
+        : 0;
+      
+      const quantity = req.body.quantity || catalogItem.defaultQuantity || "1";
+      const unitPrice = req.body.unitPrice || catalogItem.unitPrice;
+      const lineTotal = parseFloat(String(quantity)) * parseFloat(String(unitPrice));
+      
+      const created = await storage.createQuoteItem({
+        jobId: req.params.jobId,
+        catalogItemId: catalogItem.id,
+        description: req.body.description || catalogItem.name,
+        quantity: String(quantity),
+        unitPrice: String(unitPrice),
+        lineTotal: String(lineTotal),
+        sortOrder: maxSortOrder,
+      });
+      
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Add catalog item error:", error);
+      res.status(500).json({ message: "Failed to add catalog item" });
+    }
+  });
+
   return httpServer;
 }
 

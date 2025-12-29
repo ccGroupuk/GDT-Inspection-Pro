@@ -156,6 +156,7 @@ export type Task = typeof tasks.$inferSelect;
 export const quoteItems = pgTable("quote_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  catalogItemId: varchar("catalog_item_id"), // Optional link to catalog item for tracking
   description: text("description").notNull(),
   quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
@@ -1813,4 +1814,125 @@ export const EMERGENCY_CALLOUT_STATUSES = [
   { value: "in_progress", label: "In Progress", color: "bg-yellow-500" },
   { value: "resolved", label: "Resolved", color: "bg-green-500" },
   { value: "cancelled", label: "Cancelled", color: "bg-gray-500" },
+] as const;
+
+// ===============================
+// PRODUCT CATALOG & QUOTE TEMPLATES
+// ===============================
+
+// Product Categories (e.g., "Media Wall Packages", "Under Stairs Storage", "Labour Rates")
+export const productCategories = pgTable("product_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  displayOrder: integer("display_order").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertProductCategorySchema = createInsertSchema(productCategories).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertProductCategory = z.infer<typeof insertProductCategorySchema>;
+export type ProductCategory = typeof productCategories.$inferSelect;
+
+// Catalog Item Types
+export const CATALOG_ITEM_TYPES = [
+  { value: "product", label: "Product" },
+  { value: "labour", label: "Labour" },
+  { value: "consumable", label: "Consumable" },
+  { value: "material", label: "Material" },
+] as const;
+
+// Catalog Items (saved products, labour charges, materials with prices)
+export const catalogItems = pgTable("catalog_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  categoryId: varchar("category_id").references(() => productCategories.id),
+  type: text("type").notNull().default("product"), // product, labour, consumable, material
+  sku: text("sku"), // Optional stock keeping unit
+  name: text("name").notNull(),
+  description: text("description"),
+  unitOfMeasure: text("unit_of_measure").default("each"), // each, hour, metre, sqm, etc.
+  defaultQuantity: decimal("default_quantity", { precision: 10, scale: 2 }).default("1"),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }), // Optional cost for margin calculations
+  taxable: boolean("taxable").default(true),
+  isActive: boolean("is_active").default(true),
+  isFavorite: boolean("is_favorite").default(false), // Quick access items
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const catalogItemsRelations = relations(catalogItems, ({ one }) => ({
+  category: one(productCategories, {
+    fields: [catalogItems.categoryId],
+    references: [productCategories.id],
+  }),
+}));
+
+export const insertCatalogItemSchema = createInsertSchema(catalogItems).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCatalogItem = z.infer<typeof insertCatalogItemSchema>;
+export type CatalogItem = typeof catalogItems.$inferSelect;
+
+// Quote Templates (pre-built quote packages)
+export const quoteTemplates = pgTable("quote_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  categoryId: varchar("category_id").references(() => productCategories.id), // Optional category grouping
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const quoteTemplatesRelations = relations(quoteTemplates, ({ one, many }) => ({
+  category: one(productCategories, {
+    fields: [quoteTemplates.categoryId],
+    references: [productCategories.id],
+  }),
+  items: many(quoteTemplateItems),
+}));
+
+export const insertQuoteTemplateSchema = createInsertSchema(quoteTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertQuoteTemplate = z.infer<typeof insertQuoteTemplateSchema>;
+export type QuoteTemplate = typeof quoteTemplates.$inferSelect;
+
+// Quote Template Items (items within a template)
+export const quoteTemplateItems = pgTable("quote_template_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id").notNull().references(() => quoteTemplates.id, { onDelete: "cascade" }),
+  catalogItemId: varchar("catalog_item_id").references(() => catalogItems.id), // Optional link to catalog
+  description: text("description").notNull(), // Can override catalog item description
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(), // Can override catalog price
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const quoteTemplateItemsRelations = relations(quoteTemplateItems, ({ one }) => ({
+  template: one(quoteTemplates, {
+    fields: [quoteTemplateItems.templateId],
+    references: [quoteTemplates.id],
+  }),
+  catalogItem: one(catalogItems, {
+    fields: [quoteTemplateItems.catalogItemId],
+    references: [catalogItems.id],
+  }),
+}));
+
+export const insertQuoteTemplateItemSchema = createInsertSchema(quoteTemplateItems).omit({ id: true, createdAt: true });
+export type InsertQuoteTemplateItem = z.infer<typeof insertQuoteTemplateItemSchema>;
+export type QuoteTemplateItem = typeof quoteTemplateItems.$inferSelect;
+
+// Unit of Measure options
+export const UNITS_OF_MEASURE = [
+  { value: "each", label: "Each" },
+  { value: "hour", label: "Hour" },
+  { value: "day", label: "Day" },
+  { value: "metre", label: "Metre" },
+  { value: "sqm", label: "Square Metre" },
+  { value: "litre", label: "Litre" },
+  { value: "kg", label: "Kilogram" },
+  { value: "set", label: "Set" },
+  { value: "pack", label: "Pack" },
+  { value: "fixed", label: "Fixed Price" },
 ] as const;
