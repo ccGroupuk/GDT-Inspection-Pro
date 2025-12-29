@@ -5061,6 +5061,15 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   // AI Content Generation endpoint (uses Replit AI Integrations)
   app.post("/api/seo/generate-content", async (req, res) => {
     try {
+      // Check for AI integration availability first
+      if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+        console.error("AI Integration not configured: AI_INTEGRATIONS_OPENAI_API_KEY is missing");
+        return res.status(503).json({ 
+          message: "AI service not available. Please ensure the OpenAI integration is set up.",
+          errorType: "config"
+        });
+      }
+      
       const { platform, postType, service, location, tone, keywords, mediaContext, imageUrl, imageCaption } = req.body;
       
       // Build prompt based on business profile and brand voice
@@ -5152,9 +5161,36 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         usedImage: usedImageSuccessfully,
         imageUrlUsed: absoluteImageUrl || undefined,
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Generate content error:", error);
-      res.status(500).json({ message: "Failed to generate content" });
+      
+      // Provide specific error messages based on error type
+      if (error instanceof Error) {
+        const errMsg = error.message.toLowerCase();
+        
+        if (errMsg.includes("api key") || errMsg.includes("authentication") || errMsg.includes("unauthorized")) {
+          return res.status(503).json({ 
+            message: "AI service authentication failed. Please check the OpenAI integration configuration.",
+            errorType: "auth"
+          });
+        }
+        
+        if (errMsg.includes("rate limit") || errMsg.includes("quota")) {
+          return res.status(429).json({ 
+            message: "AI service is temporarily busy. Please try again in a few moments.",
+            errorType: "rate_limit"
+          });
+        }
+        
+        if (errMsg.includes("timeout") || errMsg.includes("network")) {
+          return res.status(504).json({ 
+            message: "AI service timed out. Please try again.",
+            errorType: "timeout"
+          });
+        }
+      }
+      
+      res.status(500).json({ message: "Failed to generate content. Please try again." });
     }
   });
 

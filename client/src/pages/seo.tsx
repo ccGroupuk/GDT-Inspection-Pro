@@ -1383,8 +1383,22 @@ function ContentCreatorSection() {
       }
       toast({ title: "Content generated", description });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to generate content.", variant: "destructive" });
+    onError: (error: Error) => {
+      // Error message format from apiRequest: "${status}: ${responseBody}"
+      let description = "Failed to generate content. Please try again.";
+      try {
+        const colonIndex = error.message.indexOf(": ");
+        if (colonIndex > 0) {
+          const jsonPart = error.message.slice(colonIndex + 2);
+          const errorData = JSON.parse(jsonPart);
+          if (errorData.message) {
+            description = errorData.message;
+          }
+        }
+      } catch {
+        // Use default message if parsing fails
+      }
+      toast({ title: "Error", description, variant: "destructive" });
     },
   });
 
