@@ -2422,25 +2422,8 @@ export async function registerRoutes(
       const feePercent = parseFloat(String(callout.calloutFeePercent || "20.00"));
       const feeAmount = (totalAmount * feePercent) / 100;
       
-      // Get partner info for finance transaction
-      const partner = await storage.getTradePartner(access.partnerId);
-      
-      // Create finance transaction for the callout fee (income to CCC)
-      const feeTransaction = await storage.createFinancialTransaction({
-        date: new Date(),
-        type: "income",
-        amount: feeAmount.toFixed(2),
-        description: `Emergency Callout Fee - ${partner?.businessName || "Partner"} - ${callout.incidentType}`,
-        jobId: callout.jobId || null,
-        partnerId: access.partnerId,
-        sourceType: "emergency_callout_fee",
-        grossAmount: totalAmount.toFixed(2),
-        partnerCost: (totalAmount - feeAmount).toFixed(2),
-        profitAmount: feeAmount.toFixed(2),
-        notes: completionNotes || null,
-      });
-      
-      // Update the callout
+      // Update the callout - fee is now outstanding (not yet paid to CCC)
+      // Finance transaction will be created when admin marks fee as paid
       const updated = await storage.updateEmergencyCallout(req.params.calloutId, {
         status: "resolved",
         resolvedAt: new Date(),
@@ -2449,7 +2432,7 @@ export async function registerRoutes(
         completedByPartnerId: access.partnerId,
         totalCollected: totalAmount.toFixed(2),
         calloutFeeAmount: feeAmount.toFixed(2),
-        feeTransactionId: feeTransaction.id,
+        feePaid: false, // Partner still owes this fee to CCC
       });
       
       res.json({ 
@@ -3311,6 +3294,184 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get emergency partners error:", error);
       res.status(500).json({ message: "Failed to load emergency partners" });
+    }
+  });
+
+  // ==================== PARTNER FEES API ====================
+  // Track and collect fees owed to CCC from emergency callouts
+
+  // Get all outstanding partner fees
+  app.get("/api/partner-fees", async (req, res) => {
+    try {
+      const allCallouts = await storage.getEmergencyCallouts();
+      // Filter to completed callouts with outstanding fees
+      const outstandingFees = allCallouts.filter(c => 
+        c.completedAt && 
+        c.calloutFeeAmount && 
+        parseFloat(String(c.calloutFeeAmount)) > 0 &&
+        !c.feePaid
+      );
+      
+      // Enrich with partner info
+      const feesWithDetails = await Promise.all(
+        outstandingFees.map(async (callout) => {
+          const partner = callout.assignedPartnerId 
+            ? await storage.getTradePartner(callout.assignedPartnerId)
+            : null;
+          const job = callout.jobId 
+            ? await storage.getJob(callout.jobId)
+            : null;
+          return {
+            ...callout,
+            partner,
+            job,
+          };
+        })
+      );
+      
+      res.json(feesWithDetails);
+    } catch (error) {
+      console.error("Get partner fees error:", error);
+      res.status(500).json({ message: "Failed to load partner fees" });
+    }
+  });
+
+  // Get partner fee balances (summary per partner)
+  app.get("/api/partner-fees/balances", async (req, res) => {
+    try {
+      const allCallouts = await storage.getEmergencyCallouts();
+      const allPartners = await storage.getTradePartners();
+      
+      // Calculate outstanding fees per partner
+      const balances = allPartners.map(partner => {
+        const partnerCallouts = allCallouts.filter(c => 
+          c.assignedPartnerId === partner.id &&
+          c.completedAt && 
+          c.calloutFeeAmount && 
+          parseFloat(String(c.calloutFeeAmount)) > 0 &&
+          !c.feePaid
+        );
+        
+        const totalOutstanding = partnerCallouts.reduce((sum, c) => 
+          sum + parseFloat(String(c.calloutFeeAmount || "0")), 0
+        );
+        
+        const paidCallouts = allCallouts.filter(c => 
+          c.assignedPartnerId === partner.id &&
+          c.completedAt && 
+          c.feePaid
+        );
+        
+        const totalPaid = paidCallouts.reduce((sum, c) => 
+          sum + parseFloat(String(c.calloutFeeAmount || "0")), 0
+        );
+        
+        return {
+          partnerId: partner.id,
+          partnerName: partner.businessName,
+          outstandingCount: partnerCallouts.length,
+          totalOutstanding: totalOutstanding.toFixed(2),
+          paidCount: paidCallouts.length,
+          totalPaid: totalPaid.toFixed(2),
+        };
+      }).filter(b => parseFloat(b.totalOutstanding) > 0 || parseFloat(b.totalPaid) > 0);
+      
+      res.json(balances);
+    } catch (error) {
+      console.error("Get partner fee balances error:", error);
+      res.status(500).json({ message: "Failed to load partner balances" });
+    }
+  });
+
+  // Mark a partner fee as paid (creates finance transaction)
+  app.post("/api/partner-fees/:calloutId/mark-paid", async (req, res) => {
+    try {
+      const callout = await storage.getEmergencyCallout(req.params.calloutId);
+      if (!callout) {
+        return res.status(404).json({ message: "Emergency callout not found" });
+      }
+      
+      if (!callout.calloutFeeAmount || parseFloat(String(callout.calloutFeeAmount)) <= 0) {
+        return res.status(400).json({ message: "No fee amount recorded for this callout" });
+      }
+      
+      if (callout.feePaid) {
+        return res.status(400).json({ message: "Fee already marked as paid" });
+      }
+      
+      const { notes } = req.body;
+      
+      // Get partner info for transaction description
+      const partner = callout.assignedPartnerId 
+        ? await storage.getTradePartner(callout.assignedPartnerId)
+        : null;
+      
+      // Create finance transaction for the fee (now actually received)
+      const feeTransaction = await storage.createFinancialTransaction({
+        date: new Date(),
+        type: "income",
+        amount: String(callout.calloutFeeAmount),
+        description: `Emergency Callout Fee Collected - ${partner?.businessName || "Partner"} - ${callout.incidentType}`,
+        jobId: callout.jobId || null,
+        partnerId: callout.assignedPartnerId || null,
+        sourceType: "emergency_callout_fee",
+        grossAmount: String(callout.totalCollected || "0"),
+        partnerCost: (parseFloat(String(callout.totalCollected || "0")) - parseFloat(String(callout.calloutFeeAmount || "0"))).toFixed(2),
+        profitAmount: String(callout.calloutFeeAmount),
+        notes: notes || null,
+      });
+      
+      // Update the callout to mark fee as paid
+      const updated = await storage.updateEmergencyCallout(req.params.calloutId, {
+        feePaid: true,
+        feePaidAt: new Date(),
+        feeTransactionId: feeTransaction.id,
+      });
+      
+      res.json({ 
+        callout: updated, 
+        transaction: feeTransaction,
+        message: `Fee of £${callout.calloutFeeAmount} marked as paid`
+      });
+    } catch (error) {
+      console.error("Mark partner fee paid error:", error);
+      res.status(500).json({ message: "Failed to mark fee as paid" });
+    }
+  });
+
+  // Get paid fees history
+  app.get("/api/partner-fees/paid", async (req, res) => {
+    try {
+      const allCallouts = await storage.getEmergencyCallouts();
+      // Filter to paid fees
+      const paidFees = allCallouts.filter(c => 
+        c.completedAt && 
+        c.calloutFeeAmount && 
+        parseFloat(String(c.calloutFeeAmount)) > 0 &&
+        c.feePaid
+      );
+      
+      // Enrich with partner info
+      const feesWithDetails = await Promise.all(
+        paidFees.map(async (callout) => {
+          const partner = callout.assignedPartnerId 
+            ? await storage.getTradePartner(callout.assignedPartnerId)
+            : null;
+          const job = callout.jobId 
+            ? await storage.getJob(callout.jobId)
+            : null;
+          return {
+            ...callout,
+            partner,
+            job,
+          };
+        })
+      );
+      
+      res.json(feesWithDetails);
+    } catch (error) {
+      console.error("Get paid partner fees error:", error);
+      res.status(500).json({ message: "Failed to load paid fees" });
     }
   });
 
