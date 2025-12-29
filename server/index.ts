@@ -5,6 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { initializeScheduler } from "./scheduler";
 import { seedProductionData } from "./seed";
+import { seedHelpCenter } from "./seed-help-center";
 
 const app = express();
 const httpServer = createServer(app);
@@ -67,6 +68,9 @@ app.use((req, res, next) => {
 (async () => {
   // Seed production data (ensures admin account exists)
   await seedProductionData();
+  
+  // Seed Help Center articles
+  await seedHelpCenter();
   
   await registerRoutes(httpServer, app);
 
