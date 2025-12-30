@@ -150,8 +150,10 @@ export async function registerRoutes(
 
   // Global admin route protection middleware
   app.use("/api", async (req, res, next) => {
-    // Debug: Log ALL requests entering this middleware
-    console.log(`[auth-entry] ${req.method} ${req.path} - cookies: ${JSON.stringify(Object.keys(req.cookies || {}))}`);
+    // Debug: Log ALL requests entering this middleware with origin info
+    const origin = req.get('Origin') || 'same-origin';
+    const referer = req.get('Referer') || 'no-referer';
+    console.log(`[auth-entry] ${req.method} ${req.path} - cookies: ${JSON.stringify(Object.keys(req.cookies || {}))}, origin: ${origin}, referer: ${referer}`);
     
     // Skip auth for public routes
     const isPublicRoute = publicRoutes.some(route => req.path === route || req.path.startsWith(route + "/"));

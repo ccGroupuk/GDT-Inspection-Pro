@@ -1,0 +1,101 @@
+PROJECT: Trade CRM product database + Supplier Lookup (B&Q first, more later)
+
+GOAL:
+Allow logged-in users to search supplier product listings (starting with B&Q) and import chosen items into our internal Products database for quoting.
+
+USER FLOW:
+1) User goes to /supplier-lookup
+2) They search a term e.g. "decorators caulk"
+3) System searches supplier(s) and returns results sorted by cheapest first
+4) UI shows TOP 3 results only (configurable)
+   Each result card shows:
+   - productName
+   - price (numeric + currency)
+   - size / volume (e.g. 290ml)
+   - brand (if available)
+   - supplierName (e.g. B&Q)
+   - productUrl
+   - sku / supplierProductId (if available)
+   - inStock (optional if available)
+5) User clicks "Import" on one result
+6) App creates (or updates) a Product record in our DB with mapped fields:
+   - name
+   - supplierName
+   - supplierUrl
+   - supplierSku
+   - packSize/volume
+   - costPrice (the fetched live price)
+   - currency
+   - lastPriceCheckAt timestamp (now)
+   - category (optional, inferred from query)
+7) After import, show success message + open the product edit screen.
+
+IMPORTANT: We are only saving the supplier fields + cost price for quoting. We are NOT placing orders.
+
+DATA MODEL:
+Create/confirm DB table/collection "products" with at least:
+- id (uuid)
+- name (string)
+- brand (string nullable)
+- supplierName (string)
+- supplierSku (string nullable)
+- supplierUrl (string)
+- size (string nullable)
+- costPrice (number)
+- currency (string default "GBP")
+- lastPriceCheckAt (datetime)
+- createdAt, updatedAt
+
+API ENDPOINTS:
+1) GET /api/suppliers/search?q=...&limit=3
+   Returns: { results: SupplierProduct[] }
+2) POST /api/products/import
+   Body: { supplierProduct: SupplierProduct }
+   Returns: { product: Product }
+
+SupplierProduct type:
+- name
+- brand?
+- price
+- currency
+- size?
+- supplierName
+- supplierSku?
+- productUrl
+- inStock?
+
+B&Q SEARCH IMPLEMENTATION:
+Use a server-side scraper or server-side fetch that:
+- takes query term
+- returns normalized results
+- sorts by lowest price
+- returns top limit
+
+AUTH BUG TO FIX (CURRENT ISSUE):
+Clicking Search on /supplier-lookup redirects user to login.
+This means supplier endpoints are unauthorized because cookies/session aren't being sent.
+
+Fix requirements:
+- Ensure ALL client fetch requests include credentials so session cookies are sent:
+  fetch(url, { credentials: 'include' })
+- If using TanStack Query, set a global default queryFn or a shared fetcher that always includes credentials.
+- Ensure API routes return JSON 401 for unauthorized, not HTML redirect.
+- If cross-origin preview is used, configure CORS:
+  Access-Control-Allow-Origin must match the frontend origin (not *)
+  Access-Control-Allow-Credentials: true
+  Cookies may need SameSite=None; Secure (if https)
+
+After fix:
+- Searching suppliers works while logged in
+- Import works while logged in
+- If session expires, show a friendly toast "Please log in again" instead of silent redirect.
+
+UI:
+Keep the current search box + Search button.
+Under it, render 3 result cards with Import button.
+Show loading + error states (Unauthorized should show message not redirect).
+
+TESTS:
+- Logged-in user can search and import
+- Logged-out user gets 401 + message
+- Price saved into product record correctly
