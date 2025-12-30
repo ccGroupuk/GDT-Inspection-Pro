@@ -464,25 +464,30 @@ export default function Catalog() {
                       return (
                         <TableRow key={item.id} data-testid={`row-catalog-item-${item.id}`}>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div>
-                                <div className="font-medium">{item.name}</div>
-                                {item.sku && (
-                                  <div className="text-xs text-muted-foreground">SKU: {item.sku}</div>
-                                )}
-                              </div>
-                              {item.description?.includes('URL: http') && (
-                                <a
-                                  href={item.description.match(/URL: (https?:\/\/[^\s|]+)/)?.[1] || '#'}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-muted-foreground hover:text-foreground"
-                                  data-testid={`link-product-${item.id}`}
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                </a>
-                              )}
-                            </div>
+                            {(() => {
+                              const productUrl = item.description?.match(/URL:\s*(https?:\/\/[^\s|]+)/i)?.[1];
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <div>
+                                    <div className="font-medium">{item.name}</div>
+                                    {item.sku && (
+                                      <div className="text-xs text-muted-foreground">SKU: {item.sku}</div>
+                                    )}
+                                  </div>
+                                  {productUrl && (
+                                    <a
+                                      href={productUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-muted-foreground hover:text-foreground"
+                                      data-testid={`link-product-${item.id}`}
+                                    >
+                                      <ExternalLink className="w-4 h-4" />
+                                    </a>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="gap-1">
