@@ -408,7 +408,7 @@ export default function JobForm() {
     mutation.mutate(values);
   };
 
-  if (isLoading && isEdit) {
+  if (isLoading) {
     return (
       <div className="p-6">
         <div className="flex items-center gap-3 mb-6">
@@ -417,7 +417,7 @@ export default function JobForm() {
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
-          <h1 className="text-2xl font-semibold">Edit Job</h1>
+          <h1 className="text-2xl font-semibold">{isEdit ? "Edit Job" : "New Job"}</h1>
         </div>
         <FormSkeleton />
       </div>
