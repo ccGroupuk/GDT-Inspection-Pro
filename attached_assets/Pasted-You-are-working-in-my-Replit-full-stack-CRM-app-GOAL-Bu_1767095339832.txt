@@ -1,0 +1,112 @@
+You are working in my Replit full-stack CRM app.
+
+GOAL
+Build a “Supplier Lookup” feature that:
+1) Searches trade suppliers for a product term (starting with B&Q / diy.com)
+2) Returns normalized results
+3) Displays the TOP 3 results (cheapest by default)
+4) Allows the user to click ONE result and save its fields into our Products database (name, size, price, supplier, url, sku if available)
+5) Fix current bug: Clicking Search causes redirect to login due to 401 Unauthorized.
+
+CURRENT BUG (IMPORTANT)
+When I click Search on /supplier-lookup, it returns “Unauthorized” and the UI redirects to the login page.
+Logs show some API routes are registered BEFORE the global /api authentication middleware, so cookies are not checked and those endpoints always return 401.
+Failing endpoints: /api/products, /api/suppliers/search, /api/messages/unread-count.
+Working endpoints: /api/dashboard, /api/suppliers, /api/jobs.
+
+TASK A — FIX AUTH MIDDLEWARE ORDER
+- In server/routes.ts (or equivalent), ensure auth middleware is applied BEFORE any /api route registrations.
+- Example structure:
+  1) app.use("/api", authMiddleware)  // must happen first
+  2) register all protected routes under /api after that
+- Alternatively:
+  - Use an Express Router:
+    const api = Router();
+    api.use(authMiddleware);
+    api.get("/suppliers/search", ...)
+    api.get("/products", ...)
+    app.use("/api", api);
+- Confirm with logs that every protected route prints the auth-entry debug line.
+- Ensure cookies are read correctly and sent in requests.
+
+TASK B — ENSURE FRONTEND REQUESTS SEND COOKIES
+- For fetch calls from the client, include credentials:
+  fetch("/api/suppliers/search?q=...", { credentials: "include" })
+- If using TanStack Query, set a default fetcher that always includes credentials: "include".
+
+TASK C — SUPPLIER SEARCH ENDPOINT
+Create endpoint:
+GET /api/suppliers/search?q=<term>&limit=3
+Returns:
+{
+  query: string,
+  results: [
+    {
+      supplier: "B&Q",
+      name: string,
+      size: string | null,
+      price: number,
+      currency: "GBP",
+      url: string,
+      sku: string | null,
+      inStock: boolean | null,
+      fetchedAt: ISOString
+    }
+  ]
+}
+
+- For now, implement B&Q (diy.com) search. If scraping is blocked, fall back to a safe method (server-side HTML fetch + parse, or use a supplier adapter pattern with placeholder data until we add an official API).
+- Always normalize output to the same shape.
+
+TASK D — UI: SHOW TOP 3 + SAVE
+On /supplier-lookup:
+- Search input + Search button
+- Display cards for results (Top 3 cheapest)
+- Each card shows: supplier, name, size, price, and a link to product url
+- Add “Save to Products” button per card.
+
+TASK E — SAVE INTO DB
+Create endpoint:
+POST /api/products/import
+Body:
+{
+  supplier: string,
+  name: string,
+  size: string|null,
+  price: number,
+  url: string,
+  sku: string|null,
+  fetchedAt: ISOString
+}
+
+Server should:
+- Create or update Product record
+- Store supplier info
+- Store current price and optionally append a PriceHistory row
+- Return the saved product record
+
+DB Fields needed (minimum):
+Products:
+- id
+- name
+- size
+- category (optional)
+- defaultSupplier
+- supplierSku (optional)
+- supplierUrl
+- lastPrice
+- lastPriceUpdatedAt
+
+Optional:
+ProductPriceHistory:
+- id
+- productId
+- supplier
+- price
+- fetchedAt
+
+TESTS / ACCEPTANCE
+- When logged in, pressing Search does NOT redirect to login.
+- /api/suppliers/search shows auth-entry logs and returns 200.
+- Results show top 3.
+- Clicking Save persists product fields to DB and shows success toast.
