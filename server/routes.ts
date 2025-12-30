@@ -296,10 +296,11 @@ export async function registerRoutes(
       const sessionToken = req.cookies?.employeeSession;
       if (sessionToken) {
         await storage.deleteEmployeeSession(sessionToken);
+        const isProduction = process.env.NODE_ENV === "production";
         res.clearCookie("employeeSession", {
           httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
+          secure: true,
+          sameSite: isProduction ? "lax" : "none",
           path: "/",
         });
       }
@@ -6321,11 +6322,12 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       });
 
       // Set HttpOnly cookie for secure session management
-      // Always use secure: true since Replit always serves over HTTPS
+      // Use sameSite: "lax" for production, "none" for development (preview panel uses different subdomain)
+      const isProduction = process.env.NODE_ENV === "production";
       res.cookie("employeeSession", sessionToken, {
         httpOnly: true,
         secure: true,
-        sameSite: "none",  // Allow cross-origin (preview panel uses different subdomain)
+        sameSite: isProduction ? "lax" : "none",
         expires: expiresAt,
         path: "/",
       });
@@ -6354,10 +6356,11 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (sessionToken) {
         await storage.deleteEmployeeSession(sessionToken);
       }
+      const isProduction = process.env.NODE_ENV === "production";
       res.clearCookie("employeeSession", {
         httpOnly: true,
         secure: true,
-        sameSite: "none",  // Match cookie settings
+        sameSite: isProduction ? "lax" : "none",
         path: "/",
       });
       res.json({ message: "Logged out" });

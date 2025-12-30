@@ -46,3 +46,6 @@ integrations = ["javascript_database:1.0.0", "javascript_log_in_with_replit:2.0.
 
 [userenv.shared]
 GEMINI_API_KEY = "AIzaSyBJROpUcHkRIpmhu0tStr2zI-N9CzGfYuw"
+
+[userenv.production]
+NODE_ENV = "production"
