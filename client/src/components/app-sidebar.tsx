@@ -23,6 +23,7 @@ import {
   ClipboardCheck,
   Heart,
   MessageSquare,
+  Search,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -104,6 +105,11 @@ const menuItems = [
     title: "Product Finder",
     url: "/product-finder",
     icon: Scan,
+  },
+  {
+    title: "Supplier Lookup",
+    url: "/supplier-lookup",
+    icon: Search,
   },
   {
     title: "Tools & Vehicles",

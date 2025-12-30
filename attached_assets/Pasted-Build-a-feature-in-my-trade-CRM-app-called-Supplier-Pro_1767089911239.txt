@@ -1,0 +1,161 @@
+Build a feature in my trade CRM app called “Supplier Product Lookup”.
+
+Goal
+
+When I type a search like “decorators caulk”, the app should:
+	1.	Fetch live product prices from supported UK suppliers (starting with B&Q / DIY.com, then later expand to Screwfix, Toolstation, Wickes, Howdens, etc.)
+	2.	Show me the Top 3 results (default sort: lowest price, with option to sort by “best rated” or “best value per ml” later)
+	3.	When I tap/select one result (e.g. No Nonsense Decorators Caulk), the app should save the product fields into my internal product database so I can use it in quotes/invoices — starting with price, store, size (and keep room for more fields).
+
+⸻
+
+What the feature must do
+
+A) Search & Fetch (live data)
+	•	Input: query string, example: "decorators caulk"
+	•	System searches suppliers and returns normalized results.
+
+Supported supplier v1:
+	•	B&Q via diy.com pages (example product pages)
+	•	Later we add more suppliers using the same interface.
+
+Important: many retail sites load pricing via JS, so use a “browser scrape” approach (Playwright / Puppeteer) if standard HTML fetch doesn’t include the price.
+
+⸻
+
+B) Return Top 3 results
+
+Return an array of results like:
+	•	productName
+	•	brand
+	•	price
+	•	currency (GBP)
+	•	sizeValue (e.g. 290)
+	•	sizeUnit (ml)
+	•	storeName (e.g. B&Q)
+	•	productUrl
+	•	sku (if found)
+	•	inStock (if available)
+	•	lastCheckedAt (timestamp)
+	•	optional later: rating, reviewCount, pricePerMl
+
+Then display only the top 3.
+
+⸻
+
+C) “Save to my system” (user chooses 1)
+
+When user selects a product result, save it into our internal products table:
+
+Minimum fields to save now:
+	•	productName
+	•	storeName
+	•	size (e.g. “290ml”)
+	•	price (numeric)
+	•	productUrl
+	•	lastCheckedAt
+
+Also store:
+	•	priceSource = supplier key (e.g. "diy.com")
+	•	externalSku if found
+
+After saving, this product becomes available in:
+	•	quoting dropdown
+	•	invoice items
+	•	future price refresh
+
+⸻
+
+App flow (UX)
+	1.	User opens Products → “Add product from supplier”
+	2.	User enters search term: “decorators caulk”
+	3.	App shows Top 3 matches with:
+	•	name, price, size, store
+	•	“View” (opens URL)
+	•	“Save” (stores in DB)
+	4.	User clicks “Save” on one item → app confirms “Saved to your product list”
+
+⸻
+
+Data model (database)
+
+Create table: products
+
+Fields:
+	•	id (uuid)
+	•	productName (text)
+	•	brand (text, nullable)
+	•	storeName (text)
+	•	price (decimal)
+	•	currency (text default “GBP”)
+	•	sizeValue (int nullable)
+	•	sizeUnit (text nullable)
+	•	sizeLabel (text like “290ml”)
+	•	productUrl (text)
+	•	externalSku (text nullable)
+	•	inStock (boolean nullable)
+	•	lastCheckedAt (datetime)
+	•	createdAt, updatedAt
+
+Optional later table: product_price_history
+	•	productId, price, checkedAt, storeName
+
+⸻
+
+Backend API endpoints
+
+Create these endpoints:
+	1.	GET /api/suppliers/search?query=decorators%20caulk&limit=3
+
+	•	Returns normalized list of top results (limit default 3)
+
+	2.	POST /api/products/import
+
+	•	Body includes the chosen result fields
+	•	Saves into products
+
+	3.	(Later) POST /api/products/refresh-price
+
+	•	Re-checks live price for saved products
+
+⸻
+
+Implementation requirements (Replit)
+	•	Use Playwright (preferred) to fetch supplier pages where price is JS-rendered.
+	•	Build a supplier adapter pattern:
+
+Example:
+	•	suppliers/diy.ts → search(query): ProductResult[] and parseProduct(url): ProductResult
+	•	later add suppliers/screwfix.ts, suppliers/toolstation.ts, etc.
+
+Normalize output to the same schema for all suppliers.
+
+Add caching:
+	•	Cache supplier search results for 15–30 minutes per query to reduce scraping load.
+	•	Store lastCheckedAt.
+
+Error handling:
+	•	If supplier blocks scraping or no price found, return result with price: null and mark status: "unavailable".
+
+⸻
+
+“Top 3” logic
+
+Default sorting:
+	1.	Only include results with a valid numeric price
+	2.	Sort ascending by price
+	3.	Return first 3
+
+⸻
+
+Security & Compliance
+	•	Keep request rate low (throttle + caching).
+	•	Identify scraper user-agent.
+	•	Respect supplier limits where possible.
+
+⸻
+
+Acceptance tests
+	1.	Searching “decorators caulk” returns 3 results with price/store/size.
+	2.	Selecting “Save” writes the product into DB and it appears in product list.
+	3.	Saved product can be selected in a quote line item.

@@ -58,6 +58,7 @@ import Checklists from "@/pages/checklists";
 import Wellbeing from "@/pages/wellbeing";
 import Communications from "@/pages/communications";
 import ProductFinder from "@/pages/product-finder";
+import SupplierLookup from "@/pages/supplier-lookup";
 
 function AdminRouter() {
   return (
@@ -79,6 +80,7 @@ function AdminRouter() {
       <Route path="/catalog" component={Catalog} />
       <Route path="/suppliers" component={Suppliers} />
       <Route path="/product-finder" component={ProductFinder} />
+      <Route path="/supplier-lookup" component={SupplierLookup} />
       <Route path="/templates" component={QuoteTemplates} />
       <Route path="/assets" component={Assets} />
       <Route path="/checklists" component={Checklists} />

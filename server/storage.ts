@@ -71,6 +71,8 @@ import {
   jobChatMessageReads, type JobChatMessageRead, type InsertJobChatMessageRead,
   teamActivityLog, type TeamActivityLog, type InsertTeamActivityLog,
   capturedProducts, type CapturedProduct, type InsertCapturedProduct,
+  products, type Product, type InsertProduct,
+  productPriceHistory, type ProductPriceHistory, type InsertProductPriceHistory,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -571,6 +573,13 @@ export interface IStorage {
   createCapturedProduct(product: InsertCapturedProduct): Promise<CapturedProduct>;
   updateCapturedProduct(id: string, product: Partial<InsertCapturedProduct>): Promise<CapturedProduct | undefined>;
   deleteCapturedProduct(id: string): Promise<boolean>;
+
+  // Products (Saved from Supplier Lookup)
+  getProducts(): Promise<Product[]>;
+  getProduct(id: string): Promise<Product | undefined>;
+  createProduct(product: InsertProduct): Promise<Product>;
+  updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;
+  deleteProduct(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2844,6 +2853,34 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCapturedProduct(id: string): Promise<boolean> {
     await db.delete(capturedProducts).where(eq(capturedProducts.id, id));
+    return true;
+  }
+
+  // Products (Saved from Supplier Lookup)
+  async getProducts(): Promise<Product[]> {
+    return db.select().from(products).orderBy(desc(products.createdAt));
+  }
+
+  async getProduct(id: string): Promise<Product | undefined> {
+    const [product] = await db.select().from(products).where(eq(products.id, id));
+    return product || undefined;
+  }
+
+  async createProduct(product: InsertProduct): Promise<Product> {
+    const [created] = await db.insert(products).values(product).returning();
+    return created;
+  }
+
+  async updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined> {
+    const [updated] = await db.update(products)
+      .set({ ...product, updatedAt: new Date() })
+      .where(eq(products.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteProduct(id: string): Promise<boolean> {
+    await db.delete(products).where(eq(products.id, id));
     return true;
   }
 }

@@ -2769,3 +2769,62 @@ export const DEFAULT_TRADE_SUPPLIERS = [
   { name: "Selco", website: "https://www.selcobw.com" },
   { name: "Wickes", website: "https://www.wickes.co.uk" },
 ] as const;
+
+// =====================================================
+// SUPPLIER PRODUCT LOOKUP - Saved products from suppliers
+// =====================================================
+
+export const products = pgTable("products", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Product info
+  productName: text("product_name").notNull(),
+  brand: text("brand"),
+  storeName: text("store_name").notNull(),
+  
+  // Pricing
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").default("GBP"),
+  
+  // Size info
+  sizeValue: integer("size_value"),
+  sizeUnit: text("size_unit"),
+  sizeLabel: text("size_label"), // e.g. "290ml"
+  
+  // Source info
+  productUrl: text("product_url"),
+  externalSku: text("external_sku"),
+  priceSource: text("price_source"), // e.g. "diy.com"
+  
+  // Stock status
+  inStock: boolean("in_stock"),
+  
+  // Timestamps
+  lastCheckedAt: timestamp("last_checked_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertProduct = z.infer<typeof insertProductSchema>;
+export type Product = typeof products.$inferSelect;
+
+// Product price history for tracking price changes
+export const productPriceHistory = pgTable("product_price_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  storeName: text("store_name").notNull(),
+  checkedAt: timestamp("checked_at").defaultNow(),
+});
+
+export const productPriceHistoryRelations = relations(productPriceHistory, ({ one }) => ({
+  product: one(products, {
+    fields: [productPriceHistory.productId],
+    references: [products.id],
+  }),
+}));
+
+export const insertProductPriceHistorySchema = createInsertSchema(productPriceHistory).omit({ id: true, checkedAt: true });
+export type InsertProductPriceHistory = z.infer<typeof insertProductPriceHistorySchema>;
+export type ProductPriceHistory = typeof productPriceHistory.$inferSelect;

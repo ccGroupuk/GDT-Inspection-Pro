@@ -9541,4 +9541,117 @@ ${cleanedHtml}`;
       res.status(500).json({ message: "Failed to save product to catalog" });
     }
   });
+
+  // =====================================================
+  // SUPPLIER PRODUCT LOOKUP (Live search with Playwright)
+  // =====================================================
+
+  // Search suppliers for products
+  app.get("/api/suppliers/search", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const query = req.query.query as string;
+      const limit = parseInt(req.query.limit as string) || 3;
+
+      if (!query || query.trim().length < 2) {
+        return res.status(400).json({ message: "Search query must be at least 2 characters" });
+      }
+
+      console.log(`[supplier-search] Searching for "${query}" (limit: ${limit})`);
+
+      const { searchSuppliers } = await import('./suppliers');
+      const results = await searchSuppliers(query.trim(), limit);
+
+      res.json(results);
+    } catch (error) {
+      console.error("Supplier search error:", error);
+      res.status(500).json({ message: "Failed to search suppliers. Please try again." });
+    }
+  });
+
+  // Import product from supplier search result
+  app.post("/api/products/import", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const {
+        productName,
+        brand,
+        storeName,
+        price,
+        currency,
+        sizeValue,
+        sizeUnit,
+        sizeLabel,
+        productUrl,
+        sku,
+        inStock,
+        lastCheckedAt,
+      } = req.body;
+
+      if (!productName || !storeName || price === undefined) {
+        return res.status(400).json({ message: "Missing required fields: productName, storeName, price" });
+      }
+
+      const product = await storage.createProduct({
+        productName,
+        brand: brand || null,
+        storeName,
+        price: price.toString(),
+        currency: currency || 'GBP',
+        sizeValue: sizeValue || null,
+        sizeUnit: sizeUnit || null,
+        sizeLabel: sizeLabel || null,
+        productUrl: productUrl || null,
+        externalSku: sku || null,
+        priceSource: new URL(productUrl || `https://${storeName.toLowerCase()}.com`).hostname,
+        inStock: inStock ?? null,
+        lastCheckedAt: lastCheckedAt ? new Date(lastCheckedAt) : new Date(),
+      });
+
+      res.status(201).json(product);
+    } catch (error) {
+      console.error("Product import error:", error);
+      res.status(500).json({ message: "Failed to import product" });
+    }
+  });
+
+  // Get all saved products
+  app.get("/api/products", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const products = await storage.getProducts();
+      res.json(products);
+    } catch (error) {
+      console.error("Get products error:", error);
+      res.status(500).json({ message: "Failed to get products" });
+    }
+  });
+
+  // Delete a product
+  app.delete("/api/products/:id", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.deleteProduct(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete product error:", error);
+      res.status(500).json({ message: "Failed to delete product" });
+    }
+  });
 }
