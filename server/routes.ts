@@ -161,6 +161,11 @@ export async function registerRoutes(
       return next();
     }
 
+    // Debug logging for auth issues
+    const hasCookie = !!req.cookies?.employeeSession;
+    const isReplitAuth = req.isAuthenticated?.() || false;
+    console.log(`[auth] ${req.method} ${req.path} - cookie: ${hasCookie}, replitAuth: ${isReplitAuth}`);
+
     // Check Replit Auth first - verify user is authorized for this app
     const user = req.user as any;
     if (req.isAuthenticated() && user?.expires_at && user?.claims) {
@@ -6322,7 +6327,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       res.cookie("employeeSession", sessionToken, {
         httpOnly: true,
         secure: true,
-        sameSite: "lax",
+        sameSite: "none",  // Allow cross-origin (preview panel uses different subdomain)
         expires: expiresAt,
         path: "/",
       });
@@ -6354,7 +6359,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       res.clearCookie("employeeSession", {
         httpOnly: true,
         secure: true,
-        sameSite: "lax",
+        sameSite: "none",  // Match cookie settings
         path: "/",
       });
       res.json({ message: "Logged out" });
