@@ -9321,68 +9321,6 @@ export function registerChecklistRoutes(app: Express) {
     }
   });
 
-  // Receive product data from bookmarklet (supports CORS for cross-origin requests)
-  app.options("/api/captured-products/bookmarklet", (req, res) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    res.status(200).send();
-  });
-
-  app.post("/api/captured-products/bookmarklet", async (req, res) => {
-    try {
-      // Allow CORS for bookmarklet
-      res.header("Access-Control-Allow-Origin", "*");
-      
-      const employee = (req as any).employee;
-      if (!employee) {
-        return res.status(401).json({ message: "Unauthorized - Please log in to the CRM first" });
-      }
-
-      const { productTitle, sku, price, unit, productUrl, supplierName, imageUrl } = req.body;
-      
-      if (!productTitle) {
-        return res.status(400).json({ message: "Product title is required" });
-      }
-
-      // Try to match supplier by name
-      let supplierId: string | undefined;
-      if (supplierName) {
-        const allSuppliers = await storage.getSuppliers();
-        const matchedSupplier = allSuppliers.find(
-          s => s.name.toLowerCase() === supplierName.toLowerCase()
-        );
-        if (matchedSupplier) {
-          supplierId = matchedSupplier.id;
-        }
-      }
-
-      const product = await storage.createCapturedProduct({
-        productTitle,
-        sku: sku || undefined,
-        price: price || undefined,
-        unit: unit || "each",
-        productUrl: productUrl || undefined,
-        supplierName: supplierName || undefined,
-        supplierId,
-        imageUrl: imageUrl || undefined,
-        capturedBy: employee.id,
-        status: "pending",
-        markupPercent: "20",
-        quantity: "1",
-      });
-
-      res.status(201).json({ 
-        success: true, 
-        message: "Product captured successfully",
-        product 
-      });
-    } catch (error) {
-      console.error("Bookmarklet capture error:", error);
-      res.status(500).json({ message: "Failed to capture product" });
-    }
-  });
-
   // Save captured product to permanent catalog
   app.post("/api/captured-products/:id/save-to-catalog", async (req, res) => {
     try {

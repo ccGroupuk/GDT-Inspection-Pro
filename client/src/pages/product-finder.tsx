@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -102,9 +103,10 @@ const captureProductSchema = z.object({
 
 type CaptureProductFormData = z.infer<typeof captureProductSchema>;
 
-// Generate the bookmarklet code
+// Generate the bookmarklet code - opens CRM with product data in URL
 const generateBookmarkletCode = (baseUrl: string) => {
   // This script runs on supplier websites to extract product data
+  // Then opens the CRM Product Finder with data pre-filled via URL params
   const script = `
 (function() {
   var CRM_URL = '${baseUrl}';
@@ -168,60 +170,26 @@ const generateBookmarkletCode = (baseUrl: string) => {
     '[itemprop="sku"]', '.item-code', '.part-number'
   ];
   
-  var imageSelectors = [
-    'img[data-testid*="product"]', '.product-image img', '.pdp-image img',
-    '[itemprop="image"]', '.gallery-image img', '.product-gallery img'
-  ];
-  
   // Extract product data
   var product = {
     productTitle: getText(titleSelectors) || document.title.split('|')[0].trim(),
     price: getPrice(priceSelectors),
     sku: getText(skuSelectors).replace(/[^a-zA-Z0-9-]/g, ''),
     productUrl: window.location.href,
-    supplierName: supplierName,
-    unit: 'each',
-    imageUrl: ''
+    supplierName: supplierName
   };
   
-  // Try to get image
-  for (var i = 0; i < imageSelectors.length; i++) {
-    var img = document.querySelector(imageSelectors[i]);
-    if (img && img.src) {
-      product.imageUrl = img.src;
-      break;
-    }
-  }
+  // Build URL with product data as query params
+  var params = new URLSearchParams();
+  params.set('capture', '1');
+  params.set('title', product.productTitle.substring(0, 200));
+  if (product.price) params.set('price', product.price);
+  if (product.sku) params.set('sku', product.sku);
+  params.set('url', product.productUrl);
+  params.set('supplier', product.supplierName);
   
-  // Show confirmation popup
-  var confirmed = confirm(
-    'Capture this product to CCC CRM?\\n\\n' +
-    'Product: ' + product.productTitle.substring(0, 50) + '...\\n' +
-    'Price: £' + (product.price || 'Not found') + '\\n' +
-    'SKU: ' + (product.sku || 'Not found') + '\\n' +
-    'Supplier: ' + product.supplierName
-  );
-  
-  if (!confirmed) return;
-  
-  // Send to CRM
-  fetch(CRM_URL + '/api/captured-products/bookmarklet', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(product)
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data.success) {
-      alert('Product captured! Check the Product Finder in your CRM.');
-    } else {
-      alert('Error: ' + (data.message || 'Failed to capture product'));
-    }
-  })
-  .catch(function(e) {
-    alert('Error: Could not connect to CRM. Make sure you are logged in.');
-  });
+  // Open CRM Product Finder with pre-filled data
+  window.open(CRM_URL + '/product-finder?' + params.toString(), '_blank');
 })();
   `.trim().replace(/\s+/g, ' ');
   
@@ -240,8 +208,10 @@ export default function ProductFinder() {
   const [bookmarkletCopied, setBookmarkletCopied] = useState(false);
   const [showBookmarkletInstructions, setShowBookmarkletInstructions] = useState(false);
   const [productToDelete, setProductToDelete] = useState<CapturedProduct | null>(null);
+  const [bookmarkletDataProcessed, setBookmarkletDataProcessed] = useState(false);
   
   const { toast } = useToast();
+  const searchString = useSearch();
 
   const { data: capturedProducts = [], isLoading } = useQuery<CapturedProduct[]>({
     queryKey: ["/api/captured-products"],
@@ -273,6 +243,52 @@ export default function ProductFinder() {
       quantity: "1",
     },
   });
+
+  // Handle bookmarklet data from URL parameters
+  useEffect(() => {
+    if (bookmarkletDataProcessed) return;
+    
+    const params = new URLSearchParams(searchString);
+    const isCapture = params.get("capture") === "1";
+    
+    if (isCapture) {
+      const title = params.get("title") || "";
+      const price = params.get("price") || "";
+      const sku = params.get("sku") || "";
+      const productUrl = params.get("url") || "";
+      const supplierName = params.get("supplier") || "";
+      
+      // Pre-fill the form with bookmarklet data
+      form.reset({
+        supplierName,
+        productTitle: title,
+        sku,
+        price,
+        unit: "each",
+        productUrl,
+        imageUrl: "",
+        markupPercent: "20",
+        quantity: "1",
+      });
+      
+      // Try to find matching supplier in database
+      if (supplierName && suppliers.length > 0) {
+        const dbSupplier = suppliers.find(s => 
+          s.name.toLowerCase() === supplierName.toLowerCase()
+        );
+        if (dbSupplier) {
+          form.setValue("supplierId", dbSupplier.id);
+        }
+      }
+      
+      setSelectedSupplier(supplierName);
+      setCaptureDialogOpen(true);
+      setBookmarkletDataProcessed(true);
+      
+      // Clean up URL without reloading
+      window.history.replaceState({}, "", "/product-finder");
+    }
+  }, [searchString, suppliers, bookmarkletDataProcessed, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: CaptureProductFormData) => {
