@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -15,6 +16,12 @@ declare module "http" {
     rawBody: unknown;
   }
 }
+
+// CORS configuration - allow cross-origin requests with credentials from Replit preview subdomains
+app.use(cors({
+  origin: true,  // Reflect the request origin - allows any origin
+  credentials: true,  // Allow cookies to be sent
+}));
 
 app.use(cookieParser());
 
