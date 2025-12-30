@@ -47,7 +47,7 @@ import {
   Boxes,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse, ConnectionLink, ChangeOrder, ChangeOrderItem } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse, ConnectionLink, ChangeOrder, ChangeOrderItem, CatalogItem } from "@shared/schema";
 import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES, NOTE_VISIBILITY, SURVEY_STATUSES, EMERGENCY_INCIDENT_TYPES, EMERGENCY_PRIORITIES } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -123,6 +123,11 @@ export default function JobDetail() {
       return response.json();
     },
     enabled: Boolean(id),
+  });
+
+  // Fetch catalog items for adding to change orders
+  const { data: catalogItems = [] } = useQuery<CatalogItem[]>({
+    queryKey: ["/api/catalog-items"],
   });
 
   // Fetch active schedule proposal
@@ -284,6 +289,8 @@ export default function JobDetail() {
   const [newItemDescription, setNewItemDescription] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("1");
   const [newItemUnitPrice, setNewItemUnitPrice] = useState("");
+  const [showCatalogInChangeOrder, setShowCatalogInChangeOrder] = useState(false);
+  const [catalogSearchInChangeOrder, setCatalogSearchInChangeOrder] = useState("");
 
   // Fetch connection links for this job
   const { data: connectionLinks } = useQuery<ConnectionLink[]>({
@@ -350,6 +357,17 @@ export default function JobDetail() {
     
     return { subtotal, discountAmount, taxAmount, grandTotal };
   }, [quoteItems, data?.job]);
+
+  // Filter catalog items for change order picker
+  const filteredCatalogForChangeOrder = useMemo(() => {
+    if (!catalogSearchInChangeOrder.trim()) return catalogItems.slice(0, 10);
+    const search = catalogSearchInChangeOrder.toLowerCase();
+    return catalogItems.filter(item => 
+      item.name.toLowerCase().includes(search) ||
+      (item.description && item.description.toLowerCase().includes(search)) ||
+      (item.sku && item.sku.toLowerCase().includes(search))
+    ).slice(0, 20);
+  }, [catalogItems, catalogSearchInChangeOrder]);
 
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
@@ -2701,6 +2719,8 @@ export default function JobDetail() {
           setNewItemDescription("");
           setNewItemQuantity("1");
           setNewItemUnitPrice("");
+          setShowCatalogInChangeOrder(false);
+          setCatalogSearchInChangeOrder("");
         }
       }}>
         <DialogContent className="max-w-2xl">
@@ -2710,61 +2730,137 @@ export default function JobDetail() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Add Item Form */}
+            {/* Add Item Options */}
             {selectedChangeOrder?.status === "draft" && (
-              <div className="p-4 border rounded-lg space-y-3">
-                <p className="text-sm font-medium">Add Item</p>
-                <div className="grid grid-cols-12 gap-2">
-                  <div className="col-span-6">
-                    <Input
-                      placeholder="Description"
-                      value={newItemDescription}
-                      onChange={(e) => setNewItemDescription(e.target.value)}
-                      data-testid="input-co-item-description"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input
-                      type="number"
-                      placeholder="Qty"
-                      value={newItemQuantity}
-                      onChange={(e) => setNewItemQuantity(e.target.value)}
-                      data-testid="input-co-item-qty"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="Unit £"
-                      value={newItemUnitPrice}
-                      onChange={(e) => setNewItemUnitPrice(e.target.value)}
-                      data-testid="input-co-item-price"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Button
-                      className="w-full"
-                      size="sm"
-                      onClick={() => {
-                        if (newItemDescription && newItemUnitPrice) {
-                          const qty = parseFloat(newItemQuantity) || 1;
-                          const price = parseFloat(newItemUnitPrice) || 0;
-                          addChangeOrderItemMutation.mutate({
-                            description: newItemDescription,
-                            quantity: qty.toString(),
-                            unitPrice: price.toFixed(2),
-                            lineTotal: (qty * price).toFixed(2),
-                          });
-                        }
-                      }}
-                      disabled={addChangeOrderItemMutation.isPending || !newItemDescription || !newItemUnitPrice}
-                      data-testid="button-add-co-item"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </Button>
-                  </div>
+              <div className="space-y-3">
+                {/* Toggle between manual and catalog */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={!showCatalogInChangeOrder ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowCatalogInChangeOrder(false)}
+                    data-testid="button-manual-entry"
+                  >
+                    Manual Entry
+                  </Button>
+                  <Button
+                    variant={showCatalogInChangeOrder ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowCatalogInChangeOrder(true)}
+                    data-testid="button-from-catalog"
+                  >
+                    <Boxes className="w-3 h-3 mr-1" />
+                    From Catalog
+                  </Button>
                 </div>
+
+                {/* Manual Entry Form */}
+                {!showCatalogInChangeOrder && (
+                  <div className="p-4 border rounded-lg space-y-3">
+                    <p className="text-sm font-medium">Add Manual Item</p>
+                    <div className="grid grid-cols-12 gap-2">
+                      <div className="col-span-6">
+                        <Input
+                          placeholder="Description"
+                          value={newItemDescription}
+                          onChange={(e) => setNewItemDescription(e.target.value)}
+                          data-testid="input-co-item-description"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Input
+                          type="number"
+                          placeholder="Qty"
+                          value={newItemQuantity}
+                          onChange={(e) => setNewItemQuantity(e.target.value)}
+                          data-testid="input-co-item-qty"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="Unit £"
+                          value={newItemUnitPrice}
+                          onChange={(e) => setNewItemUnitPrice(e.target.value)}
+                          data-testid="input-co-item-price"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Button
+                          className="w-full"
+                          size="sm"
+                          onClick={() => {
+                            if (newItemDescription && newItemUnitPrice) {
+                              const qty = parseFloat(newItemQuantity) || 1;
+                              const price = parseFloat(newItemUnitPrice) || 0;
+                              addChangeOrderItemMutation.mutate({
+                                description: newItemDescription,
+                                quantity: qty.toString(),
+                                unitPrice: price.toFixed(2),
+                                lineTotal: (qty * price).toFixed(2),
+                              });
+                            }
+                          }}
+                          disabled={addChangeOrderItemMutation.isPending || !newItemDescription || !newItemUnitPrice}
+                          data-testid="button-add-co-item"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Catalog Picker */}
+                {showCatalogInChangeOrder && (
+                  <div className="p-4 border rounded-lg space-y-3">
+                    <p className="text-sm font-medium">Select from Catalog</p>
+                    <Input
+                      placeholder="Search products..."
+                      value={catalogSearchInChangeOrder}
+                      onChange={(e) => setCatalogSearchInChangeOrder(e.target.value)}
+                      data-testid="input-catalog-search-co"
+                    />
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {filteredCatalogForChangeOrder.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          {catalogItems.length === 0 ? "No products in catalog" : "No matching products"}
+                        </p>
+                      ) : (
+                        filteredCatalogForChangeOrder.map(item => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between gap-2 p-2 rounded-md border hover-elevate"
+                            data-testid={`catalog-co-item-${item.id}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{item.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                £{parseFloat(item.unitPrice).toFixed(2)}/{item.unitOfMeasure || "each"}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                addChangeOrderItemMutation.mutate({
+                                  description: item.name,
+                                  quantity: "1",
+                                  unitPrice: item.unitPrice,
+                                  lineTotal: item.unitPrice,
+                                });
+                              }}
+                              disabled={addChangeOrderItemMutation.isPending}
+                              data-testid={`button-add-catalog-co-${item.id}`}
+                            >
+                              <Plus className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
