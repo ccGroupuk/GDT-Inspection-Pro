@@ -2699,3 +2699,73 @@ export const ACTIVITY_TYPES = [
   { value: "message_sent", label: "Message Sent" },
   { value: "note_added", label: "Note Added" },
 ] as const;
+
+// =====================================================
+// SUPPLIER PRODUCT CAPTURE (for Product Finder feature)
+// =====================================================
+
+// Captured products - products captured from supplier websites before adding to catalog/quote
+export const capturedProducts = pgTable("captured_products", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Captured from supplier
+  supplierId: varchar("supplier_id").references(() => suppliers.id),
+  supplierName: text("supplier_name"),
+  productTitle: text("product_title").notNull(),
+  sku: text("sku"),
+  price: decimal("price", { precision: 10, scale: 2 }),
+  unit: text("unit").default("each"),
+  productUrl: text("product_url"),
+  imageUrl: text("image_url"),
+  
+  // Capture metadata
+  capturedAt: timestamp("captured_at").defaultNow(),
+  capturedBy: varchar("captured_by").references(() => employees.id),
+  
+  // Status: pending, added_to_quote, saved_to_catalog, discarded
+  status: text("status").default("pending"),
+  
+  // If added to a job's quote items
+  jobId: varchar("job_id").references(() => jobs.id),
+  
+  // If saved to catalog
+  catalogItemId: varchar("catalog_item_id").references(() => catalogItems.id),
+  
+  // Markup applied
+  markupPercent: decimal("markup_percent", { precision: 5, scale: 2 }).default("20"),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).default("1"),
+});
+
+export const capturedProductsRelations = relations(capturedProducts, ({ one }) => ({
+  supplier: one(suppliers, {
+    fields: [capturedProducts.supplierId],
+    references: [suppliers.id],
+  }),
+  capturer: one(employees, {
+    fields: [capturedProducts.capturedBy],
+    references: [employees.id],
+  }),
+  job: one(jobs, {
+    fields: [capturedProducts.jobId],
+    references: [jobs.id],
+  }),
+  catalogItem: one(catalogItems, {
+    fields: [capturedProducts.catalogItemId],
+    references: [catalogItems.id],
+  }),
+}));
+
+export const insertCapturedProductSchema = createInsertSchema(capturedProducts).omit({ id: true, capturedAt: true });
+export type InsertCapturedProduct = z.infer<typeof insertCapturedProductSchema>;
+export type CapturedProduct = typeof capturedProducts.$inferSelect;
+
+// Default trade suppliers list (for Product Finder)
+export const DEFAULT_TRADE_SUPPLIERS = [
+  { name: "B&Q", website: "https://www.diy.com" },
+  { name: "Howdens", website: "https://www.howdens.com" },
+  { name: "Screwfix", website: "https://www.screwfix.com" },
+  { name: "Toolstation", website: "https://www.toolstation.com" },
+  { name: "Travis Perkins", website: "https://www.travisperkins.co.uk" },
+  { name: "Selco", website: "https://www.selcobw.com" },
+  { name: "Wickes", website: "https://www.wickes.co.uk" },
+] as const;
