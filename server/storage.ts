@@ -73,6 +73,8 @@ import {
   capturedProducts, type CapturedProduct, type InsertCapturedProduct,
   products, type Product, type InsertProduct,
   productPriceHistory, type ProductPriceHistory, type InsertProductPriceHistory,
+  changeOrders, type ChangeOrder, type InsertChangeOrder,
+  changeOrderItems, type ChangeOrderItem, type InsertChangeOrderItem,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -148,6 +150,21 @@ export interface IStorage {
   getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]>;
   createInvoiceLineItem(item: InsertInvoiceLineItem): Promise<InvoiceLineItem>;
   deleteInvoiceLineItems(invoiceId: string): Promise<boolean>;
+
+  // Change Orders
+  getChangeOrdersByJob(jobId: string): Promise<ChangeOrder[]>;
+  getChangeOrder(id: string): Promise<ChangeOrder | undefined>;
+  createChangeOrder(changeOrder: InsertChangeOrder): Promise<ChangeOrder>;
+  updateChangeOrder(id: string, changeOrder: Partial<InsertChangeOrder>): Promise<ChangeOrder | undefined>;
+  deleteChangeOrder(id: string): Promise<boolean>;
+  getNextChangeOrderNumber(jobNumber: string): Promise<string>;
+
+  // Change Order Items
+  getChangeOrderItems(changeOrderId: string): Promise<ChangeOrderItem[]>;
+  createChangeOrderItem(item: InsertChangeOrderItem): Promise<ChangeOrderItem>;
+  updateChangeOrderItem(id: string, item: Partial<InsertChangeOrderItem>): Promise<ChangeOrderItem | undefined>;
+  deleteChangeOrderItem(id: string): Promise<boolean>;
+  deleteChangeOrderItems(changeOrderId: string): Promise<boolean>;
 
   // Partner Portal
   getPartnerPortalAccess(partnerId: string): Promise<PartnerPortalAccess | undefined>;
@@ -869,6 +886,63 @@ export class DatabaseStorage implements IStorage {
 
   async deleteInvoiceLineItems(invoiceId: string): Promise<boolean> {
     await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
+    return true;
+  }
+
+  // Change Order Methods
+  async getChangeOrdersByJob(jobId: string): Promise<ChangeOrder[]> {
+    return db.select().from(changeOrders).where(eq(changeOrders.jobId, jobId)).orderBy(desc(changeOrders.createdAt));
+  }
+
+  async getChangeOrder(id: string): Promise<ChangeOrder | undefined> {
+    const [changeOrder] = await db.select().from(changeOrders).where(eq(changeOrders.id, id));
+    return changeOrder || undefined;
+  }
+
+  async createChangeOrder(changeOrder: InsertChangeOrder): Promise<ChangeOrder> {
+    const [created] = await db.insert(changeOrders).values(changeOrder).returning();
+    return created;
+  }
+
+  async updateChangeOrder(id: string, changeOrder: Partial<InsertChangeOrder>): Promise<ChangeOrder | undefined> {
+    const [updated] = await db.update(changeOrders).set({ ...changeOrder, updatedAt: new Date() }).where(eq(changeOrders.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteChangeOrder(id: string): Promise<boolean> {
+    await db.delete(changeOrders).where(eq(changeOrders.id, id));
+    return true;
+  }
+
+  async getNextChangeOrderNumber(jobNumber: string): Promise<string> {
+    const existing = await db.select().from(changeOrders)
+      .where(eq(changeOrders.jobId, jobNumber));
+    const count = existing.length + 1;
+    return `${jobNumber}-CO-${count.toString().padStart(2, "0")}`;
+  }
+
+  // Change Order Items Methods
+  async getChangeOrderItems(changeOrderId: string): Promise<ChangeOrderItem[]> {
+    return db.select().from(changeOrderItems).where(eq(changeOrderItems.changeOrderId, changeOrderId)).orderBy(asc(changeOrderItems.sortOrder));
+  }
+
+  async createChangeOrderItem(item: InsertChangeOrderItem): Promise<ChangeOrderItem> {
+    const [created] = await db.insert(changeOrderItems).values(item).returning();
+    return created;
+  }
+
+  async updateChangeOrderItem(id: string, item: Partial<InsertChangeOrderItem>): Promise<ChangeOrderItem | undefined> {
+    const [updated] = await db.update(changeOrderItems).set(item).where(eq(changeOrderItems.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteChangeOrderItem(id: string): Promise<boolean> {
+    await db.delete(changeOrderItems).where(eq(changeOrderItems.id, id));
+    return true;
+  }
+
+  async deleteChangeOrderItems(changeOrderId: string): Promise<boolean> {
+    await db.delete(changeOrderItems).where(eq(changeOrderItems.changeOrderId, changeOrderId));
     return true;
   }
 

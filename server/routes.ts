@@ -1256,6 +1256,209 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== CHANGE ORDERS ====================
+
+  // Get change orders for a job
+  app.get("/api/jobs/:jobId/change-orders", async (req, res) => {
+    try {
+      const changeOrders = await storage.getChangeOrdersByJob(req.params.jobId);
+      res.json(changeOrders);
+    } catch (error) {
+      console.error("Get change orders error:", error);
+      res.status(500).json({ message: "Failed to fetch change orders" });
+    }
+  });
+
+  // Get a single change order with items
+  app.get("/api/change-orders/:id", async (req, res) => {
+    try {
+      const changeOrder = await storage.getChangeOrder(req.params.id);
+      if (!changeOrder) {
+        return res.status(404).json({ message: "Change order not found" });
+      }
+      const items = await storage.getChangeOrderItems(req.params.id);
+      res.json({ ...changeOrder, items });
+    } catch (error) {
+      console.error("Get change order error:", error);
+      res.status(500).json({ message: "Failed to fetch change order" });
+    }
+  });
+
+  // Create a new change order
+  app.post("/api/jobs/:jobId/change-orders", async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      // Generate reference number
+      const existing = await storage.getChangeOrdersByJob(req.params.jobId);
+      const count = existing.length + 1;
+      const referenceNumber = `${job.jobNumber}-CO-${count.toString().padStart(2, "0")}`;
+      
+      const changeOrder = await storage.createChangeOrder({
+        jobId: req.params.jobId,
+        referenceNumber,
+        status: "draft",
+        subtotal: "0",
+        grandTotal: "0",
+        taxAmount: "0",
+        ...req.body,
+      });
+      res.status(201).json(changeOrder);
+    } catch (error) {
+      console.error("Create change order error:", error);
+      res.status(500).json({ message: "Failed to create change order" });
+    }
+  });
+
+  // Update a change order
+  app.patch("/api/change-orders/:id", async (req, res) => {
+    try {
+      const changeOrder = await storage.updateChangeOrder(req.params.id, req.body);
+      if (!changeOrder) {
+        return res.status(404).json({ message: "Change order not found" });
+      }
+      res.json(changeOrder);
+    } catch (error) {
+      console.error("Update change order error:", error);
+      res.status(500).json({ message: "Failed to update change order" });
+    }
+  });
+
+  // Delete a change order
+  app.delete("/api/change-orders/:id", async (req, res) => {
+    try {
+      await storage.deleteChangeOrder(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete change order error:", error);
+      res.status(500).json({ message: "Failed to delete change order" });
+    }
+  });
+
+  // Send change order to client portal
+  app.post("/api/change-orders/:id/send", async (req, res) => {
+    try {
+      const changeOrder = await storage.updateChangeOrder(req.params.id, {
+        status: "sent",
+        showInPortal: true,
+        sentAt: new Date(),
+      });
+      if (!changeOrder) {
+        return res.status(404).json({ message: "Change order not found" });
+      }
+      res.json(changeOrder);
+    } catch (error) {
+      console.error("Send change order error:", error);
+      res.status(500).json({ message: "Failed to send change order" });
+    }
+  });
+
+  // ==================== CHANGE ORDER ITEMS ====================
+
+  // Get items for a change order
+  app.get("/api/change-orders/:changeOrderId/items", async (req, res) => {
+    try {
+      const items = await storage.getChangeOrderItems(req.params.changeOrderId);
+      res.json(items);
+    } catch (error) {
+      console.error("Get change order items error:", error);
+      res.status(500).json({ message: "Failed to fetch change order items" });
+    }
+  });
+
+  // Add item to change order
+  app.post("/api/change-orders/:changeOrderId/items", async (req, res) => {
+    try {
+      const item = await storage.createChangeOrderItem({
+        changeOrderId: req.params.changeOrderId,
+        ...req.body,
+      });
+      
+      // Recalculate totals
+      const items = await storage.getChangeOrderItems(req.params.changeOrderId);
+      const changeOrder = await storage.getChangeOrder(req.params.changeOrderId);
+      if (changeOrder) {
+        const subtotal = items.reduce((sum, i) => sum + parseFloat(i.lineTotal), 0);
+        const taxAmount = changeOrder.taxEnabled ? subtotal * (parseFloat(changeOrder.taxRate || "20") / 100) : 0;
+        const grandTotal = subtotal + taxAmount;
+        await storage.updateChangeOrder(req.params.changeOrderId, {
+          subtotal: subtotal.toFixed(2),
+          taxAmount: taxAmount.toFixed(2),
+          grandTotal: grandTotal.toFixed(2),
+        });
+      }
+      
+      res.status(201).json(item);
+    } catch (error) {
+      console.error("Create change order item error:", error);
+      res.status(500).json({ message: "Failed to create change order item" });
+    }
+  });
+
+  // Update change order item
+  app.patch("/api/change-order-items/:id", async (req, res) => {
+    try {
+      const item = await storage.updateChangeOrderItem(req.params.id, req.body);
+      if (!item) {
+        return res.status(404).json({ message: "Change order item not found" });
+      }
+      
+      // Recalculate totals
+      const items = await storage.getChangeOrderItems(item.changeOrderId);
+      const changeOrder = await storage.getChangeOrder(item.changeOrderId);
+      if (changeOrder) {
+        const subtotal = items.reduce((sum, i) => sum + parseFloat(i.lineTotal), 0);
+        const taxAmount = changeOrder.taxEnabled ? subtotal * (parseFloat(changeOrder.taxRate || "20") / 100) : 0;
+        const grandTotal = subtotal + taxAmount;
+        await storage.updateChangeOrder(item.changeOrderId, {
+          subtotal: subtotal.toFixed(2),
+          taxAmount: taxAmount.toFixed(2),
+          grandTotal: grandTotal.toFixed(2),
+        });
+      }
+      
+      res.json(item);
+    } catch (error) {
+      console.error("Update change order item error:", error);
+      res.status(500).json({ message: "Failed to update change order item" });
+    }
+  });
+
+  // Delete change order item
+  app.delete("/api/change-order-items/:id", async (req, res) => {
+    try {
+      // Get item first to get changeOrderId for recalculation
+      const items = await storage.getChangeOrderItems(req.params.id);
+      const targetItem = items.find(i => i.id === req.params.id);
+      
+      await storage.deleteChangeOrderItem(req.params.id);
+      
+      // Recalculate if we found the item
+      if (targetItem) {
+        const remainingItems = await storage.getChangeOrderItems(targetItem.changeOrderId);
+        const changeOrder = await storage.getChangeOrder(targetItem.changeOrderId);
+        if (changeOrder) {
+          const subtotal = remainingItems.reduce((sum, i) => sum + parseFloat(i.lineTotal), 0);
+          const taxAmount = changeOrder.taxEnabled ? subtotal * (parseFloat(changeOrder.taxRate || "20") / 100) : 0;
+          const grandTotal = subtotal + taxAmount;
+          await storage.updateChangeOrder(targetItem.changeOrderId, {
+            subtotal: subtotal.toFixed(2),
+            taxAmount: taxAmount.toFixed(2),
+            grandTotal: grandTotal.toFixed(2),
+          });
+        }
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete change order item error:", error);
+      res.status(500).json({ message: "Failed to delete change order item" });
+    }
+  });
+
   // ==================== CLIENT PORTAL ADMIN ENDPOINTS ====================
 
   // Client Invites
