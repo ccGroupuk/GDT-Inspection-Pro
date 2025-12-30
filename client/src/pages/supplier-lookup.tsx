@@ -21,6 +21,7 @@ interface ProductResult {
   sku: string | null;
   inStock: boolean | null;
   lastCheckedAt: string;
+  imageUrl?: string | null;
 }
 
 interface SavedProduct {
@@ -208,6 +209,20 @@ export default function SupplierLookup() {
             <Card key={index} data-testid={`card-product-result-${index}`}>
               <CardContent className="p-4">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                  <div className="w-20 h-20 flex-shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden">
+                    {product.imageUrl ? (
+                      <img 
+                        src={product.imageUrl} 
+                        alt={product.productName}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <Package className={`h-8 w-8 text-muted-foreground ${product.imageUrl ? 'hidden' : ''}`} />
+                  </div>
                   <div className="flex-1 space-y-2">
                     <div className="flex items-start gap-2 flex-wrap">
                       <h3 className="font-medium" data-testid={`text-product-name-${index}`}>

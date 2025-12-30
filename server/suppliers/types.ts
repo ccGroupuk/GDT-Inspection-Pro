@@ -14,6 +14,7 @@ export interface ProductResult {
   rating?: number | null;
   reviewCount?: number | null;
   pricePerUnit?: number | null;
+  imageUrl?: string | null;
 }
 
 export interface SupplierAdapter {

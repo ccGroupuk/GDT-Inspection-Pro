@@ -30,7 +30,8 @@ Return ONLY valid JSON array with this exact structure (no markdown, no explanat
     "storeName": "B&Q",
     "productUrl": "https://www.diy.com/departments/product-name/12345",
     "sku": "12345678",
-    "inStock": true
+    "inStock": true,
+    "imageUrl": "https://media.diy.com/is/image/Kingfisher/product-image-12345"
   }
 ]
 
@@ -41,7 +42,8 @@ Rules:
 - Use real brand names common in UK (Dulux, Ronseal, UniBond, DeWalt, Stanley, etc.)
 - Make product names specific and realistic
 - Include size/quantity where applicable
-- Sort by price (lowest first)`
+- Sort by price (lowest first)
+- Include realistic product image URLs from the store's CDN (use patterns like media.diy.com, media.screwfix.com, media.toolstation.com, media.wickes.co.uk)`
         },
         {
           role: 'user',
@@ -81,6 +83,7 @@ Rules:
       sku: p.sku || null,
       inStock: p.inStock ?? null,
       lastCheckedAt: new Date(),
+      imageUrl: p.imageUrl || null,
     }));
 
     console.log(`[ai-search] Found ${results.length} products for "${query}"`);
