@@ -257,6 +257,68 @@ export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).
 export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
 export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
 
+// Change Orders (for additional costs after quote acceptance)
+export const changeOrders = pgTable("change_orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  referenceNumber: text("reference_number").notNull().unique(), // e.g., CCC-25-0005-CO-01
+  status: text("status").notNull().default("draft"), // draft, sent, accepted, declined
+  reason: text("reason"), // Brief description of why extra costs needed
+  
+  // Totals
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
+  taxEnabled: boolean("tax_enabled").default(false),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("20"),
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).default("0"),
+  grandTotal: decimal("grand_total", { precision: 10, scale: 2 }).notNull().default("0"),
+  
+  // Client response
+  clientResponse: text("client_response"), // pending, accepted, declined
+  clientRespondedAt: timestamp("client_responded_at"),
+  
+  // Visibility
+  showInPortal: boolean("show_in_portal").default(false),
+  sentAt: timestamp("sent_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const changeOrdersRelations = relations(changeOrders, ({ one, many }) => ({
+  job: one(jobs, {
+    fields: [changeOrders.jobId],
+    references: [jobs.id],
+  }),
+  items: many(changeOrderItems),
+}));
+
+export const insertChangeOrderSchema = createInsertSchema(changeOrders).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertChangeOrder = z.infer<typeof insertChangeOrderSchema>;
+export type ChangeOrder = typeof changeOrders.$inferSelect;
+
+// Change Order Items
+export const changeOrderItems = pgTable("change_order_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  changeOrderId: varchar("change_order_id").notNull().references(() => changeOrders.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const changeOrderItemsRelations = relations(changeOrderItems, ({ one }) => ({
+  changeOrder: one(changeOrders, {
+    fields: [changeOrderItems.changeOrderId],
+    references: [changeOrders.id],
+  }),
+}));
+
+export const insertChangeOrderItemSchema = createInsertSchema(changeOrderItems).omit({ id: true, createdAt: true });
+export type InsertChangeOrderItem = z.infer<typeof insertChangeOrderItemSchema>;
+export type ChangeOrderItem = typeof changeOrderItems.$inferSelect;
+
 // Invoice statuses for reference
 export const INVOICE_STATUSES = [
   { value: "draft", label: "Draft", color: "bg-gray-500" },
