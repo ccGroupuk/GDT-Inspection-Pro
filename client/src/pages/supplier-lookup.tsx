@@ -65,6 +65,7 @@ export default function SupplierLookup() {
   const [savedProductIds, setSavedProductIds] = useState<Set<string>>(new Set());
   const [priceOverrides, setPriceOverrides] = useState<Record<number, string>>({});
   const [editingPrice, setEditingPrice] = useState<number | null>(null);
+  const [failedImages, setFailedImages] = useState<Set<number>>(new Set());
   const { toast } = useToast();
 
   const getDisplayPrice = (index: number, originalPrice: number | null): number | null => {
@@ -108,6 +109,7 @@ export default function SupplierLookup() {
       setSavedProductIds(new Set());
       setPriceOverrides({});
       setEditingPrice(null);
+      setFailedImages(new Set());
       if (results.length === 0) {
         toast({
           title: "No results found",
@@ -252,8 +254,20 @@ export default function SupplierLookup() {
             <Card key={index} data-testid={`card-product-result-${index}`}>
               <CardContent className="p-4">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                  <div className="w-16 h-16 flex-shrink-0 rounded-md bg-muted/50 flex items-center justify-center border">
-                    <Package className="h-6 w-6 text-muted-foreground" />
+                  <div className="w-16 h-16 flex-shrink-0 rounded-md bg-muted/50 flex items-center justify-center border overflow-hidden">
+                    {product.imageUrl && !failedImages.has(index) ? (
+                      <img 
+                        src={product.imageUrl} 
+                        alt={product.productName}
+                        className="w-full h-full object-contain"
+                        onError={() => {
+                          setFailedImages(prev => new Set(prev).add(index));
+                        }}
+                        data-testid={`img-product-${index}`}
+                      />
+                    ) : (
+                      <Package className="h-6 w-6 text-muted-foreground" />
+                    )}
                   </div>
                   <div className="flex-1 space-y-2">
                     <div className="flex items-start gap-2 flex-wrap">
