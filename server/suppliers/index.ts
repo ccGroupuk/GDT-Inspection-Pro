@@ -52,4 +52,4 @@ export function clearCache(): void {
   searchCache.clear();
 }
 
-export { ProductResult } from './types';
+export type { ProductResult, SupplierAdapter } from './types';
