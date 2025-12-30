@@ -1,19 +1,15 @@
-import { ProductResult, SupplierAdapter } from './types';
-import { diyAdapter } from './diy';
+import { ProductResult } from './types';
+import { searchProductsWithAI } from './ai-search';
 
 const searchCache = new Map<string, { results: ProductResult[]; timestamp: number }>();
-const CACHE_TTL = 15 * 60 * 1000;
-
-const adapters: SupplierAdapter[] = [
-  diyAdapter,
-];
+const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
 export async function searchSuppliers(
   query: string,
-  limit: number = 3,
+  limit: number = 5,
   supplierFilter?: string[]
 ): Promise<ProductResult[]> {
-  const cacheKey = `${query.toLowerCase()}_${limit}_${(supplierFilter || []).join(',')}`;
+  const cacheKey = `${query.toLowerCase()}_${limit}`;
   
   const cached = searchCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -21,31 +17,16 @@ export async function searchSuppliers(
     return cached.results;
   }
 
-  const activeAdapters = supplierFilter
-    ? adapters.filter(a => supplierFilter.includes(a.name))
-    : adapters;
+  console.log(`[suppliers] Searching for "${query}" (limit: ${limit})...`);
+  
+  // Use AI-powered search - simple, reliable, fast
+  const results = await searchProductsWithAI(query, limit);
 
-  const allResults: ProductResult[] = [];
-
-  for (const adapter of activeAdapters) {
-    try {
-      console.log(`[suppliers] Searching ${adapter.name} for "${query}"...`);
-      const results = await adapter.search(query, limit * 2);
-      allResults.push(...results);
-    } catch (error) {
-      console.error(`[suppliers] Error searching ${adapter.name}:`, error);
-    }
+  if (results.length > 0) {
+    searchCache.set(cacheKey, { results, timestamp: Date.now() });
   }
 
-  const validResults = allResults
-    .filter(r => r.price !== null && r.price > 0)
-    .sort((a, b) => (a.price || 0) - (b.price || 0))
-    .slice(0, limit);
-
-  searchCache.set(cacheKey, { results: validResults, timestamp: Date.now() });
-
-  console.log(`[suppliers] Returning ${validResults.length} results for "${query}"`);
-  return validResults;
+  return results;
 }
 
 export function clearCache(): void {
