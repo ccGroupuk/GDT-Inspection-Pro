@@ -1,3 +1,5 @@
+export type PriceSource = 'serpapi' | 'bnq_api' | 'gemini_estimate' | 'ai_estimate' | 'manual';
+
 export interface ProductResult {
   productName: string;
   brand: string | null;
@@ -15,6 +17,8 @@ export interface ProductResult {
   reviewCount?: number | null;
   pricePerUnit?: number | null;
   imageUrl?: string | null;
+  source?: PriceSource;
+  isRealPrice?: boolean;
 }
 
 export interface SupplierAdapter {
