@@ -69,12 +69,6 @@ Rules:
       return [];
     }
 
-    // Category to placeholder image mapping using picsum
-    const getCategoryImage = (category: string): string => {
-      const seed = category?.toLowerCase() || 'product';
-      return `https://picsum.photos/seed/${seed}/200/200`;
-    };
-
     // Map to ProductResult format
     const results: ProductResult[] = products.map(p => ({
       productName: p.productName || '',
@@ -89,7 +83,6 @@ Rules:
       sku: p.sku || null,
       inStock: p.inStock ?? null,
       lastCheckedAt: new Date(),
-      imageUrl: getCategoryImage(p.category),
     }));
 
     console.log(`[ai-search] Found ${results.length} products for "${query}"`);
