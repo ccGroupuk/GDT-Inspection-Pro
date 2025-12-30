@@ -50,7 +50,7 @@ export async function searchProductsWithSerpApi(query: string, limit: number = 3
       
       return {
         productName: item.title || 'Unknown Product',
-        brand: item.source || null,
+        brand: null,
         price: price,
         currency: 'GBP',
         sizeValue: sizeMatch ? parseFloat(sizeMatch[1]) : null,
