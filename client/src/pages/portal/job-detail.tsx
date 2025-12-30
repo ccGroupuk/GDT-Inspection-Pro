@@ -56,6 +56,29 @@ interface PortalInvoice {
   createdAt: string;
 }
 
+interface ChangeOrderItem {
+  id: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  lineTotal: string;
+}
+
+interface PortalChangeOrder {
+  id: string;
+  referenceNumber: string;
+  status: string;
+  reason: string | null;
+  subtotal: string;
+  taxEnabled: boolean;
+  taxRate: string | null;
+  taxAmount: string | null;
+  grandTotal: string;
+  clientResponse: string | null;
+  items: ChangeOrderItem[];
+  createdAt: string;
+}
+
 interface ScheduleProposal {
   id: string;
   jobId: string;
@@ -96,6 +119,8 @@ interface PortalJobDetail {
   paymentRequests: PaymentRequest[];
   quoteItems: QuoteItem[];
   invoices: PortalInvoice[];
+  changeOrders: PortalChangeOrder[];
+  totalWithChangeOrders: string | null;
   hideClientCostBreakdown?: boolean;
 }
 
@@ -147,6 +172,35 @@ export default function PortalJobDetail() {
         description: response === 'accepted' 
           ? "Thank you! We'll be in touch shortly to arrange the next steps." 
           : "Your response has been recorded. Please contact us if you have any questions.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to submit your response. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Change order response mutation
+  const changeOrderResponseMutation = useMutation({
+    mutationFn: async ({ changeOrderId, response }: { changeOrderId: string; response: 'accepted' | 'declined' }) => {
+      if (!token) throw new Error("No token");
+      const res = await portalApiRequest("POST", `/api/portal/change-orders/${changeOrderId}/response`, token, { response });
+      if (!res.ok) {
+        throw new Error("Failed to submit response");
+      }
+      return res.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs"] });
+      toast({
+        title: variables.response === 'accepted' ? "Change Order Accepted" : "Change Order Declined",
+        description: variables.response === 'accepted' 
+          ? "The additional work has been approved and added to your project total." 
+          : "Your response has been recorded.",
       });
     },
     onError: () => {
@@ -702,6 +756,159 @@ export default function PortalJobDetail() {
                               {paymentDetails.paymentNotes}
                             </p>
                           )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Change Orders Section */}
+            {job.changeOrders && job.changeOrders.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Change Orders
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {job.changeOrders.map((changeOrder) => (
+                      <div
+                        key={changeOrder.id}
+                        className="p-4 rounded-lg bg-muted/50"
+                        data-testid={`change-order-${changeOrder.id}`}
+                      >
+                        <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-medium">
+                              {changeOrder.referenceNumber}
+                            </span>
+                            <Badge variant={
+                              changeOrder.clientResponse === 'accepted' ? 'default' :
+                              changeOrder.clientResponse === 'declined' ? 'destructive' :
+                              'outline'
+                            } className="text-xs">
+                              {changeOrder.clientResponse === 'accepted' ? 'Accepted' :
+                               changeOrder.clientResponse === 'declined' ? 'Declined' :
+                               'Pending Response'}
+                            </Badge>
+                          </div>
+                          <span className="font-mono font-semibold text-lg">
+                            £{parseFloat(changeOrder.grandTotal).toFixed(2)}
+                          </span>
+                        </div>
+                        
+                        {changeOrder.reason && (
+                          <p className="text-sm text-muted-foreground mb-3">
+                            <span className="font-medium">Reason: </span>{changeOrder.reason}
+                          </p>
+                        )}
+
+                        {/* Change Order Items */}
+                        {changeOrder.items && changeOrder.items.length > 0 && (
+                          <div className="space-y-2 mb-3">
+                            <p className="text-sm font-medium">Items:</p>
+                            {changeOrder.items.map((item) => (
+                              <div 
+                                key={item.id} 
+                                className="flex items-center justify-between text-sm py-2 border-b border-border last:border-0"
+                              >
+                                <div className="flex-1">
+                                  <span>{item.description}</span>
+                                  <span className="text-muted-foreground ml-2">
+                                    x{parseFloat(item.quantity).toFixed(2)} @ £{parseFloat(item.unitPrice).toFixed(2)}
+                                  </span>
+                                </div>
+                                <span className="font-mono">
+                                  £{parseFloat(item.lineTotal).toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        <div className="space-y-2 text-sm border-t border-border pt-3">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Subtotal</span>
+                            <span className="font-mono">£{parseFloat(changeOrder.subtotal).toFixed(2)}</span>
+                          </div>
+                          {changeOrder.taxEnabled && changeOrder.taxAmount && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">VAT ({changeOrder.taxRate}%)</span>
+                              <span className="font-mono">£{parseFloat(changeOrder.taxAmount).toFixed(2)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between pt-2 border-t border-border">
+                            <span className="font-semibold">Total</span>
+                            <span className="font-mono font-semibold">
+                              £{parseFloat(changeOrder.grandTotal).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          Created: {new Date(changeOrder.createdAt).toLocaleDateString()}
+                        </div>
+
+                        {/* Accept/Decline Buttons for pending change orders */}
+                        {!changeOrder.clientResponse && (
+                          <div className="mt-4 pt-3 border-t border-border">
+                            <p className="text-sm text-muted-foreground mb-3 text-center">
+                              Do you approve this additional work?
+                            </p>
+                            <div className="flex gap-3 justify-center flex-wrap">
+                              <Button
+                                variant="outline"
+                                onClick={() => changeOrderResponseMutation.mutate({ 
+                                  changeOrderId: changeOrder.id, 
+                                  response: 'declined' 
+                                })}
+                                disabled={changeOrderResponseMutation.isPending}
+                                data-testid={`button-decline-change-order-${changeOrder.id}`}
+                              >
+                                <X className="w-4 h-4 mr-2" />
+                                Decline
+                              </Button>
+                              <Button
+                                onClick={() => changeOrderResponseMutation.mutate({ 
+                                  changeOrderId: changeOrder.id, 
+                                  response: 'accepted' 
+                                })}
+                                disabled={changeOrderResponseMutation.isPending}
+                                data-testid={`button-accept-change-order-${changeOrder.id}`}
+                              >
+                                <Check className="w-4 h-4 mr-2" />
+                                Accept Change Order
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Total with Change Orders Summary */}
+                    {job.totalWithChangeOrders && parseFloat(job.totalWithChangeOrders) !== parseFloat(job.quotedValue || "0") && (
+                      <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Original Quote</span>
+                            <span className="font-mono">£{parseFloat(job.quotedValue || "0").toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Change Orders Total</span>
+                            <span className="font-mono">
+                              £{(parseFloat(job.totalWithChangeOrders) - parseFloat(job.quotedValue || "0")).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between pt-2 border-t border-border">
+                            <span className="font-semibold">Revised Total</span>
+                            <span className="font-mono font-semibold text-lg">
+                              £{parseFloat(job.totalWithChangeOrders).toFixed(2)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     )}

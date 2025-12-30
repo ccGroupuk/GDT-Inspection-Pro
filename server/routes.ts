@@ -1714,6 +1714,15 @@ export async function registerRoutes(
       const allInvoices = await storage.getInvoicesByJob(req.params.jobId);
       const invoices = allInvoices.filter(inv => inv.showInPortal);
       
+      // Get change orders visible in portal
+      const allChangeOrders = await storage.getChangeOrdersByJob(req.params.jobId);
+      const changeOrders = await Promise.all(
+        allChangeOrders.filter(co => co.showInPortal).map(async (co) => {
+          const items = await storage.getChangeOrderItems(co.id);
+          return { ...co, items };
+        })
+      );
+      
       // Apply markup to quote items for client view
       let markupPercent = 0;
       if (job.useDefaultMarkup) {
@@ -1753,12 +1762,17 @@ export async function registerRoutes(
       const taxAmount = job.taxEnabled ? afterDiscount * (parseFloat(job.taxRate || "0") / 100) : 0;
       const clientTotal = (afterDiscount + taxAmount).toFixed(2);
       
+      // Calculate total including change orders
+      const changeOrdersTotal = changeOrders.reduce((sum, co) => sum + parseFloat(co.grandTotal), 0);
+      
       res.json({ 
         ...job, 
         paymentRequests, 
         quoteItems, 
         invoices,
+        changeOrders,
         quotedValue: clientTotal, // Override with marked-up total
+        totalWithChangeOrders: (parseFloat(clientTotal) + changeOrdersTotal).toFixed(2),
         hideClientCostBreakdown: job.hideClientCostBreakdown ?? true,
       });
     } catch (error) {
@@ -1819,6 +1833,62 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Portal quote response error:", error);
       res.status(500).json({ message: "Failed to submit quote response" });
+    }
+  });
+
+  // Client portal: Respond to change order (accept/decline)
+  app.post("/api/portal/change-orders/:changeOrderId/response", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const changeOrder = await storage.getChangeOrder(req.params.changeOrderId);
+      if (!changeOrder) {
+        return res.status(404).json({ message: "Change order not found" });
+      }
+      
+      // Verify the change order belongs to a job owned by this client
+      const job = await storage.getJob(changeOrder.jobId);
+      if (!job || job.contactId !== access.contactId) {
+        return res.status(404).json({ message: "Change order not found" });
+      }
+      
+      // Only allow response to change orders visible in portal
+      if (!changeOrder.showInPortal) {
+        return res.status(400).json({ message: "Change order is not available for response" });
+      }
+      
+      const { response } = req.body;
+      if (!['accepted', 'declined'].includes(response)) {
+        return res.status(400).json({ message: "Invalid response. Must be 'accepted' or 'declined'" });
+      }
+      
+      // Prevent re-submission if already responded
+      if (changeOrder.clientResponse) {
+        return res.status(400).json({ 
+          message: "Change order has already been responded to",
+          currentResponse: changeOrder.clientResponse 
+        });
+      }
+      
+      // Update change order with client response
+      const updatedChangeOrder = await storage.updateChangeOrder(req.params.changeOrderId, {
+        clientResponse: response,
+        clientRespondedAt: new Date(),
+        status: response === 'accepted' ? 'accepted' : 'declined',
+      });
+      
+      res.json(updatedChangeOrder);
+    } catch (error) {
+      console.error("Portal change order response error:", error);
+      res.status(500).json({ message: "Failed to submit change order response" });
     }
   });
 

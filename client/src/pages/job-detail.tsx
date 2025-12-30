@@ -47,7 +47,7 @@ import {
   Boxes,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse, ConnectionLink } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse, ConnectionLink, ChangeOrder, ChangeOrderItem } from "@shared/schema";
 import { PIPELINE_STAGES, DELIVERY_TYPES, PARTNER_STATUSES, INVOICE_STATUSES, NOTE_VISIBILITY, SURVEY_STATUSES, EMERGENCY_INCIDENT_TYPES, EMERGENCY_PRIORITIES } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -109,6 +109,17 @@ export default function JobDetail() {
     queryFn: async () => {
       const response = await fetch(`/api/jobs/${id}/notes`);
       if (!response.ok) throw new Error("Failed to fetch notes");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
+  // Fetch change orders
+  const { data: changeOrders } = useQuery<ChangeOrder[]>({
+    queryKey: ["/api/jobs", id, "change-orders"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/change-orders`);
+      if (!response.ok) throw new Error("Failed to fetch change orders");
       return response.json();
     },
     enabled: Boolean(id),
@@ -265,6 +276,14 @@ export default function JobDetail() {
   // CAD drawing link state
   const [cadLinkEditing, setCadLinkEditing] = useState(false);
   const [cadLinkValue, setCadLinkValue] = useState("");
+
+  // Change order state
+  const [changeOrderDialogOpen, setChangeOrderDialogOpen] = useState(false);
+  const [selectedChangeOrder, setSelectedChangeOrder] = useState<ChangeOrder | null>(null);
+  const [changeOrderItems, setChangeOrderItems] = useState<ChangeOrderItem[]>([]);
+  const [newItemDescription, setNewItemDescription] = useState("");
+  const [newItemQuantity, setNewItemQuantity] = useState("1");
+  const [newItemUnitPrice, setNewItemUnitPrice] = useState("");
 
   // Fetch connection links for this job
   const { data: connectionLinks } = useQuery<ConnectionLink[]>({
@@ -461,6 +480,100 @@ export default function JobDetail() {
       toast({ title: "Error sending document", variant: "destructive" });
     },
   });
+
+  // Change order mutations
+  const createChangeOrderMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/jobs/${id}/change-orders`, {});
+    },
+    onSuccess: async (response) => {
+      const changeOrder = await response.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "change-orders"] });
+      setSelectedChangeOrder(changeOrder);
+      setChangeOrderItems([]);
+      setChangeOrderDialogOpen(true);
+      toast({ title: "Change order created" });
+    },
+    onError: () => {
+      toast({ title: "Error creating change order", variant: "destructive" });
+    },
+  });
+
+  const deleteChangeOrderMutation = useMutation({
+    mutationFn: async (changeOrderId: string) => {
+      return apiRequest("DELETE", `/api/change-orders/${changeOrderId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "change-orders"] });
+      toast({ title: "Change order deleted" });
+    },
+    onError: () => {
+      toast({ title: "Error deleting change order", variant: "destructive" });
+    },
+  });
+
+  const sendChangeOrderMutation = useMutation({
+    mutationFn: async (changeOrderId: string) => {
+      return apiRequest("POST", `/api/change-orders/${changeOrderId}/send`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "change-orders"] });
+      toast({ title: "Change order sent to client portal" });
+    },
+    onError: () => {
+      toast({ title: "Error sending change order", variant: "destructive" });
+    },
+  });
+
+  const addChangeOrderItemMutation = useMutation({
+    mutationFn: async (item: { description: string; quantity: string; unitPrice: string; lineTotal: string }) => {
+      return apiRequest("POST", `/api/change-orders/${selectedChangeOrder?.id}/items`, item);
+    },
+    onSuccess: async () => {
+      // Refetch change order with items
+      if (selectedChangeOrder) {
+        const response = await fetch(`/api/change-orders/${selectedChangeOrder.id}`);
+        const updatedCO = await response.json();
+        setSelectedChangeOrder(updatedCO);
+        setChangeOrderItems(updatedCO.items || []);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "change-orders"] });
+      setNewItemDescription("");
+      setNewItemQuantity("1");
+      setNewItemUnitPrice("");
+      toast({ title: "Item added" });
+    },
+    onError: () => {
+      toast({ title: "Error adding item", variant: "destructive" });
+    },
+  });
+
+  const deleteChangeOrderItemMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      return apiRequest("DELETE", `/api/change-order-items/${itemId}`);
+    },
+    onSuccess: async () => {
+      if (selectedChangeOrder) {
+        const response = await fetch(`/api/change-orders/${selectedChangeOrder.id}`);
+        const updatedCO = await response.json();
+        setSelectedChangeOrder(updatedCO);
+        setChangeOrderItems(updatedCO.items || []);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "change-orders"] });
+      toast({ title: "Item removed" });
+    },
+    onError: () => {
+      toast({ title: "Error removing item", variant: "destructive" });
+    },
+  });
+
+  const openChangeOrderForEdit = async (changeOrder: ChangeOrder) => {
+    const response = await fetch(`/api/change-orders/${changeOrder.id}`);
+    const fullCO = await response.json();
+    setSelectedChangeOrder(fullCO);
+    setChangeOrderItems(fullCO.items || []);
+    setChangeOrderDialogOpen(true);
+  };
 
   const createNoteMutation = useMutation({
     mutationFn: async (data: { content: string; visibility: string }): Promise<JobNote> => {
@@ -1161,6 +1274,100 @@ export default function JobDetail() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No quotes or invoices yet. Create one to send to the client.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Change Orders Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Change Orders
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => createChangeOrderMutation.mutate()}
+                  disabled={createChangeOrderMutation.isPending}
+                  data-testid="button-add-change-order"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Change Order
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {changeOrders && changeOrders.length > 0 ? (
+                <div className="space-y-3">
+                  {changeOrders.map((co) => (
+                    <div 
+                      key={co.id} 
+                      className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/50"
+                      data-testid={`change-order-row-${co.id}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-sm font-medium">{co.referenceNumber}</span>
+                          <Badge 
+                            variant={co.status === "sent" ? "default" : co.status === "accepted" ? "default" : "secondary"}
+                            className={`text-xs ${co.status === "accepted" ? "bg-green-500" : ""}`}
+                          >
+                            {co.status === "draft" ? "Draft" : co.status === "sent" ? "Sent" : co.status === "accepted" ? "Accepted" : "Declined"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground">£{parseFloat(co.grandTotal).toFixed(2)}</span>
+                          {co.reason && <span className="truncate">{co.reason}</span>}
+                          {co.createdAt && (
+                            <span>{new Date(co.createdAt).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openChangeOrderForEdit(co)}
+                          data-testid={`button-edit-co-${co.id}`}
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        {co.status === "draft" && (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => sendChangeOrderMutation.mutate(co.id)}
+                              disabled={sendChangeOrderMutation.isPending || parseFloat(co.grandTotal) === 0}
+                              data-testid={`button-send-co-${co.id}`}
+                            >
+                              <Send className="w-3 h-3 mr-1" />
+                              Send
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => deleteChangeOrderMutation.mutate(co.id)}
+                              disabled={deleteChangeOrderMutation.isPending}
+                              data-testid={`button-delete-co-${co.id}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </>
+                        )}
+                        {co.status === "sent" && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Eye className="w-3 h-3" />
+                            In Portal
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No change orders yet. Add extra materials or costs after the original quote.</p>
               )}
             </CardContent>
           </Card>
@@ -2482,6 +2689,158 @@ export default function JobDetail() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Order Dialog */}
+      <Dialog open={changeOrderDialogOpen} onOpenChange={(open) => {
+        setChangeOrderDialogOpen(open);
+        if (!open) {
+          setSelectedChangeOrder(null);
+          setChangeOrderItems([]);
+          setNewItemDescription("");
+          setNewItemQuantity("1");
+          setNewItemUnitPrice("");
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedChangeOrder?.referenceNumber || "Change Order"} - Additional Costs
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Add Item Form */}
+            {selectedChangeOrder?.status === "draft" && (
+              <div className="p-4 border rounded-lg space-y-3">
+                <p className="text-sm font-medium">Add Item</p>
+                <div className="grid grid-cols-12 gap-2">
+                  <div className="col-span-6">
+                    <Input
+                      placeholder="Description"
+                      value={newItemDescription}
+                      onChange={(e) => setNewItemDescription(e.target.value)}
+                      data-testid="input-co-item-description"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Input
+                      type="number"
+                      placeholder="Qty"
+                      value={newItemQuantity}
+                      onChange={(e) => setNewItemQuantity(e.target.value)}
+                      data-testid="input-co-item-qty"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="Unit £"
+                      value={newItemUnitPrice}
+                      onChange={(e) => setNewItemUnitPrice(e.target.value)}
+                      data-testid="input-co-item-price"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Button
+                      className="w-full"
+                      size="sm"
+                      onClick={() => {
+                        if (newItemDescription && newItemUnitPrice) {
+                          const qty = parseFloat(newItemQuantity) || 1;
+                          const price = parseFloat(newItemUnitPrice) || 0;
+                          addChangeOrderItemMutation.mutate({
+                            description: newItemDescription,
+                            quantity: qty.toString(),
+                            unitPrice: price.toFixed(2),
+                            lineTotal: (qty * price).toFixed(2),
+                          });
+                        }
+                      }}
+                      disabled={addChangeOrderItemMutation.isPending || !newItemDescription || !newItemUnitPrice}
+                      data-testid="button-add-co-item"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Items List */}
+            {changeOrderItems.length > 0 ? (
+              <div className="border rounded-lg divide-y">
+                {changeOrderItems.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 p-3">
+                    <div className="flex-1">
+                      <p className="text-sm">{item.description}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.quantity} x £{parseFloat(item.unitPrice).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-medium">
+                        £{parseFloat(item.lineTotal).toFixed(2)}
+                      </span>
+                      {selectedChangeOrder?.status === "draft" && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteChangeOrderItemMutation.mutate(item.id)}
+                          disabled={deleteChangeOrderItemMutation.isPending}
+                          data-testid={`button-delete-item-${item.id}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No items added yet. Add extra materials or costs above.
+              </p>
+            )}
+
+            {/* Totals */}
+            {selectedChangeOrder && (
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Subtotal</span>
+                  <span>£{parseFloat(selectedChangeOrder.subtotal).toFixed(2)}</span>
+                </div>
+                {selectedChangeOrder.taxEnabled && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>VAT ({selectedChangeOrder.taxRate}%)</span>
+                    <span>£{parseFloat(selectedChangeOrder.taxAmount || "0").toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-semibold">
+                  <span>Total</span>
+                  <span>£{parseFloat(selectedChangeOrder.grandTotal).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChangeOrderDialogOpen(false)}>
+              Close
+            </Button>
+            {selectedChangeOrder?.status === "draft" && changeOrderItems.length > 0 && (
+              <Button
+                onClick={() => {
+                  sendChangeOrderMutation.mutate(selectedChangeOrder.id);
+                  setChangeOrderDialogOpen(false);
+                }}
+                disabled={sendChangeOrderMutation.isPending}
+              >
+                <Send className="w-3 h-3 mr-1" />
+                Send to Client
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
