@@ -74,6 +74,7 @@ import {
   Copy,
   Check,
   Info,
+  Download,
 } from "lucide-react";
 import type { CapturedProduct, Supplier, Job } from "@shared/schema";
 
@@ -209,6 +210,7 @@ export default function ProductFinder() {
   const [showBookmarkletInstructions, setShowBookmarkletInstructions] = useState(false);
   const [productToDelete, setProductToDelete] = useState<CapturedProduct | null>(null);
   const [bookmarkletDataProcessed, setBookmarkletDataProcessed] = useState(false);
+  const [fetchUrl, setFetchUrl] = useState("");
   
   const { toast } = useToast();
   const searchString = useSearch();
@@ -344,6 +346,40 @@ export default function ProductFinder() {
     },
     onError: () => {
       toast({ title: "Failed to save to catalog", variant: "destructive" });
+    },
+  });
+
+  const fetchUrlMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const response = await apiRequest("POST", "/api/captured-products/scrape-url", { url }) as unknown;
+      return response as { productTitle: string; price: string; sku: string; supplierName: string; productUrl: string };
+    },
+    onSuccess: (data) => {
+      // Pre-fill the form with scraped data
+      form.setValue("productTitle", data.productTitle || "");
+      form.setValue("price", data.price || "");
+      form.setValue("sku", data.sku || "");
+      form.setValue("productUrl", data.productUrl || "");
+      form.setValue("supplierName", data.supplierName || "");
+      setSelectedSupplier(data.supplierName);
+      
+      // Try to match supplier ID
+      if (data.supplierName && suppliers.length > 0) {
+        const dbSupplier = suppliers.find(s => 
+          s.name.toLowerCase() === data.supplierName.toLowerCase()
+        );
+        if (dbSupplier) {
+          form.setValue("supplierId", dbSupplier.id);
+        }
+      }
+      
+      toast({ 
+        title: "Product data fetched", 
+        description: data.productTitle ? `Found: ${data.productTitle.substring(0, 50)}...` : "Some fields may need manual entry"
+      });
+    },
+    onError: () => {
+      toast({ title: "Failed to fetch product data", description: "Try entering details manually", variant: "destructive" });
     },
   });
 
@@ -752,17 +788,56 @@ export default function ProductFinder() {
       </Tabs>
 
       {/* Capture Product Dialog */}
-      <Dialog open={captureDialogOpen} onOpenChange={setCaptureDialogOpen}>
+      <Dialog open={captureDialogOpen} onOpenChange={(open) => {
+        setCaptureDialogOpen(open);
+        if (!open) setFetchUrl("");
+      }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Capture Product</DialogTitle>
             <DialogDescription>
               {selectedSupplier 
                 ? `Enter product details from ${selectedSupplier}`
-                : "Enter product details from a supplier website"
+                : "Paste a product URL to auto-fill, or enter details manually"
               }
             </DialogDescription>
           </DialogHeader>
+          
+          {/* Quick URL Fetch Section */}
+          <div className="rounded-md border bg-muted/50 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Link2 className="h-4 w-4" />
+              Quick Capture: Paste URL
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Paste product URL from Screwfix, B&Q, etc."
+                value={fetchUrl}
+                onChange={(e) => setFetchUrl(e.target.value)}
+                className="flex-1"
+                data-testid="input-fetch-url"
+              />
+              <Button
+                type="button"
+                onClick={() => fetchUrl && fetchUrlMutation.mutate(fetchUrl)}
+                disabled={!fetchUrl || fetchUrlMutation.isPending}
+                data-testid="button-fetch-url"
+              >
+                {fetchUrlMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-1" />
+                    Fetch
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Works with Screwfix, B&Q, Toolstation, Wickes, Travis Perkins, Howdens, Selco, Jewson
+            </p>
+          </div>
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
               <FormField

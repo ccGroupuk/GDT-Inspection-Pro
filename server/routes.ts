@@ -9211,6 +9211,161 @@ export function registerChecklistRoutes(app: Express) {
     }
   });
 
+  // Scrape product data from a supplier URL
+  app.post("/api/captured-products/scrape-url", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { url } = req.body;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ message: "URL is required" });
+      }
+
+      // Validate it's a valid URL
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        return res.status(400).json({ message: "Invalid URL format" });
+      }
+
+      // Must be HTTPS
+      if (parsedUrl.protocol !== 'https:') {
+        return res.status(400).json({ message: "Only HTTPS URLs are allowed" });
+      }
+
+      // Allowlist of supplier domains to prevent SSRF attacks
+      const allowedSuppliers: Record<string, string> = {
+        'diy.com': 'B&Q',
+        'www.diy.com': 'B&Q',
+        'screwfix.com': 'Screwfix',
+        'www.screwfix.com': 'Screwfix',
+        'howdens.com': 'Howdens',
+        'www.howdens.com': 'Howdens',
+        'toolstation.com': 'Toolstation',
+        'www.toolstation.com': 'Toolstation',
+        'travisperkins.co.uk': 'Travis Perkins',
+        'www.travisperkins.co.uk': 'Travis Perkins',
+        'selcobw.com': 'Selco',
+        'www.selcobw.com': 'Selco',
+        'wickes.co.uk': 'Wickes',
+        'www.wickes.co.uk': 'Wickes',
+        'jewson.co.uk': 'Jewson',
+        'www.jewson.co.uk': 'Jewson',
+      };
+
+      // Validate domain is in allowlist (SSRF protection)
+      let supplierName = '';
+      for (const [domain, name] of Object.entries(allowedSuppliers)) {
+        if (parsedUrl.hostname === domain || parsedUrl.hostname.endsWith('.' + domain)) {
+          supplierName = name;
+          break;
+        }
+      }
+
+      if (!supplierName) {
+        return res.status(400).json({ 
+          message: "This supplier is not supported. Supported suppliers: Screwfix, B&Q, Toolstation, Wickes, Travis Perkins, Howdens, Selco, Jewson" 
+        });
+      }
+
+      // Fetch the page with timeout (10 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      let fetchResponse: globalThis.Response;
+      try {
+        fetchResponse = await globalThis.fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-GB,en;q=0.5',
+          },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!fetchResponse.ok) {
+        return res.status(400).json({ message: `Failed to fetch page: ${fetchResponse.status}` });
+      }
+
+      const html = await fetchResponse.text();
+
+      // Extract product data using regex patterns (works without a DOM parser)
+      let productTitle = '';
+      let price = '';
+      let sku = '';
+
+      // Try to extract title from various patterns
+      const titlePatterns = [
+        /<h1[^>]*>([^<]+)<\/h1>/i,
+        /<title[^>]*>([^<|]+)/i,
+        /data-product-name="([^"]+)"/i,
+        /"name"\s*:\s*"([^"]+)"/i,
+        /itemprop="name"[^>]*>([^<]+)/i,
+      ];
+      for (const pattern of titlePatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+          productTitle = match[1].trim().replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+          break;
+        }
+      }
+
+      // Try to extract price
+      const pricePatterns = [
+        /data-price="([\d.]+)"/i,
+        /"price"\s*:\s*"?([\d.]+)"?/i,
+        /itemprop="price"[^>]*content="([\d.]+)"/i,
+        /class="[^"]*price[^"]*"[^>]*>[\s\S]*?£([\d.]+)/i,
+        />£([\d.]+)</,
+        /price[^>]*>([\d.]+)/i,
+      ];
+      for (const pattern of pricePatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+          price = match[1].trim();
+          break;
+        }
+      }
+
+      // Try to extract SKU/product code
+      const skuPatterns = [
+        /data-sku="([^"]+)"/i,
+        /"sku"\s*:\s*"([^"]+)"/i,
+        /itemprop="sku"[^>]*content="([^"]+)"/i,
+        /product\s*code[:\s]*([A-Z0-9-]+)/i,
+        /item\s*code[:\s]*([A-Z0-9-]+)/i,
+        /sku[:\s]*([A-Z0-9-]+)/i,
+        /part\s*number[:\s]*([A-Z0-9-]+)/i,
+      ];
+      for (const pattern of skuPatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+          sku = match[1].trim();
+          break;
+        }
+      }
+
+      // Return extracted data
+      res.json({
+        productTitle: productTitle || '',
+        price: price || '',
+        sku: sku || '',
+        supplierName,
+        productUrl: url,
+      });
+    } catch (error) {
+      console.error("Scrape URL error:", error);
+      res.status(500).json({ message: "Failed to scrape product data" });
+    }
+  });
+
   // Create captured product
   app.post("/api/captured-products", async (req, res) => {
     try {
