@@ -49,7 +49,7 @@ export async function registerRoutes(
   // Setup authentication (BEFORE other routes)
   await setupAuth(app);
   registerAuthRoutes(app);
-  registerChecklistRoutes(app);
+  // Note: registerChecklistRoutes is called AFTER the auth middleware is registered (see below)
 
   // Helper to get employee from session cookie
   const getEmployeeFromCookie = async (req: Request): Promise<Employee | null> => {
@@ -150,11 +150,6 @@ export async function registerRoutes(
 
   // Global admin route protection middleware
   app.use("/api", async (req, res, next) => {
-    // Debug: Log ALL requests entering this middleware with origin info
-    const origin = req.get('Origin') || 'same-origin';
-    const referer = req.get('Referer') || 'no-referer';
-    console.log(`[auth-entry] ${req.method} ${req.path} - cookies: ${JSON.stringify(Object.keys(req.cookies || {}))}, origin: ${origin}, referer: ${referer}`);
-    
     // Skip auth for public routes
     const isPublicRoute = publicRoutes.some(route => req.path === route || req.path.startsWith(route + "/"));
     if (isPublicRoute) {
@@ -165,11 +160,6 @@ export async function registerRoutes(
     if (req.path.startsWith("/portal/") || req.path.startsWith("/partner-portal/")) {
       return next();
     }
-
-    // Debug logging for auth issues
-    const hasCookie = !!req.cookies?.employeeSession;
-    const isReplitAuth = req.isAuthenticated?.() || false;
-    console.log(`[auth] ${req.method} ${req.path} - cookie: ${hasCookie}, replitAuth: ${isReplitAuth}`);
 
     // Check Replit Auth first - verify user is authorized for this app
     const user = req.user as any;
@@ -211,6 +201,9 @@ export async function registerRoutes(
     // Not authenticated
     res.status(401).json({ message: "Unauthorized" });
   });
+
+  // Register checklist, wellbeing, messages, and product routes AFTER auth middleware
+  registerChecklistRoutes(app);
   
   // Check authentication status (supports both Replit OAuth and employee sessions)
   // Also verifies authorization for admin access
