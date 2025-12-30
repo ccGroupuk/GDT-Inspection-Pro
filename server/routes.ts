@@ -1465,6 +1465,7 @@ export async function registerRoutes(
   app.post("/api/contacts/:contactId/invite", async (req, res) => {
     try {
       const { contactId } = req.params;
+      const { sendEmail: shouldSendEmail } = req.body;
       const contact = await storage.getContact(contactId);
       if (!contact) {
         return res.status(404).json({ message: "Contact not found" });
@@ -1473,14 +1474,35 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Contact must have an email address" });
       }
       
+      const inviteToken = crypto.randomUUID();
       const invite = await storage.createClientInvite({
         contactId,
         email: contact.email,
-        inviteToken: crypto.randomUUID(),
+        inviteToken,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       });
       
-      res.status(201).json(invite);
+      // Optionally send email with invite link
+      let emailSent = false;
+      if (shouldSendEmail) {
+        try {
+          const { sendClientPortalAccess, isEmailConfigured } = await import('./email');
+          if (isEmailConfigured()) {
+            const portalUrl = `${req.protocol}://${req.get('host')}/portal/invite/${inviteToken}`;
+            const result = await sendClientPortalAccess(
+              contact.email,
+              contact.name,
+              portalUrl,
+              inviteToken
+            );
+            emailSent = result.success;
+          }
+        } catch (emailError) {
+          console.error("Failed to send invite email:", emailError);
+        }
+      }
+      
+      res.status(201).json({ ...invite, emailSent });
     } catch (error) {
       console.error("Create invite error:", error);
       res.status(500).json({ message: "Failed to create invite" });

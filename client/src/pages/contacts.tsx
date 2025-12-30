@@ -139,17 +139,25 @@ export default function Contacts() {
   });
 
   const inviteMutation = useMutation({
-    mutationFn: async (contactId: string) => {
-      const response = await apiRequest("POST", `/api/contacts/${contactId}/invite`);
+    mutationFn: async ({ contactId, sendEmail }: { contactId: string; sendEmail: boolean }) => {
+      const response = await apiRequest("POST", `/api/contacts/${contactId}/invite`, { sendEmail });
       return response.json();
     },
     onSuccess: (data) => {
       const inviteUrl = `${window.location.origin}/portal/invite/${data.inviteToken}`;
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-      toast({
-        title: "Invitation sent",
-        description: `Invite link: ${inviteUrl}`,
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts/portal-access"] });
+      if (data.emailSent) {
+        toast({
+          title: "Invitation sent via email",
+          description: "The client has been emailed their portal access link.",
+        });
+      } else {
+        toast({
+          title: "Invitation created",
+          description: `Invite link: ${inviteUrl}`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -756,24 +764,42 @@ export default function Contacts() {
                           Active
                         </Badge>
                       ) : contact.email ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => inviteMutation.mutate(contact.id)}
-                              disabled={inviteMutation.isPending}
-                              className="gap-1"
-                              data-testid={`button-invite-portal-${contact.id}`}
-                            >
-                              <UserPlus className="w-3 h-3" />
-                              Invite
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Send portal invite to {contact.email}</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        <div className="flex items-center gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => inviteMutation.mutate({ contactId: contact.id, sendEmail: true })}
+                                disabled={inviteMutation.isPending}
+                                className="gap-1"
+                                data-testid={`button-invite-portal-${contact.id}`}
+                              >
+                                <Mail className="w-3 h-3" />
+                                Email Invite
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Send portal invite email to {contact.email}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => inviteMutation.mutate({ contactId: contact.id, sendEmail: false })}
+                                disabled={inviteMutation.isPending}
+                                data-testid={`button-invite-link-${contact.id}`}
+                              >
+                                <UserPlus className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Create invite link only (no email)</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">No email</span>
                       )}
