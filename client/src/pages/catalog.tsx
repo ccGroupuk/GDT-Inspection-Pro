@@ -49,6 +49,7 @@ import {
   Building2,
   Star,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import type { ProductCategory, CatalogItem, InsertProductCategory, InsertCatalogItem, Supplier, SupplierCatalogItem } from "@shared/schema";
 
@@ -463,10 +464,25 @@ export default function Catalog() {
                       return (
                         <TableRow key={item.id} data-testid={`row-catalog-item-${item.id}`}>
                           <TableCell>
-                            <div className="font-medium">{item.name}</div>
-                            {item.sku && (
-                              <div className="text-xs text-muted-foreground">SKU: {item.sku}</div>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <div className="font-medium">{item.name}</div>
+                                {item.sku && (
+                                  <div className="text-xs text-muted-foreground">SKU: {item.sku}</div>
+                                )}
+                              </div>
+                              {item.description?.includes('URL: http') && (
+                                <a
+                                  href={item.description.match(/URL: (https?:\/\/[^\s|]+)/)?.[1] || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-muted-foreground hover:text-foreground"
+                                  data-testid={`link-product-${item.id}`}
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </a>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="gap-1">
