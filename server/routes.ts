@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema, insertSeoBusinessProfileSchema, insertSeoGoogleBusinessLocationSchema, insertSeoMediaLibrarySchema, insertSeoBrandVoiceSchema, insertSeoWeeklyFocusSchema, insertSeoJobMediaSchema, insertSeoContentPostSchema, insertEmployeeSchema, insertTimeEntrySchema, insertPayPeriodSchema, insertPayrollRunSchema, insertPayrollAdjustmentSchema, insertEmployeeDocumentSchema, type Employee } from "@shared/schema";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema, insertSeoBusinessProfileSchema, insertSeoGoogleBusinessLocationSchema, insertSeoMediaLibrarySchema, insertSeoBrandVoiceSchema, insertSeoWeeklyFocusSchema, insertSeoJobMediaSchema, insertSeoContentPostSchema, insertEmployeeSchema, insertTimeEntrySchema, insertPayPeriodSchema, insertPayrollRunSchema, insertPayrollAdjustmentSchema, insertEmployeeDocumentSchema, insertInternalMessageSchema, insertJobChatMessageSchema, type Employee } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -8965,22 +8965,21 @@ export function registerChecklistRoutes(app: Express) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       
-      // Validate request body
-      const { recipientId, content, jobId } = req.body;
-      if (!recipientId || typeof recipientId !== 'string' || !recipientId.trim()) {
-        return res.status(400).json({ message: "recipientId is required" });
-      }
-      if (!content || typeof content !== 'string' || !content.trim()) {
-        return res.status(400).json({ message: "content is required and cannot be empty" });
-      }
-      if (content.length > 10000) {
-        return res.status(400).json({ message: "content exceeds maximum length of 10000 characters" });
+      // Validate request body using Zod schema
+      const messageSchema = insertInternalMessageSchema.omit({ senderId: true }).extend({
+        content: z.string().min(1, "content is required").max(10000, "content exceeds maximum length"),
+      });
+      
+      const validation = messageSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Validation failed", 
+          errors: validation.error.errors 
+        });
       }
       
       const message = await storage.createInternalMessage({
-        recipientId: recipientId.trim(),
-        content: content.trim(),
-        jobId: jobId || null,
+        ...validation.data,
         senderId: employee.id,
       });
       // Log activity
@@ -9021,17 +9020,23 @@ export function registerChecklistRoutes(app: Express) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       
-      // Validate request body
-      const { content } = req.body;
-      if (!content || typeof content !== 'string' || !content.trim()) {
-        return res.status(400).json({ message: "content is required and cannot be empty" });
-      }
-      if (content.length > 10000) {
-        return res.status(400).json({ message: "content exceeds maximum length of 10000 characters" });
+      // Validate request body using Zod schema
+      const chatSchema = insertJobChatMessageSchema
+        .omit({ jobId: true, employeeId: true })
+        .extend({
+          content: z.string().min(1, "content is required").max(10000, "content exceeds maximum length"),
+        });
+      
+      const validation = chatSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Validation failed", 
+          errors: validation.error.errors 
+        });
       }
       
       const message = await storage.createJobChatMessage({
-        content: content.trim(),
+        ...validation.data,
         jobId: req.params.jobId,
         employeeId: employee.id,
       });

@@ -92,46 +92,61 @@ export default function CommunicationsPage() {
   const getConversationSummaries = (): ConversationSummary[] => {
     if (!currentEmployeeId) return [];
     
-    const conversationMap = new Map<string, ConversationSummary>();
+    // First pass: group messages by conversation partner and count unreads
+    const conversationData = new Map<string, {
+      employee: Employee;
+      messages: InternalMessage[];
+      unreadCount: number;
+    }>();
     
     messages.forEach(msg => {
-      // Determine the "other person" in the conversation
       const isFromMe = msg.senderId === currentEmployeeId;
       const otherPersonId = isFromMe ? msg.recipientId : msg.senderId;
       
-      // Skip if other person is somehow the current user
       if (otherPersonId === currentEmployeeId) return;
       
       const otherPerson = employees?.find(e => e.id === otherPersonId);
       if (!otherPerson) return;
       
-      const fullName = `${otherPerson.firstName} ${otherPerson.lastName}`;
-      const existingEntry = conversationMap.get(otherPersonId);
-      
-      // Check if this is a newer message than what we have
-      const msgTime = new Date(msg.createdAt!);
-      const existingTime = existingEntry?.lastMessageTime;
-      
-      // Calculate if this message is unread (I'm the recipient and it's not read)
-      const isUnreadForMe = !isFromMe && !msg.isRead;
-      
-      if (!existingEntry || msgTime > existingTime!) {
-        conversationMap.set(otherPersonId, {
-          partnerId: otherPersonId,
-          partnerName: fullName,
-          partnerInitials: `${otherPerson.firstName[0]}${otherPerson.lastName[0]}`.toUpperCase(),
-          lastMessage: msg.content,
-          lastMessageTime: msgTime,
-          unreadCount: (existingEntry?.unreadCount || 0) + (isUnreadForMe ? 1 : 0),
+      if (!conversationData.has(otherPersonId)) {
+        conversationData.set(otherPersonId, {
+          employee: otherPerson,
+          messages: [],
+          unreadCount: 0,
         });
-      } else if (isUnreadForMe) {
-        // Just increment unread count for older unread messages
-        existingEntry.unreadCount++;
+      }
+      
+      const data = conversationData.get(otherPersonId)!;
+      data.messages.push(msg);
+      
+      // Count unread messages (I'm the recipient and it's not read)
+      if (!isFromMe && !msg.isRead) {
+        data.unreadCount++;
       }
     });
     
-    return Array.from(conversationMap.values())
-      .sort((a, b) => b.lastMessageTime.getTime() - a.lastMessageTime.getTime());
+    // Second pass: build summaries with correct unread counts
+    const summaries: ConversationSummary[] = [];
+    
+    conversationData.forEach((data, partnerId) => {
+      // Find the latest message for this conversation
+      const sortedMessages = [...data.messages].sort(
+        (a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+      );
+      const latestMsg = sortedMessages[0];
+      
+      const emp = data.employee;
+      summaries.push({
+        partnerId,
+        partnerName: `${emp.firstName} ${emp.lastName}`,
+        partnerInitials: `${emp.firstName[0]}${emp.lastName[0]}`.toUpperCase(),
+        lastMessage: latestMsg.content,
+        lastMessageTime: new Date(latestMsg.createdAt!),
+        unreadCount: data.unreadCount,
+      });
+    });
+    
+    return summaries.sort((a, b) => b.lastMessageTime.getTime() - a.lastMessageTime.getTime());
   };
 
   const conversationSummaries = getConversationSummaries();
