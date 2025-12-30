@@ -58,7 +58,7 @@ export default function SupplierLookup() {
           description: "Please log in again",
           variant: "destructive",
         });
-        window.location.href = "/employee-login";
+        window.location.href = "/employee-portal";
         throw new Error("Please log in again");
       }
       if (!response.ok) {
@@ -102,7 +102,7 @@ export default function SupplierLookup() {
           description: "Please log in again",
           variant: "destructive",
         });
-        window.location.href = "/employee-login";
+        window.location.href = "/employee-portal";
         throw new Error("Please log in again");
       }
       if (!response.ok) {
