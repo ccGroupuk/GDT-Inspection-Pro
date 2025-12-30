@@ -19,6 +19,9 @@ interface PortalJob {
   jobAddress: string;
   quotedValue: string | null;
   createdAt: string;
+  changeOrdersTotal?: string;
+  totalWithChangeOrders?: string;
+  hasChangeOrders?: boolean;
 }
 
 export default function PortalJobs() {
@@ -127,9 +130,14 @@ export default function PortalJobs() {
                       </div>
                       <div className="flex items-center gap-4 shrink-0">
                         {job.quotedValue && (
-                          <span className="font-mono font-semibold text-sm" data-testid={`text-quoted-value-${job.id}`}>
-                            £{Number(job.quotedValue).toLocaleString()}
-                          </span>
+                          <div className="text-right">
+                            <span className="font-mono font-semibold text-sm" data-testid={`text-quoted-value-${job.id}`}>
+                              £{Number(job.hasChangeOrders ? job.totalWithChangeOrders : job.quotedValue).toLocaleString()}
+                            </span>
+                            {job.hasChangeOrders && (
+                              <p className="text-xs text-muted-foreground">inc. changes</p>
+                            )}
+                          </div>
                         )}
                         <ChevronRight className="w-5 h-5 text-muted-foreground" />
                       </div>
