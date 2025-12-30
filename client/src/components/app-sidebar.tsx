@@ -24,6 +24,7 @@ import {
   Heart,
   MessageSquare,
   Search,
+  Phone,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -70,6 +71,11 @@ const menuItems = [
     title: "Team Hub",
     url: "/communications",
     icon: MessageSquare,
+  },
+  {
+    title: "Daily Activities",
+    url: "/daily-activities",
+    icon: Phone,
   },
   {
     title: "Calendar",

@@ -2900,6 +2900,7 @@ export const dailyActivities = pgTable("daily_activities", {
   
   // Type of interaction
   activityType: text("activity_type").notNull(), // call_inbound, call_outbound, facebook_message, whatsapp, email, walk_in, website_enquiry, other
+  direction: text("direction").default("outbound"), // inbound, outbound
   
   // Link to contact/job (optional)
   contactId: varchar("contact_id").references(() => contacts.id),
@@ -2913,9 +2914,14 @@ export const dailyActivities = pgTable("daily_activities", {
   // Outcome tracking
   outcome: text("outcome"), // new_lead, follow_up_scheduled, quote_requested, booking_made, no_answer, not_interested, information_only
   followUpDate: timestamp("follow_up_date"),
+  followUpNotes: text("follow_up_notes"),
   
   // Duration for calls
   durationMinutes: integer("duration_minutes"),
+  
+  // Lead tracking
+  linkedLead: boolean("linked_lead").default(false),
+  leadSource: text("lead_source"),
   
   // Who logged this
   employeeId: varchar("employee_id").references(() => employees.id),
