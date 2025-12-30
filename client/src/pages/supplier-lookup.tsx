@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, ExternalLink, Save, Package, Loader2, Store, Check } from "lucide-react";
+import { Search, ExternalLink, Save, Package, Loader2, Store, Check, AlertTriangle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+
+type PriceSource = 'serpapi' | 'bnq_api' | 'gemini_estimate' | 'ai_estimate' | 'manual';
 
 interface ProductResult {
   productName: string;
@@ -22,6 +24,25 @@ interface ProductResult {
   inStock: boolean | null;
   lastCheckedAt: string;
   imageUrl?: string | null;
+  source?: PriceSource;
+  isRealPrice?: boolean;
+}
+
+function getSourceLabel(source?: PriceSource): { label: string; isReal: boolean } {
+  switch (source) {
+    case 'serpapi':
+      return { label: 'Google Shopping', isReal: true };
+    case 'bnq_api':
+      return { label: 'B&Q API', isReal: true };
+    case 'gemini_estimate':
+      return { label: 'AI Estimate', isReal: false };
+    case 'ai_estimate':
+      return { label: 'AI Estimate', isReal: false };
+    case 'manual':
+      return { label: 'Manual Entry', isReal: true };
+    default:
+      return { label: 'Unknown', isReal: false };
+  }
 }
 
 interface SavedProduct {
@@ -164,7 +185,7 @@ export default function SupplierLookup() {
             Search Suppliers
           </CardTitle>
           <CardDescription>
-            Currently searching: B&Q. More suppliers coming soon.
+            Searches Google Shopping for real product prices. Falls back to AI estimates if unavailable.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -237,12 +258,28 @@ export default function SupplierLookup() {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <div className="text-right">
+                    <div className="text-right space-y-1">
                       <div className="text-2xl font-bold" data-testid={`text-product-price-${index}`}>
                         £{product.price?.toFixed(2) ?? "N/A"}
                       </div>
+                      {(() => {
+                        const sourceInfo = getSourceLabel(product.source);
+                        return (
+                          <Badge 
+                            variant={sourceInfo.isReal ? "default" : "secondary"} 
+                            className={`text-xs ${!sourceInfo.isReal ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' : ''}`}
+                          >
+                            {sourceInfo.isReal ? (
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                            ) : (
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                            )}
+                            {sourceInfo.label}
+                          </Badge>
+                        );
+                      })()}
                       {product.inStock !== null && (
-                        <Badge variant={product.inStock ? "default" : "destructive"} className="text-xs">
+                        <Badge variant={product.inStock ? "outline" : "destructive"} className="text-xs ml-1">
                           {product.inStock ? "In Stock" : "Out of Stock"}
                         </Badge>
                       )}
