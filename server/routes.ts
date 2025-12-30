@@ -9988,4 +9988,275 @@ ${cleanedHtml}`;
       res.status(500).json({ message: "Failed to delete product" });
     }
   });
+
+  // ============ Daily Activity Tracking ============
+
+  // Get daily activities with optional date range
+  app.get("/api/daily-activities", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { startDate, endDate } = req.query;
+      let dateStart: Date | undefined;
+      let dateEnd: Date | undefined;
+
+      if (startDate && endDate) {
+        dateStart = new Date(startDate as string);
+        dateEnd = new Date(endDate as string);
+        dateEnd.setHours(23, 59, 59, 999); // End of day
+      }
+
+      const activities = await storage.getDailyActivities(dateStart, dateEnd);
+      res.json(activities);
+    } catch (error) {
+      console.error("Get daily activities error:", error);
+      res.status(500).json({ message: "Failed to get activities" });
+    }
+  });
+
+  // Create a new daily activity
+  app.post("/api/daily-activities", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const activity = await storage.createDailyActivity({
+        ...req.body,
+        employeeId: employee.id,
+      });
+      res.status(201).json(activity);
+    } catch (error) {
+      console.error("Create daily activity error:", error);
+      res.status(500).json({ message: "Failed to create activity" });
+    }
+  });
+
+  // Update a daily activity
+  app.patch("/api/daily-activities/:id", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const activity = await storage.updateDailyActivity(req.params.id, req.body);
+      if (!activity) {
+        return res.status(404).json({ message: "Activity not found" });
+      }
+      res.json(activity);
+    } catch (error) {
+      console.error("Update daily activity error:", error);
+      res.status(500).json({ message: "Failed to update activity" });
+    }
+  });
+
+  // Delete a daily activity
+  app.delete("/api/daily-activities/:id", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.deleteDailyActivity(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete daily activity error:", error);
+      res.status(500).json({ message: "Failed to delete activity" });
+    }
+  });
+
+  // Get activity reports/summary
+  app.get("/api/activity-reports", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { period, startDate, endDate } = req.query;
+      let dateStart: Date;
+      let dateEnd: Date = new Date();
+
+      // Calculate date range based on period
+      if (startDate && endDate) {
+        dateStart = new Date(startDate as string);
+        dateEnd = new Date(endDate as string);
+      } else if (period === "today") {
+        dateStart = new Date();
+        dateStart.setHours(0, 0, 0, 0);
+      } else if (period === "week") {
+        dateStart = new Date();
+        dateStart.setDate(dateStart.getDate() - 7);
+        dateStart.setHours(0, 0, 0, 0);
+      } else if (period === "month") {
+        dateStart = new Date();
+        dateStart.setMonth(dateStart.getMonth() - 1);
+        dateStart.setHours(0, 0, 0, 0);
+      } else {
+        // Default to today
+        dateStart = new Date();
+        dateStart.setHours(0, 0, 0, 0);
+      }
+
+      dateEnd.setHours(23, 59, 59, 999);
+
+      // Get activities for the period
+      const activities = await storage.getDailyActivities(dateStart, dateEnd);
+
+      // Calculate metrics
+      const metrics = {
+        totalActivities: activities.length,
+        byType: {} as Record<string, number>,
+        byOutcome: {} as Record<string, number>,
+        followUpsScheduled: 0,
+        averageDuration: 0,
+      };
+
+      let totalDuration = 0;
+      let durationCount = 0;
+
+      activities.forEach((a) => {
+        // Count by type
+        metrics.byType[a.activityType] = (metrics.byType[a.activityType] || 0) + 1;
+
+        // Count by outcome
+        if (a.outcome) {
+          metrics.byOutcome[a.outcome] = (metrics.byOutcome[a.outcome] || 0) + 1;
+        }
+
+        // Count follow-ups
+        if (a.followUpDate) {
+          metrics.followUpsScheduled++;
+        }
+
+        // Calculate average duration
+        if (a.durationMinutes) {
+          totalDuration += a.durationMinutes;
+          durationCount++;
+        }
+      });
+
+      if (durationCount > 0) {
+        metrics.averageDuration = Math.round(totalDuration / durationCount);
+      }
+
+      // Get jobs for conversion calculation
+      const allJobs = await storage.getJobs();
+      const periodJobs = allJobs.filter(
+        (j) => j.createdAt && new Date(j.createdAt) >= dateStart && new Date(j.createdAt) <= dateEnd
+      );
+      const newLeads = periodJobs.length;
+      const quotesAccepted = periodJobs.filter((j) => j.quoteResponse === "accepted").length;
+
+      // Calculate revenue from completed jobs in period
+      const paidJobs = allJobs.filter(
+        (j) =>
+          j.status === "paid" &&
+          j.updatedAt &&
+          new Date(j.updatedAt) >= dateStart &&
+          new Date(j.updatedAt) <= dateEnd
+      );
+      const totalRevenue = paidJobs.reduce((sum, j) => sum + parseFloat(j.quotedValue || "0"), 0);
+
+      // Generate highlights
+      const highlights = {
+        newLeads,
+        quotesAccepted,
+        totalRevenue,
+        topActivityType:
+          Object.entries(metrics.byType).sort(([, a], [, b]) => b - a)[0]?.[0] || "None",
+        conversionRate: newLeads > 0 ? Math.round((quotesAccepted / newLeads) * 100) : 0,
+      };
+
+      res.json({
+        period: period || "today",
+        dateRange: { start: dateStart, end: dateEnd },
+        metrics,
+        highlights,
+        activities,
+      });
+    } catch (error) {
+      console.error("Get activity reports error:", error);
+      res.status(500).json({ message: "Failed to get activity reports" });
+    }
+  });
+
+  // End of day summary
+  app.get("/api/activity-reports/end-of-day", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Get today's activities
+      const activities = await storage.getDailyActivities(today, endOfDay);
+
+      // Get today's new contacts
+      const contacts = await storage.getContacts();
+      const newContacts = contacts.filter(
+        (c) => c.createdAt && new Date(c.createdAt) >= today
+      );
+
+      // Get today's new jobs
+      const jobs = await storage.getJobs();
+      const newJobs = jobs.filter(
+        (j) => j.createdAt && new Date(j.createdAt) >= today
+      );
+
+      // Get quotes sent today
+      const quotesSent = newJobs.filter((j) => j.quotedValue);
+
+      // Get jobs won today
+      const jobsWon = jobs.filter(
+        (j) =>
+          j.quoteResponse === "accepted" &&
+          j.quoteRespondedAt &&
+          new Date(j.quoteRespondedAt) >= today
+      );
+
+      // Calculate revenue from jobs won
+      const revenueWon = jobsWon.reduce((sum, j) => sum + parseFloat(j.quotedValue || "0"), 0);
+
+      // Summary by activity type
+      const activitySummary: Record<string, number> = {};
+      activities.forEach((a) => {
+        activitySummary[a.activityType] = (activitySummary[a.activityType] || 0) + 1;
+      });
+
+      res.json({
+        date: today.toISOString().split("T")[0],
+        summary: {
+          totalInteractions: activities.length,
+          newContacts: newContacts.length,
+          newEnquiries: newJobs.length,
+          quotesSent: quotesSent.length,
+          jobsWon: jobsWon.length,
+          revenueWon,
+        },
+        activityBreakdown: activitySummary,
+        recentActivities: activities.slice(0, 10),
+        followUpsForTomorrow: activities.filter(
+          (a) =>
+            a.followUpDate &&
+            new Date(a.followUpDate).toDateString() ===
+              new Date(Date.now() + 24 * 60 * 60 * 1000).toDateString()
+        ),
+      });
+    } catch (error) {
+      console.error("End of day summary error:", error);
+      res.status(500).json({ message: "Failed to get end of day summary" });
+    }
+  });
 }

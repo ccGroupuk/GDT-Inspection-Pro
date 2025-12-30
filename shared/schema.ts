@@ -2893,3 +2893,75 @@ export const productPriceHistoryRelations = relations(productPriceHistory, ({ on
 export const insertProductPriceHistorySchema = createInsertSchema(productPriceHistory).omit({ id: true, checkedAt: true });
 export type InsertProductPriceHistory = z.infer<typeof insertProductPriceHistorySchema>;
 export type ProductPriceHistory = typeof productPriceHistory.$inferSelect;
+
+// Daily Activity Tracking - for logging calls, messages, interactions
+export const dailyActivities = pgTable("daily_activities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Type of interaction
+  activityType: text("activity_type").notNull(), // call_inbound, call_outbound, facebook_message, whatsapp, email, walk_in, website_enquiry, other
+  
+  // Link to contact/job (optional)
+  contactId: varchar("contact_id").references(() => contacts.id),
+  jobId: varchar("job_id").references(() => jobs.id),
+  
+  // Activity details
+  contactName: text("contact_name"), // For quick logging without creating contact
+  contactPhone: text("contact_phone"),
+  notes: text("notes"),
+  
+  // Outcome tracking
+  outcome: text("outcome"), // new_lead, follow_up_scheduled, quote_requested, booking_made, no_answer, not_interested, information_only
+  followUpDate: timestamp("follow_up_date"),
+  
+  // Duration for calls
+  durationMinutes: integer("duration_minutes"),
+  
+  // Who logged this
+  employeeId: varchar("employee_id").references(() => employees.id),
+  
+  // Timestamps
+  activityDate: timestamp("activity_date").notNull().defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const dailyActivitiesRelations = relations(dailyActivities, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [dailyActivities.contactId],
+    references: [contacts.id],
+  }),
+  job: one(jobs, {
+    fields: [dailyActivities.jobId],
+    references: [jobs.id],
+  }),
+  employee: one(employees, {
+    fields: [dailyActivities.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const insertDailyActivitySchema = createInsertSchema(dailyActivities).omit({ id: true, createdAt: true });
+export type InsertDailyActivity = z.infer<typeof insertDailyActivitySchema>;
+export type DailyActivity = typeof dailyActivities.$inferSelect;
+
+// Activity Report Snapshots - for caching daily/weekly/monthly summaries
+export const activityReportSnapshots = pgTable("activity_report_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Report period
+  periodType: text("period_type").notNull(), // daily, weekly, monthly
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Aggregated metrics (stored as JSON for flexibility)
+  metrics: text("metrics").notNull(), // JSON string with activity counts, outcomes, etc.
+  
+  // Generated highlights
+  highlights: text("highlights"), // JSON string with key achievements
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertActivityReportSnapshotSchema = createInsertSchema(activityReportSnapshots).omit({ id: true, createdAt: true });
+export type InsertActivityReportSnapshot = z.infer<typeof insertActivityReportSnapshotSchema>;
+export type ActivityReportSnapshot = typeof activityReportSnapshots.$inferSelect;

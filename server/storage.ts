@@ -73,6 +73,8 @@ import {
   capturedProducts, type CapturedProduct, type InsertCapturedProduct,
   products, type Product, type InsertProduct,
   productPriceHistory, type ProductPriceHistory, type InsertProductPriceHistory,
+  dailyActivities, type DailyActivity, type InsertDailyActivity,
+  activityReportSnapshots, type ActivityReportSnapshot, type InsertActivityReportSnapshot,
   changeOrders, type ChangeOrder, type InsertChangeOrder,
   changeOrderItems, type ChangeOrderItem, type InsertChangeOrderItem,
 } from "@shared/schema";
@@ -597,6 +599,19 @@ export interface IStorage {
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;
   deleteProduct(id: string): Promise<boolean>;
+
+  // Daily Activities (Tracking calls, messages, interactions)
+  getDailyActivities(dateStart?: Date, dateEnd?: Date): Promise<DailyActivity[]>;
+  getDailyActivitiesByEmployee(employeeId: string, dateStart?: Date, dateEnd?: Date): Promise<DailyActivity[]>;
+  getDailyActivity(id: string): Promise<DailyActivity | undefined>;
+  createDailyActivity(activity: InsertDailyActivity): Promise<DailyActivity>;
+  updateDailyActivity(id: string, activity: Partial<InsertDailyActivity>): Promise<DailyActivity | undefined>;
+  deleteDailyActivity(id: string): Promise<boolean>;
+
+  // Activity Report Snapshots
+  getActivityReportSnapshots(periodType: string): Promise<ActivityReportSnapshot[]>;
+  getActivityReportSnapshot(id: string): Promise<ActivityReportSnapshot | undefined>;
+  createActivityReportSnapshot(snapshot: InsertActivityReportSnapshot): Promise<ActivityReportSnapshot>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2956,6 +2971,71 @@ export class DatabaseStorage implements IStorage {
   async deleteProduct(id: string): Promise<boolean> {
     await db.delete(products).where(eq(products.id, id));
     return true;
+  }
+
+  // Daily Activities (Tracking calls, messages, interactions)
+  async getDailyActivities(dateStart?: Date, dateEnd?: Date): Promise<DailyActivity[]> {
+    let query = db.select().from(dailyActivities);
+    if (dateStart && dateEnd) {
+      query = query.where(
+        and(
+          gte(dailyActivities.activityDate, dateStart),
+          lte(dailyActivities.activityDate, dateEnd)
+        )
+      ) as any;
+    }
+    return query.orderBy(desc(dailyActivities.activityDate)) as any;
+  }
+
+  async getDailyActivitiesByEmployee(employeeId: string, dateStart?: Date, dateEnd?: Date): Promise<DailyActivity[]> {
+    let conditions = [eq(dailyActivities.employeeId, employeeId)];
+    if (dateStart && dateEnd) {
+      conditions.push(gte(dailyActivities.activityDate, dateStart));
+      conditions.push(lte(dailyActivities.activityDate, dateEnd));
+    }
+    return db.select().from(dailyActivities)
+      .where(and(...conditions))
+      .orderBy(desc(dailyActivities.activityDate));
+  }
+
+  async getDailyActivity(id: string): Promise<DailyActivity | undefined> {
+    const [activity] = await db.select().from(dailyActivities).where(eq(dailyActivities.id, id));
+    return activity || undefined;
+  }
+
+  async createDailyActivity(activity: InsertDailyActivity): Promise<DailyActivity> {
+    const [created] = await db.insert(dailyActivities).values(activity).returning();
+    return created;
+  }
+
+  async updateDailyActivity(id: string, activity: Partial<InsertDailyActivity>): Promise<DailyActivity | undefined> {
+    const [updated] = await db.update(dailyActivities)
+      .set(activity)
+      .where(eq(dailyActivities.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteDailyActivity(id: string): Promise<boolean> {
+    await db.delete(dailyActivities).where(eq(dailyActivities.id, id));
+    return true;
+  }
+
+  // Activity Report Snapshots
+  async getActivityReportSnapshots(periodType: string): Promise<ActivityReportSnapshot[]> {
+    return db.select().from(activityReportSnapshots)
+      .where(eq(activityReportSnapshots.periodType, periodType))
+      .orderBy(desc(activityReportSnapshots.periodStart));
+  }
+
+  async getActivityReportSnapshot(id: string): Promise<ActivityReportSnapshot | undefined> {
+    const [snapshot] = await db.select().from(activityReportSnapshots).where(eq(activityReportSnapshots.id, id));
+    return snapshot || undefined;
+  }
+
+  async createActivityReportSnapshot(snapshot: InsertActivityReportSnapshot): Promise<ActivityReportSnapshot> {
+    const [created] = await db.insert(activityReportSnapshots).values(snapshot).returning();
+    return created;
   }
 }
 
