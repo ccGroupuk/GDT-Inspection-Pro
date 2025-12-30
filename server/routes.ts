@@ -9295,16 +9295,38 @@ export function registerChecklistRoutes(app: Express) {
       }
 
       const html = await fetchResponse.text();
+      console.log(`[scrape] Fetched ${html.length} bytes from ${supplierName}`);
 
       // Extract product data using regex patterns (works without a DOM parser)
       let productTitle = '';
       let price = '';
       let sku = '';
 
+      // Try to extract SKU from URL first (works for B&Q and others)
+      // B&Q: /58025_BQ.prd -> 58025_BQ
+      // Screwfix: /7363v or /p/name/7363v -> 7363v  
+      // Toolstation: /p72594 or /product-name/p72594 -> 72594
+      const bqMatch = url.match(/\/(\d+_BQ)\.prd/i);
+      const screwfixMatch = url.match(/\/(\d+[a-z]*)(?:[/?]|$)/i);
+      const toolstationMatch = url.match(/\/p(\d+)(?:[/?]|$)/i);
+      
+      if (supplierName === 'B&Q' && bqMatch) {
+        sku = bqMatch[1];
+        console.log(`[scrape] Extracted B&Q SKU from URL: ${sku}`);
+      } else if (supplierName === 'Screwfix' && screwfixMatch) {
+        sku = screwfixMatch[1];
+        console.log(`[scrape] Extracted Screwfix SKU from URL: ${sku}`);
+      } else if (supplierName === 'Toolstation' && toolstationMatch) {
+        sku = toolstationMatch[1];
+        console.log(`[scrape] Extracted Toolstation SKU from URL: ${sku}`);
+      }
+
       // Try to extract title from various patterns
       const titlePatterns = [
+        /<title[^>]*>([^<]+)<\/title>/i,  // Standard title tag
+        /property="og:title"[^>]*content="([^"]+)"/i,  // Open Graph title
+        /content="([^"]+)"[^>]*property="og:title"/i,  // OG title (attribute order)
         /<h1[^>]*>([^<]+)<\/h1>/i,
-        /<title[^>]*>([^<|]+)/i,
         /data-product-name="([^"]+)"/i,
         /"name"\s*:\s*"([^"]+)"/i,
         /itemprop="name"[^>]*>([^<]+)/i,
@@ -9312,45 +9334,61 @@ export function registerChecklistRoutes(app: Express) {
       for (const pattern of titlePatterns) {
         const match = html.match(pattern);
         if (match && match[1]) {
-          productTitle = match[1].trim().replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
-          break;
+          productTitle = match[1].trim()
+            .replace(/&amp;/g, '&')
+            .replace(/&#39;/g, "'")
+            .replace(/&quot;/g, '"')
+            .replace(/\s+/g, ' ');
+          // Skip if it's just a site name
+          if (productTitle.length > 3 && !productTitle.match(/^(B&Q|Screwfix|Toolstation|Wickes|Howdens|Selco|Jewson|Travis Perkins)$/i)) {
+            console.log(`[scrape] Extracted title: ${productTitle}`);
+            break;
+          }
+          productTitle = '';
         }
       }
 
-      // Try to extract price
+      // Try to extract price from HTML
       const pricePatterns = [
         /data-price="([\d.]+)"/i,
         /"price"\s*:\s*"?([\d.]+)"?/i,
         /itemprop="price"[^>]*content="([\d.]+)"/i,
         /class="[^"]*price[^"]*"[^>]*>[\s\S]*?£([\d.]+)/i,
-        />£([\d.]+)</,
-        /price[^>]*>([\d.]+)/i,
+        />£\s*([\d.]+)</,
+        /"salePrice"\s*:\s*([\d.]+)/i,
+        /"currentPrice"\s*:\s*([\d.]+)/i,
       ];
       for (const pattern of pricePatterns) {
         const match = html.match(pattern);
         if (match && match[1]) {
           price = match[1].trim();
+          console.log(`[scrape] Extracted price: £${price}`);
           break;
         }
       }
 
-      // Try to extract SKU/product code
-      const skuPatterns = [
-        /data-sku="([^"]+)"/i,
-        /"sku"\s*:\s*"([^"]+)"/i,
-        /itemprop="sku"[^>]*content="([^"]+)"/i,
-        /product\s*code[:\s]*([A-Z0-9-]+)/i,
-        /item\s*code[:\s]*([A-Z0-9-]+)/i,
-        /sku[:\s]*([A-Z0-9-]+)/i,
-        /part\s*number[:\s]*([A-Z0-9-]+)/i,
-      ];
-      for (const pattern of skuPatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-          sku = match[1].trim();
-          break;
+      // Try to extract SKU from HTML if not found in URL
+      if (!sku) {
+        const skuPatterns = [
+          /data-sku="([^"]+)"/i,
+          /"sku"\s*:\s*"([^"]+)"/i,
+          /itemprop="sku"[^>]*content="([^"]+)"/i,
+          /product\s*code[:\s]*([A-Z0-9-]+)/i,
+          /item\s*code[:\s]*([A-Z0-9-]+)/i,
+          /sku[:\s]*([A-Z0-9-]+)/i,
+          /part\s*number[:\s]*([A-Z0-9-]+)/i,
+        ];
+        for (const pattern of skuPatterns) {
+          const match = html.match(pattern);
+          if (match && match[1]) {
+            sku = match[1].trim();
+            console.log(`[scrape] Extracted SKU from HTML: ${sku}`);
+            break;
+          }
         }
       }
+
+      console.log(`[scrape] Final result - Title: "${productTitle}", SKU: "${sku}", Price: "${price}"`)
 
       // Return extracted data
       res.json({
