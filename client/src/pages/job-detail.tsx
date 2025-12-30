@@ -44,6 +44,7 @@ import {
   Link2,
   Copy,
   ExternalLink,
+  Boxes,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse, ConnectionLink } from "@shared/schema";
@@ -260,6 +261,10 @@ export default function JobDetail() {
   // Connection links state
   const [connectionLinkDialogOpen, setConnectionLinkDialogOpen] = useState(false);
   const [connectionLinkType, setConnectionLinkType] = useState<string>("client");
+
+  // CAD drawing link state
+  const [cadLinkEditing, setCadLinkEditing] = useState(false);
+  const [cadLinkValue, setCadLinkValue] = useState("");
 
   // Fetch connection links for this job
   const { data: connectionLinks } = useQuery<ConnectionLink[]>({
@@ -529,6 +534,21 @@ export default function JobDetail() {
     },
     onError: () => {
       toast({ title: "Error updating share settings", variant: "destructive" });
+    },
+  });
+
+  // CAD drawing link mutation
+  const updateCadLinkMutation = useMutation({
+    mutationFn: async (cadDrawingLink: string) => {
+      return apiRequest("PATCH", `/api/jobs/${id}`, { cadDrawingLink });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      toast({ title: "CAD drawing link saved" });
+      setCadLinkEditing(false);
+    },
+    onError: () => {
+      toast({ title: "Error saving CAD link", variant: "destructive" });
     },
   });
 
@@ -1475,6 +1495,89 @@ export default function JobDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* CAD Drawing Link Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Boxes className="w-4 h-4" />
+                  CAD Drawing
+                </div>
+                {!cadLinkEditing && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setCadLinkValue(job.cadDrawingLink || "");
+                      setCadLinkEditing(true);
+                    }}
+                    data-testid="button-edit-cad-link"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {cadLinkEditing ? (
+                <div className="space-y-3">
+                  <Input
+                    placeholder="Paste CAD drawing link here..."
+                    value={cadLinkValue}
+                    onChange={(e) => setCadLinkValue(e.target.value)}
+                    data-testid="input-cad-link"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => updateCadLinkMutation.mutate(cadLinkValue)}
+                      disabled={updateCadLinkMutation.isPending}
+                      data-testid="button-save-cad-link"
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCadLinkEditing(false)}
+                      data-testid="button-cancel-cad-link"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : job.cadDrawingLink ? (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <a 
+                    href={job.cadDrawingLink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline flex items-center gap-1 break-all"
+                    data-testid="link-cad-drawing"
+                  >
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                    {job.cadDrawingLink}
+                  </a>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => {
+                      navigator.clipboard.writeText(job.cadDrawingLink!);
+                      toast({ title: "Link copied to clipboard" });
+                    }}
+                    data-testid="button-copy-cad-link"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No CAD drawing link added yet. Click the edit button to add one.
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Connection Links Section */}
           <Card>

@@ -112,6 +112,9 @@ export const jobs = pgTable("jobs", {
   customMarkupPercent: decimal("custom_markup_percent", { precision: 5, scale: 2 }), // Override markup %
   hideClientCostBreakdown: boolean("hide_client_cost_breakdown").default(true), // Hide profit margins from client
   
+  // CAD Drawing
+  cadDrawingLink: text("cad_drawing_link"), // Link to 3D CAD drawing for client review
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
