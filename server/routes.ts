@@ -9637,7 +9637,29 @@ ${cleanedHtml}`;
         lastCheckedAt: lastCheckedAt ? new Date(lastCheckedAt) : new Date(),
       });
 
-      res.status(201).json(product);
+      // Also add to Product Catalog for use in quotes
+      const catalogDescription = [
+        brand ? `Brand: ${brand}` : null,
+        storeName ? `Supplier: ${storeName}` : null,
+        sizeLabel ? `Size: ${sizeLabel}` : null,
+        productUrl ? `URL: ${productUrl}` : null,
+      ].filter(Boolean).join(' | ');
+
+      const catalogItem = await storage.createCatalogItem({
+        name: productName,
+        description: catalogDescription || undefined,
+        type: "product",
+        sku: sku || undefined,
+        unitPrice: price.toString(),
+        unitOfMeasure: sizeUnit || "each",
+        defaultQuantity: "1",
+        isActive: true,
+        isFavorite: false,
+        taxable: true,
+      });
+
+      // Return product with catalogItemId for backwards compatibility
+      res.status(201).json({ ...product, catalogItemId: catalogItem.id });
     } catch (error) {
       console.error("Product import error:", error);
       res.status(500).json({ message: "Failed to import product" });
