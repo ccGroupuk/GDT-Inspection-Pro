@@ -9627,7 +9627,7 @@ ${cleanedHtml}`;
         storeName,
         price: price.toString(),
         currency: currency || 'GBP',
-        sizeValue: sizeValue || null,
+        sizeValue: sizeValue ? Math.round(Number(sizeValue)) : null,
         sizeUnit: sizeUnit || null,
         sizeLabel: sizeLabel || null,
         productUrl: productUrl || null,
