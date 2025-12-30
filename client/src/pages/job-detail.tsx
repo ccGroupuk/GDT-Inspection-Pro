@@ -559,6 +559,7 @@ export default function JobDetail() {
       setNewItemDescription("");
       setNewItemQuantity("1");
       setNewItemUnitPrice("");
+      setCatalogSearchInChangeOrder("");
       toast({ title: "Item added" });
     },
     onError: () => {
