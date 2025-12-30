@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Pencil, Trash2, Users, Clock, Wallet, Search, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Clock, Wallet, Search, ExternalLink, KeyRound, Eye, EyeOff } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import type { Employee } from "@shared/schema";
@@ -20,6 +20,9 @@ export default function EmployeesAdmin() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [resetPasswordEmployee, setResetPasswordEmployee] = useState<Employee | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -76,6 +79,25 @@ export default function EmployeesAdmin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       toast({ title: "Employee Deleted", description: "The employee has been removed." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ id, newPassword }: { id: string; newPassword: string }) => {
+      const res = await apiRequest("POST", `/api/employees/${id}/reset-password`, { newPassword });
+      return res.json();
+    },
+    onSuccess: () => {
+      setResetPasswordEmployee(null);
+      setNewPassword("");
+      setShowNewPassword(false);
+      toast({ 
+        title: "Password Reset", 
+        description: "Password has been reset. Employee must change it on next login." 
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -526,6 +548,19 @@ export default function EmployeesAdmin() {
                           variant="ghost" 
                           size="icon"
                           onClick={() => {
+                            setResetPasswordEmployee(employee);
+                            setNewPassword("");
+                            setShowNewPassword(false);
+                          }}
+                          title="Reset Password"
+                          data-testid={`button-reset-password-${employee.id}`}
+                        >
+                          <KeyRound className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => {
                             if (confirm("Are you sure you want to delete this employee?")) {
                               deleteMutation.mutate(employee.id);
                             }
@@ -543,6 +578,59 @@ export default function EmployeesAdmin() {
           )}
         </CardContent>
       </Card>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetPasswordEmployee} onOpenChange={(open) => !open && setResetPasswordEmployee(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Reset password for {resetPasswordEmployee?.firstName} {resetPasswordEmployee?.lastName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>New Password</Label>
+              <div className="relative">
+                <Input
+                  type={showNewPassword ? "text" : "password"}
+                  placeholder="Enter new password (min 6 characters)"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  data-testid="input-reset-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  data-testid="button-toggle-reset-password"
+                >
+                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                The employee will be required to change this password on their next login.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetPasswordEmployee(null)}>Cancel</Button>
+            <Button 
+              onClick={() => {
+                if (resetPasswordEmployee && newPassword.length >= 6) {
+                  resetPasswordMutation.mutate({ id: resetPasswordEmployee.id, newPassword });
+                }
+              }}
+              disabled={resetPasswordMutation.isPending || newPassword.length < 6}
+              data-testid="button-confirm-reset-password"
+            >
+              {resetPasswordMutation.isPending ? "Resetting..." : "Reset Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

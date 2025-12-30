@@ -6908,6 +6908,45 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     }
   });
 
+  // Reset employee password (admin only)
+  app.post("/api/employees/:id/reset-password", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      const employee = await storage.getEmployee(req.params.id);
+      
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      const existing = await storage.getEmployeeCredential(employee.id);
+      
+      if (existing) {
+        await storage.updateEmployeeCredential(employee.id, { 
+          passwordHash,
+          mustChangePassword: true,
+          failedLoginAttempts: 0,
+          lockedUntil: null
+        });
+      } else {
+        await storage.createEmployeeCredential({
+          employeeId: employee.id,
+          passwordHash,
+          mustChangePassword: true
+        });
+      }
+
+      res.json({ message: "Password reset successfully. Employee must change password on next login." });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
   // Time Entries (admin only - employees use /api/employee/* routes)
   app.get("/api/time-entries", isAdminAuthenticated, async (req, res) => {
     try {
