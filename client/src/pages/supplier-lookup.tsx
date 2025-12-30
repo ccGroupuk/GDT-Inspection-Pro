@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, ExternalLink, Save, Package, Loader2, Store, Check, AlertTriangle, CheckCircle } from "lucide-react";
+import { Search, ExternalLink, Save, Package, Loader2, Store, Check, AlertTriangle, CheckCircle, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +63,21 @@ export default function SupplierLookup() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<ProductResult[]>([]);
   const [savedProductIds, setSavedProductIds] = useState<Set<string>>(new Set());
+  const [priceOverrides, setPriceOverrides] = useState<Record<number, string>>({});
+  const [editingPrice, setEditingPrice] = useState<number | null>(null);
   const { toast } = useToast();
+
+  const getDisplayPrice = (index: number, originalPrice: number | null): number | null => {
+    if (priceOverrides[index] !== undefined) {
+      const parsed = parseFloat(priceOverrides[index]);
+      return isNaN(parsed) ? originalPrice : parsed;
+    }
+    return originalPrice;
+  };
+
+  const isPriceOverridden = (index: number): boolean => {
+    return priceOverrides[index] !== undefined && priceOverrides[index] !== '';
+  };
 
   const { data: savedProducts = [] } = useQuery<SavedProduct[]>({
     queryKey: ["/api/products"],
@@ -92,6 +106,8 @@ export default function SupplierLookup() {
     onSuccess: (results) => {
       setSearchResults(results);
       setSavedProductIds(new Set());
+      setPriceOverrides({});
+      setEditingPrice(null);
       if (results.length === 0) {
         toast({
           title: "No results found",
@@ -165,8 +181,14 @@ export default function SupplierLookup() {
     searchMutation.mutate(searchQuery.trim());
   };
 
-  const handleSave = (product: ProductResult) => {
-    importMutation.mutate(product);
+  const handleSave = (product: ProductResult, index: number) => {
+    const overriddenPrice = getDisplayPrice(index, product.price);
+    const productToSave = {
+      ...product,
+      price: overriddenPrice,
+      source: isPriceOverridden(index) ? 'manual' as PriceSource : product.source,
+    };
+    importMutation.mutate(productToSave);
   };
 
   return (
@@ -259,30 +281,67 @@ export default function SupplierLookup() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right space-y-1">
-                      <div className="text-2xl font-bold" data-testid={`text-product-price-${index}`}>
-                        £{product.price?.toFixed(2) ?? "N/A"}
-                      </div>
-                      {(() => {
-                        const sourceInfo = getSourceLabel(product.source);
-                        return (
-                          <Badge 
-                            variant={sourceInfo.isReal ? "default" : "secondary"} 
-                            className={`text-xs ${!sourceInfo.isReal ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' : ''}`}
-                          >
-                            {sourceInfo.isReal ? (
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                            ) : (
-                              <AlertTriangle className="h-3 w-3 mr-1" />
-                            )}
-                            {sourceInfo.label}
-                          </Badge>
-                        );
-                      })()}
-                      {product.inStock !== null && (
-                        <Badge variant={product.inStock ? "outline" : "destructive"} className="text-xs ml-1">
-                          {product.inStock ? "In Stock" : "Out of Stock"}
-                        </Badge>
+                      {editingPrice === index ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-lg font-bold">£</span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={priceOverrides[index] ?? product.price?.toString() ?? ''}
+                            onChange={(e) => setPriceOverrides(prev => ({ ...prev, [index]: e.target.value }))}
+                            onBlur={() => setEditingPrice(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') setEditingPrice(null);
+                            }}
+                            className="w-24 text-right font-bold"
+                            autoFocus
+                            data-testid={`input-price-override-${index}`}
+                          />
+                        </div>
+                      ) : (
+                        <div 
+                          className="flex items-center gap-1 cursor-pointer group"
+                          onClick={() => setEditingPrice(index)}
+                          data-testid={`text-product-price-${index}`}
+                        >
+                          <span className="text-2xl font-bold">
+                            £{getDisplayPrice(index, product.price)?.toFixed(2) ?? "N/A"}
+                          </span>
+                          <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
                       )}
+                      <div className="flex flex-wrap gap-1 justify-end">
+                        {isPriceOverridden(index) ? (
+                          <Badge 
+                            variant="default" 
+                            className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            Manual Override
+                          </Badge>
+                        ) : (() => {
+                          const sourceInfo = getSourceLabel(product.source);
+                          return (
+                            <Badge 
+                              variant={sourceInfo.isReal ? "default" : "secondary"} 
+                              className={`text-xs ${!sourceInfo.isReal ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' : ''}`}
+                            >
+                              {sourceInfo.isReal ? (
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                              ) : (
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                              )}
+                              {sourceInfo.label}
+                            </Badge>
+                          );
+                        })()}
+                        {product.inStock !== null && (
+                          <Badge variant={product.inStock ? "outline" : "destructive"} className="text-xs">
+                            {product.inStock ? "In Stock" : "Out of Stock"}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <div className="flex flex-col gap-2">
                       {product.productUrl && (
@@ -300,7 +359,7 @@ export default function SupplierLookup() {
                       )}
                       <Button
                         size="sm"
-                        onClick={() => handleSave(product)}
+                        onClick={() => handleSave(product, index)}
                         disabled={importMutation.isPending || savedProductIds.has(product.productUrl)}
                         data-testid={`button-save-${index}`}
                       >
