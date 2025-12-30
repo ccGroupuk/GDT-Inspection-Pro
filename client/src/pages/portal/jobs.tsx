@@ -8,8 +8,9 @@ import { usePortalAuth, portalApiRequest } from "@/hooks/use-portal-auth";
 import { StatusBadge } from "@/components/status-badge";
 import { PortalMessagesDisplay } from "@/components/portal-messages-display";
 import { useTabNotification } from "@/hooks/use-tab-notification";
-import { ChevronRight, Briefcase, MapPin } from "lucide-react";
+import { ChevronRight, Briefcase, MapPin, Bell, Phone, MessageSquare, Mail, CheckCircle, Clock } from "lucide-react";
 import { useEffect } from "react";
+import { formatDistanceToNow } from "date-fns";
 
 interface PortalJob {
   id: string;
@@ -23,6 +24,26 @@ interface PortalJob {
   totalWithChangeOrders?: string;
   hasChangeOrders?: boolean;
 }
+
+interface PortalActivity {
+  id: string;
+  type: string;
+  direction: string;
+  date: string;
+  outcome: string | null;
+  hasFollowUp: boolean;
+}
+
+const ACTIVITY_LABELS: Record<string, { label: string; icon: typeof Phone }> = {
+  phone_call: { label: "Phone Call", icon: Phone },
+  text_message: { label: "Text Message", icon: MessageSquare },
+  email: { label: "Email", icon: Mail },
+  facebook_message: { label: "Facebook Message", icon: MessageSquare },
+  website_enquiry: { label: "Website Enquiry", icon: Mail },
+  site_visit: { label: "Site Visit", icon: Briefcase },
+  quote_sent: { label: "Quote Sent", icon: Mail },
+  follow_up: { label: "Follow Up", icon: Clock },
+};
 
 export default function PortalJobs() {
   const { token, isAuthenticated } = usePortalAuth();
@@ -53,14 +74,83 @@ export default function PortalJobs() {
     enabled: !!token,
   });
 
+  const { data: activities = [] } = useQuery<PortalActivity[]>({
+    queryKey: ["/api/portal/activities"],
+    queryFn: async () => {
+      if (!token) throw new Error("No token");
+      const response = await portalApiRequest("GET", "/api/portal/activities", token);
+      if (!response.ok) {
+        return [];
+      }
+      return response.json();
+    },
+    enabled: !!token,
+  });
+
   if (!isAuthenticated) {
     return null;
   }
+
+  const getActivityInfo = (type: string) => {
+    return ACTIVITY_LABELS[type] || { label: type, icon: Bell };
+  };
 
   return (
     <PortalLayout>
       <div className="space-y-6">
         <PortalMessagesDisplay portalType="client" accessToken={token || ""} />
+        
+        {activities.length > 0 && (
+          <Card data-testid="card-recent-activity">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Bell className="h-4 w-4 text-primary" />
+                <CardTitle className="text-base">Recent Activity</CardTitle>
+                <Badge variant="secondary" className="ml-auto">
+                  {activities.length} update{activities.length !== 1 ? "s" : ""}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-3">
+                {activities.slice(0, 5).map((activity) => {
+                  const info = getActivityInfo(activity.type);
+                  const Icon = info.icon;
+                  return (
+                    <div
+                      key={activity.id}
+                      className="flex items-start gap-3 py-2 border-b last:border-0"
+                      data-testid={`activity-item-${activity.id}`}
+                    >
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted shrink-0">
+                        <Icon className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{info.label}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {activity.direction === "inbound" ? "From CCC" : "To you"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span>{formatDistanceToNow(new Date(activity.date), { addSuffix: true })}</span>
+                          {activity.outcome && (
+                            <>
+                              <span className="mx-1">-</span>
+                              <CheckCircle className="h-3 w-3" />
+                              <span className="capitalize">{activity.outcome.replace(/_/g, " ")}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
         
         <div>
           <h1 className="text-2xl font-semibold" data-testid="text-jobs-title">My Jobs</h1>

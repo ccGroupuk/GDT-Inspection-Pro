@@ -1971,6 +1971,43 @@ export async function registerRoutes(
     }
   });
 
+  // Get recent activities for client portal (notifications)
+  app.get("/api/portal/activities", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Get activities linked to this contact
+      const allActivities = await storage.getDailyActivities();
+      const contactActivities = allActivities
+        .filter(a => a.contactId === access.contactId)
+        .sort((a, b) => new Date(b.activityDate).getTime() - new Date(a.activityDate).getTime())
+        .slice(0, 10); // Last 10 activities
+      
+      // Format for client display (hide internal notes)
+      const clientActivities = contactActivities.map(a => ({
+        id: a.id,
+        type: a.activityType,
+        direction: a.direction,
+        date: a.activityDate,
+        outcome: a.outcome,
+        hasFollowUp: !!a.followUpDate,
+      }));
+      
+      res.json(clientActivities);
+    } catch (error) {
+      console.error("Portal activities error:", error);
+      res.status(500).json({ message: "Failed to load activities" });
+    }
+  });
+
   // Set password for client portal (optional security)
   app.post("/api/portal/set-password", async (req, res) => {
     try {
