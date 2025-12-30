@@ -69,6 +69,10 @@ import {
   Link2,
   Tag,
   Box,
+  Bookmark,
+  Copy,
+  Check,
+  Info,
 } from "lucide-react";
 import type { CapturedProduct, Supplier, Job } from "@shared/schema";
 
@@ -98,6 +102,132 @@ const captureProductSchema = z.object({
 
 type CaptureProductFormData = z.infer<typeof captureProductSchema>;
 
+// Generate the bookmarklet code
+const generateBookmarkletCode = (baseUrl: string) => {
+  // This script runs on supplier websites to extract product data
+  const script = `
+(function() {
+  var CRM_URL = '${baseUrl}';
+  
+  // Supplier detection patterns
+  var suppliers = {
+    'diy.com': 'B&Q',
+    'screwfix.com': 'Screwfix',
+    'howdens.com': 'Howdens',
+    'toolstation.com': 'Toolstation',
+    'travisperkins.co.uk': 'Travis Perkins',
+    'selcobw.com': 'Selco',
+    'wickes.co.uk': 'Wickes',
+    'jewson.co.uk': 'Jewson'
+  };
+  
+  // Detect supplier from URL
+  var supplierName = 'Unknown';
+  for (var domain in suppliers) {
+    if (window.location.hostname.includes(domain)) {
+      supplierName = suppliers[domain];
+      break;
+    }
+  }
+  
+  // Generic product extraction
+  function getText(selectors) {
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el && el.textContent.trim()) return el.textContent.trim();
+    }
+    return '';
+  }
+  
+  function getPrice(selectors) {
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el) {
+        var text = el.textContent.replace(/[^0-9.]/g, '');
+        if (text) return text;
+      }
+    }
+    return '';
+  }
+  
+  // Common selectors for product data
+  var titleSelectors = [
+    'h1[data-testid*="title"]', 'h1.product-title', 'h1.product-name',
+    '[data-testid="product-title"]', '.product-title h1', '#productTitle',
+    'h1[itemprop="name"]', '.pdp-title h1', 'h1'
+  ];
+  
+  var priceSelectors = [
+    '[data-testid*="price"]', '.product-price', '.price-value',
+    '[itemprop="price"]', '.pdp-price', '.price', '.current-price',
+    '.product-price-amount', '.price-amount'
+  ];
+  
+  var skuSelectors = [
+    '[data-testid*="sku"]', '.product-code', '.sku', '.product-sku',
+    '[itemprop="sku"]', '.item-code', '.part-number'
+  ];
+  
+  var imageSelectors = [
+    'img[data-testid*="product"]', '.product-image img', '.pdp-image img',
+    '[itemprop="image"]', '.gallery-image img', '.product-gallery img'
+  ];
+  
+  // Extract product data
+  var product = {
+    productTitle: getText(titleSelectors) || document.title.split('|')[0].trim(),
+    price: getPrice(priceSelectors),
+    sku: getText(skuSelectors).replace(/[^a-zA-Z0-9-]/g, ''),
+    productUrl: window.location.href,
+    supplierName: supplierName,
+    unit: 'each',
+    imageUrl: ''
+  };
+  
+  // Try to get image
+  for (var i = 0; i < imageSelectors.length; i++) {
+    var img = document.querySelector(imageSelectors[i]);
+    if (img && img.src) {
+      product.imageUrl = img.src;
+      break;
+    }
+  }
+  
+  // Show confirmation popup
+  var confirmed = confirm(
+    'Capture this product to CCC CRM?\\n\\n' +
+    'Product: ' + product.productTitle.substring(0, 50) + '...\\n' +
+    'Price: £' + (product.price || 'Not found') + '\\n' +
+    'SKU: ' + (product.sku || 'Not found') + '\\n' +
+    'Supplier: ' + product.supplierName
+  );
+  
+  if (!confirmed) return;
+  
+  // Send to CRM
+  fetch(CRM_URL + '/api/captured-products/bookmarklet', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(product)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.success) {
+      alert('Product captured! Check the Product Finder in your CRM.');
+    } else {
+      alert('Error: ' + (data.message || 'Failed to capture product'));
+    }
+  })
+  .catch(function(e) {
+    alert('Error: Could not connect to CRM. Make sure you are logged in.');
+  });
+})();
+  `.trim().replace(/\s+/g, ' ');
+  
+  return `javascript:${encodeURIComponent(script)}`;
+};
+
 export default function ProductFinder() {
   const [captureDialogOpen, setCaptureDialogOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
@@ -107,6 +237,8 @@ export default function ProductFinder() {
   const [selectedJobId, setSelectedJobId] = useState<string>("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [bookmarkletCopied, setBookmarkletCopied] = useState(false);
+  const [showBookmarkletInstructions, setShowBookmarkletInstructions] = useState(false);
   const [productToDelete, setProductToDelete] = useState<CapturedProduct | null>(null);
   
   const { toast } = useToast();
@@ -264,6 +396,78 @@ export default function ProductFinder() {
         </TabsList>
 
         <TabsContent value="suppliers" className="space-y-4">
+          {/* One-Click Bookmarklet Card */}
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <Bookmark className="h-5 w-5 text-primary" />
+                One-Click Product Capture
+              </CardTitle>
+              <CardDescription>
+                Install this bookmarklet in your browser to capture products with a single click from any supplier website
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <a
+                  href={generateBookmarkletCode(window.location.origin)}
+                  onClick={(e) => e.preventDefault()}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("text/uri-list", generateBookmarkletCode(window.location.origin));
+                    e.dataTransfer.setData("text/plain", generateBookmarkletCode(window.location.origin));
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground font-medium cursor-grab active:cursor-grabbing"
+                  data-testid="link-bookmarklet"
+                >
+                  <Package className="h-4 w-4" />
+                  CCC Product Capture
+                </a>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generateBookmarkletCode(window.location.origin));
+                    setBookmarkletCopied(true);
+                    setTimeout(() => setBookmarkletCopied(false), 2000);
+                    toast({ title: "Bookmarklet code copied to clipboard" });
+                  }}
+                  data-testid="button-copy-bookmarklet"
+                >
+                  {bookmarkletCopied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                  {bookmarkletCopied ? "Copied" : "Copy Code"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowBookmarkletInstructions(!showBookmarkletInstructions)}
+                  data-testid="button-show-instructions"
+                >
+                  <Info className="h-4 w-4 mr-2" />
+                  {showBookmarkletInstructions ? "Hide Instructions" : "How to Install"}
+                </Button>
+              </div>
+              
+              {showBookmarkletInstructions && (
+                <div className="rounded-md bg-muted p-4 space-y-3 text-sm">
+                  <h4 className="font-medium">Installation Instructions:</h4>
+                  <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+                    <li><strong>Drag the button</strong> above to your browser's bookmarks bar, OR</li>
+                    <li>Click "Copy Code", then right-click your bookmarks bar and select "Add page" or "Add bookmark"</li>
+                    <li>Give it a name like "CCC Capture" and paste the code as the URL</li>
+                  </ol>
+                  <h4 className="font-medium mt-4">How to Use:</h4>
+                  <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+                    <li>Go to any supplier product page (Screwfix, B&Q, Toolstation, etc.)</li>
+                    <li>Click the bookmarklet in your bookmarks bar</li>
+                    <li>Confirm the captured details in the popup</li>
+                    <li>The product will appear in your Pending Products tab</li>
+                  </ol>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Note: Make sure you're logged into the CRM in another tab for this to work.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -271,7 +475,7 @@ export default function ProductFinder() {
                 Quick Access Trade Suppliers
               </CardTitle>
               <CardDescription>
-                Click a supplier to open their website, then manually capture product details
+                Click a supplier to open their website, then use the bookmarklet or manually capture product details
               </CardDescription>
             </CardHeader>
             <CardContent>
