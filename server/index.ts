@@ -19,7 +19,16 @@ declare module "http" {
 
 // CORS configuration - allow cross-origin requests with credentials from Replit preview subdomains
 app.use(cors({
-  origin: true,  // Reflect the request origin - allows any origin
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, same-origin)
+    if (!origin) return callback(null, true);
+    // Allow any replit.dev or replit.app origins
+    if (origin.includes('replit.dev') || origin.includes('replit.app') || origin.includes('localhost')) {
+      return callback(null, origin);
+    }
+    // Allow same origin
+    return callback(null, true);
+  },
   credentials: true,  // Allow cookies to be sent
 }));
 
