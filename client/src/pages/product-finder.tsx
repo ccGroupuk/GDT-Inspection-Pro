@@ -271,16 +271,6 @@ export default function ProductFinder() {
         quantity: "1",
       });
       
-      // Try to find matching supplier in database
-      if (supplierName && suppliers.length > 0) {
-        const dbSupplier = suppliers.find(s => 
-          s.name.toLowerCase() === supplierName.toLowerCase()
-        );
-        if (dbSupplier) {
-          form.setValue("supplierId", dbSupplier.id);
-        }
-      }
-      
       setSelectedSupplier(supplierName);
       setCaptureDialogOpen(true);
       setBookmarkletDataProcessed(true);
@@ -288,7 +278,26 @@ export default function ProductFinder() {
       // Clean up URL without reloading
       window.history.replaceState({}, "", "/product-finder");
     }
-  }, [searchString, suppliers, bookmarkletDataProcessed, form]);
+  }, [searchString, bookmarkletDataProcessed, form]);
+
+  // Match supplier ID when supplier data loads (separate effect to handle async loading)
+  useEffect(() => {
+    if (!bookmarkletDataProcessed) return;
+    if (suppliers.length === 0) return;
+    
+    const currentSupplierName = form.getValues("supplierName");
+    const currentSupplierId = form.getValues("supplierId");
+    
+    // Only set supplierId if we have a supplier name but no ID yet
+    if (currentSupplierName && !currentSupplierId) {
+      const dbSupplier = suppliers.find(s => 
+        s.name.toLowerCase() === currentSupplierName.toLowerCase()
+      );
+      if (dbSupplier) {
+        form.setValue("supplierId", dbSupplier.id);
+      }
+    }
+  }, [suppliers, bookmarkletDataProcessed, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: CaptureProductFormData) => {
