@@ -31,7 +31,7 @@ Return ONLY valid JSON array with this exact structure (no markdown, no explanat
     "productUrl": "https://www.diy.com/departments/product-name/12345",
     "sku": "12345678",
     "inStock": true,
-    "imageUrl": "https://media.diy.com/is/image/Kingfisher/product-image-12345"
+    "category": "paint"
   }
 ]
 
@@ -43,7 +43,7 @@ Rules:
 - Make product names specific and realistic
 - Include size/quantity where applicable
 - Sort by price (lowest first)
-- Include realistic product image URLs from the store's CDN (use patterns like media.diy.com, media.screwfix.com, media.toolstation.com, media.wickes.co.uk)`
+- Include a category for each product (paint, wood, screws, tools, adhesive, sealant, electrical, plumbing, flooring, hardware)`
         },
         {
           role: 'user',
@@ -69,6 +69,12 @@ Rules:
       return [];
     }
 
+    // Category to placeholder image mapping using picsum
+    const getCategoryImage = (category: string): string => {
+      const seed = category?.toLowerCase() || 'product';
+      return `https://picsum.photos/seed/${seed}/200/200`;
+    };
+
     // Map to ProductResult format
     const results: ProductResult[] = products.map(p => ({
       productName: p.productName || '',
@@ -83,7 +89,7 @@ Rules:
       sku: p.sku || null,
       inStock: p.inStock ?? null,
       lastCheckedAt: new Date(),
-      imageUrl: p.imageUrl || null,
+      imageUrl: getCategoryImage(p.category),
     }));
 
     console.log(`[ai-search] Found ${results.length} products for "${query}"`);

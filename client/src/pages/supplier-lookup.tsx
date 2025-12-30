@@ -209,19 +209,24 @@ export default function SupplierLookup() {
             <Card key={index} data-testid={`card-product-result-${index}`}>
               <CardContent className="p-4">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                  <div className="w-20 h-20 flex-shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                    {product.imageUrl ? (
-                      <img 
-                        src={product.imageUrl} 
-                        alt={product.productName}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                        }}
-                      />
-                    ) : null}
-                    <Package className={`h-8 w-8 text-muted-foreground ${product.imageUrl ? 'hidden' : ''}`} />
+                  <div className="w-20 h-20 flex-shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden relative">
+                    <img 
+                      src={product.imageUrl || ''} 
+                      alt={product.productName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const img = e.target as HTMLImageElement;
+                        img.style.display = 'none';
+                        const fallback = img.parentElement?.querySelector('.fallback-icon');
+                        if (fallback) fallback.classList.remove('hidden');
+                      }}
+                      onLoad={(e) => {
+                        const img = e.target as HTMLImageElement;
+                        const fallback = img.parentElement?.querySelector('.fallback-icon');
+                        if (fallback) fallback.classList.add('hidden');
+                      }}
+                    />
+                    <Package className="fallback-icon h-8 w-8 text-muted-foreground absolute" />
                   </div>
                   <div className="flex-1 space-y-2">
                     <div className="flex items-start gap-2 flex-wrap">
