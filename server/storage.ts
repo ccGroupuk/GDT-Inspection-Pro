@@ -70,6 +70,7 @@ import {
   jobChatMessages, type JobChatMessage, type InsertJobChatMessage,
   jobChatMessageReads, type JobChatMessageRead, type InsertJobChatMessageRead,
   teamActivityLog, type TeamActivityLog, type InsertTeamActivityLog,
+  capturedProducts, type CapturedProduct, type InsertCapturedProduct,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -561,6 +562,15 @@ export interface IStorage {
   getTeamActivityLog(limit: number): Promise<TeamActivityLog[]>;
   getTeamActivityLogByEmployee(employeeId: string, limit: number): Promise<TeamActivityLog[]>;
   createTeamActivityLog(activity: InsertTeamActivityLog): Promise<TeamActivityLog>;
+
+  // Captured Products (Supplier Product Finder)
+  getCapturedProducts(employeeId?: string): Promise<CapturedProduct[]>;
+  getCapturedProductsByJob(jobId: string): Promise<CapturedProduct[]>;
+  getCapturedProductsByStatus(status: string): Promise<CapturedProduct[]>;
+  getCapturedProduct(id: string): Promise<CapturedProduct | undefined>;
+  createCapturedProduct(product: InsertCapturedProduct): Promise<CapturedProduct>;
+  updateCapturedProduct(id: string, product: Partial<InsertCapturedProduct>): Promise<CapturedProduct | undefined>;
+  deleteCapturedProduct(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2790,6 +2800,51 @@ export class DatabaseStorage implements IStorage {
   async createTeamActivityLog(activity: InsertTeamActivityLog): Promise<TeamActivityLog> {
     const [created] = await db.insert(teamActivityLog).values(activity).returning();
     return created;
+  }
+
+  // Captured Products (Supplier Product Finder)
+  async getCapturedProducts(employeeId?: string): Promise<CapturedProduct[]> {
+    if (employeeId) {
+      return db.select().from(capturedProducts)
+        .where(eq(capturedProducts.capturedBy, employeeId))
+        .orderBy(desc(capturedProducts.capturedAt));
+    }
+    return db.select().from(capturedProducts).orderBy(desc(capturedProducts.capturedAt));
+  }
+
+  async getCapturedProductsByJob(jobId: string): Promise<CapturedProduct[]> {
+    return db.select().from(capturedProducts)
+      .where(eq(capturedProducts.jobId, jobId))
+      .orderBy(desc(capturedProducts.capturedAt));
+  }
+
+  async getCapturedProductsByStatus(status: string): Promise<CapturedProduct[]> {
+    return db.select().from(capturedProducts)
+      .where(eq(capturedProducts.status, status))
+      .orderBy(desc(capturedProducts.capturedAt));
+  }
+
+  async getCapturedProduct(id: string): Promise<CapturedProduct | undefined> {
+    const [product] = await db.select().from(capturedProducts).where(eq(capturedProducts.id, id));
+    return product || undefined;
+  }
+
+  async createCapturedProduct(product: InsertCapturedProduct): Promise<CapturedProduct> {
+    const [created] = await db.insert(capturedProducts).values(product).returning();
+    return created;
+  }
+
+  async updateCapturedProduct(id: string, product: Partial<InsertCapturedProduct>): Promise<CapturedProduct | undefined> {
+    const [updated] = await db.update(capturedProducts)
+      .set(product)
+      .where(eq(capturedProducts.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteCapturedProduct(id: string): Promise<boolean> {
+    await db.delete(capturedProducts).where(eq(capturedProducts.id, id));
+    return true;
   }
 }
 

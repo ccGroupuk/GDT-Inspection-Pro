@@ -10,6 +10,7 @@ import {
   Building2,
   Settings,
   PoundSterling,
+  Scan,
   Calendar,
   Megaphone,
   HelpCircle,
@@ -98,6 +99,11 @@ const menuItems = [
     title: "Suppliers",
     url: "/suppliers",
     icon: Building2,
+  },
+  {
+    title: "Product Finder",
+    url: "/product-finder",
+    icon: Scan,
   },
   {
     title: "Tools & Vehicles",

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema, insertSeoBusinessProfileSchema, insertSeoGoogleBusinessLocationSchema, insertSeoMediaLibrarySchema, insertSeoBrandVoiceSchema, insertSeoWeeklyFocusSchema, insertSeoJobMediaSchema, insertSeoContentPostSchema, insertEmployeeSchema, insertTimeEntrySchema, insertPayPeriodSchema, insertPayrollRunSchema, insertPayrollAdjustmentSchema, insertEmployeeDocumentSchema, insertInternalMessageSchema, insertJobChatMessageSchema, type Employee } from "@shared/schema";
+import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertTaskSchema, insertPaymentRequestSchema, insertCompanySettingSchema, insertInvoiceSchema, insertJobNoteSchema, insertFinancialCategorySchema, insertFinancialTransactionSchema, insertCalendarEventSchema, insertPartnerAvailabilitySchema, insertJobScheduleProposalSchema, insertSeoBusinessProfileSchema, insertSeoGoogleBusinessLocationSchema, insertSeoMediaLibrarySchema, insertSeoBrandVoiceSchema, insertSeoWeeklyFocusSchema, insertSeoJobMediaSchema, insertSeoContentPostSchema, insertEmployeeSchema, insertTimeEntrySchema, insertPayPeriodSchema, insertPayrollRunSchema, insertPayrollAdjustmentSchema, insertEmployeeDocumentSchema, insertInternalMessageSchema, insertJobChatMessageSchema, insertCapturedProductSchema, type Employee } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -9142,6 +9142,231 @@ export function registerChecklistRoutes(app: Express) {
     } catch (error) {
       console.error("Get communications dashboard error:", error);
       res.status(500).json({ message: "Failed to get communications dashboard" });
+    }
+  });
+
+  // ==================== Captured Products (Supplier Product Finder) ====================
+  
+  // Get captured products - optionally filter by employee
+  app.get("/api/captured-products", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const employeeId = req.query.employeeId as string | undefined;
+      const products = await storage.getCapturedProducts(employeeId);
+      res.json(products);
+    } catch (error) {
+      console.error("Get captured products error:", error);
+      res.status(500).json({ message: "Failed to get captured products" });
+    }
+  });
+
+  // Get captured products by job
+  app.get("/api/captured-products/job/:jobId", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const products = await storage.getCapturedProductsByJob(req.params.jobId);
+      res.json(products);
+    } catch (error) {
+      console.error("Get captured products by job error:", error);
+      res.status(500).json({ message: "Failed to get captured products" });
+    }
+  });
+
+  // Get captured products by status
+  app.get("/api/captured-products/status/:status", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const products = await storage.getCapturedProductsByStatus(req.params.status);
+      res.json(products);
+    } catch (error) {
+      console.error("Get captured products by status error:", error);
+      res.status(500).json({ message: "Failed to get captured products" });
+    }
+  });
+
+  // Get single captured product
+  app.get("/api/captured-products/:id", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const product = await storage.getCapturedProduct(req.params.id);
+      if (!product) {
+        return res.status(404).json({ message: "Captured product not found" });
+      }
+      res.json(product);
+    } catch (error) {
+      console.error("Get captured product error:", error);
+      res.status(500).json({ message: "Failed to get captured product" });
+    }
+  });
+
+  // Create captured product
+  app.post("/api/captured-products", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const parseResult = insertCapturedProductSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid product data", errors: parseResult.error.errors });
+      }
+      const product = await storage.createCapturedProduct({
+        ...parseResult.data,
+        capturedBy: employee.id,
+      });
+      res.status(201).json(product);
+    } catch (error) {
+      console.error("Create captured product error:", error);
+      res.status(500).json({ message: "Failed to create captured product" });
+    }
+  });
+
+  // Update captured product
+  app.patch("/api/captured-products/:id", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const parseResult = insertCapturedProductSchema.partial().safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid product data", errors: parseResult.error.errors });
+      }
+      const product = await storage.updateCapturedProduct(req.params.id, parseResult.data);
+      if (!product) {
+        return res.status(404).json({ message: "Captured product not found" });
+      }
+      res.json(product);
+    } catch (error) {
+      console.error("Update captured product error:", error);
+      res.status(500).json({ message: "Failed to update captured product" });
+    }
+  });
+
+  // Delete captured product
+  app.delete("/api/captured-products/:id", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      await storage.deleteCapturedProduct(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete captured product error:", error);
+      res.status(500).json({ message: "Failed to delete captured product" });
+    }
+  });
+
+  // Add captured product to job quote items
+  app.post("/api/captured-products/:id/add-to-quote", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const capturedProduct = await storage.getCapturedProduct(req.params.id);
+      if (!capturedProduct) {
+        return res.status(404).json({ message: "Captured product not found" });
+      }
+      
+      const { jobId } = req.body;
+      if (!jobId) {
+        return res.status(400).json({ message: "Job ID is required" });
+      }
+
+      // Calculate price with markup
+      const basePrice = parseFloat(capturedProduct.price || "0");
+      const markupPercent = parseFloat(capturedProduct.markupPercent || "20");
+      const quantity = parseFloat(capturedProduct.quantity || "1");
+      const unitPriceWithMarkup = basePrice * (1 + markupPercent / 100);
+      
+      // Create quote item - include unit and supplier info in description
+      const lineTotal = (unitPriceWithMarkup * quantity).toFixed(2);
+      const descWithDetails = capturedProduct.sku 
+        ? `${capturedProduct.productTitle} (${capturedProduct.unit || 'each'}) - SKU: ${capturedProduct.sku} | From: ${capturedProduct.supplierName || 'Unknown Supplier'}`
+        : `${capturedProduct.productTitle} (${capturedProduct.unit || 'each'}) - From: ${capturedProduct.supplierName || 'Unknown Supplier'}`;
+      
+      const quoteItem = await storage.createQuoteItem({
+        jobId,
+        description: descWithDetails,
+        quantity: quantity.toString(),
+        unitPrice: unitPriceWithMarkup.toFixed(2),
+        lineTotal,
+      });
+      
+      // Update captured product status
+      await storage.updateCapturedProduct(req.params.id, {
+        status: "added_to_quote",
+        jobId,
+      });
+      
+      res.json({ quoteItem, capturedProduct: await storage.getCapturedProduct(req.params.id) });
+    } catch (error) {
+      console.error("Add to quote error:", error);
+      res.status(500).json({ message: "Failed to add product to quote" });
+    }
+  });
+
+  // Save captured product to permanent catalog
+  app.post("/api/captured-products/:id/save-to-catalog", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const capturedProduct = await storage.getCapturedProduct(req.params.id);
+      if (!capturedProduct) {
+        return res.status(404).json({ message: "Captured product not found" });
+      }
+      
+      const { categoryId } = req.body;
+      
+      // Create catalog item
+      const catalogItem = await storage.createCatalogItem({
+        name: capturedProduct.productTitle,
+        description: capturedProduct.sku ? `SKU: ${capturedProduct.sku}` : undefined,
+        type: "materials",
+        unitOfMeasure: capturedProduct.unit || "each",
+        unitPrice: capturedProduct.price || "0",
+        categoryId: categoryId || undefined,
+      });
+      
+      // If we have a supplier, link it
+      if (capturedProduct.supplierId) {
+        await storage.createSupplierCatalogItem({
+          supplierId: capturedProduct.supplierId,
+          catalogItemId: catalogItem.id,
+          supplierSku: capturedProduct.sku || undefined,
+          supplierPrice: capturedProduct.price,
+          notes: capturedProduct.productUrl ? `Product URL: ${capturedProduct.productUrl}` : undefined,
+        });
+      }
+      
+      // Update captured product status
+      await storage.updateCapturedProduct(req.params.id, {
+        status: "saved_to_catalog",
+        catalogItemId: catalogItem.id,
+      });
+      
+      res.json({ catalogItem, capturedProduct: await storage.getCapturedProduct(req.params.id) });
+    } catch (error) {
+      console.error("Save to catalog error:", error);
+      res.status(500).json({ message: "Failed to save product to catalog" });
     }
   });
 }
