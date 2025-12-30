@@ -1,16 +1,15 @@
 import { ProductResult } from './types';
 import { getJson } from 'serpapi';
 
-const SERPAPI_KEY = process.env.SERPAPI_KEY;
-
 export function isSerpApiConfigured(): boolean {
-  return !!SERPAPI_KEY;
+  return !!process.env.SERPAPI_KEY;
 }
 
 export async function searchProductsWithSerpApi(query: string, limit: number = 3): Promise<ProductResult[]> {
-  console.log(`[serpapi] Searching Google Shopping for "${query}"...`);
+  const apiKey = process.env.SERPAPI_KEY;
+  console.log(`[serpapi] Searching Google Shopping for "${query}"... (API key configured: ${!!apiKey})`);
   
-  if (!SERPAPI_KEY) {
+  if (!apiKey) {
     console.error('[serpapi] SERPAPI_KEY not set');
     return [];
   }
@@ -22,7 +21,7 @@ export async function searchProductsWithSerpApi(query: string, limit: number = 3
       location: "United Kingdom",
       hl: "en",
       gl: "uk",
-      api_key: SERPAPI_KEY,
+      api_key: apiKey,
       num: limit * 2,
     });
 
