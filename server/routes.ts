@@ -1685,7 +1685,22 @@ export async function registerRoutes(
       }
       
       const jobs = await storage.getJobsByContact(access.contactId);
-      res.json(jobs);
+      
+      // Add change orders total to each job
+      const jobsWithChangeOrders = await Promise.all(jobs.map(async (job) => {
+        const changeOrders = await storage.getChangeOrdersByJob(job.id);
+        const visibleChangeOrders = changeOrders.filter(co => co.showInPortal);
+        const changeOrdersTotal = visibleChangeOrders.reduce((sum, co) => sum + parseFloat(co.grandTotal), 0);
+        const originalQuote = parseFloat(job.quotedValue || "0");
+        return {
+          ...job,
+          changeOrdersTotal: changeOrdersTotal.toFixed(2),
+          totalWithChangeOrders: (originalQuote + changeOrdersTotal).toFixed(2),
+          hasChangeOrders: visibleChangeOrders.length > 0,
+        };
+      }));
+      
+      res.json(jobsWithChangeOrders);
     } catch (error) {
       console.error("Portal jobs error:", error);
       res.status(500).json({ message: "Failed to load jobs" });
