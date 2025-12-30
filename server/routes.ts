@@ -9297,98 +9297,77 @@ export function registerChecklistRoutes(app: Express) {
       const html = await fetchResponse.text();
       console.log(`[scrape] Fetched ${html.length} bytes from ${supplierName}`);
 
-      // Extract product data using regex patterns (works without a DOM parser)
+      // Clean HTML to reduce tokens - remove scripts, styles, and excessive whitespace
+      let cleanedHtml = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<link[^>]*>/gi, '')
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      // Truncate to ~15k chars to stay within token limits
+      if (cleanedHtml.length > 15000) {
+        cleanedHtml = cleanedHtml.substring(0, 15000);
+      }
+      console.log(`[scrape] Cleaned HTML to ${cleanedHtml.length} chars`);
+
+      // Use OpenAI to extract product data
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const prompt = `Extract product information from this ${supplierName} product page HTML.
+Return a JSON object with exactly these fields:
+- title: the product name/title (string)
+- price: the price in GBP as a number only, no currency symbol (string like "2.99")
+- sku: the product code/SKU/item number (string)
+
+If you cannot find a value, use null for that field.
+Only return the JSON object, no explanation.
+
+URL: ${url}
+
+HTML:
+${cleanedHtml}`;
+
+      console.log(`[scrape] Calling OpenAI to extract product data...`);
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4.1-mini',
+        messages: [
+          { role: 'system', content: 'You extract product information from HTML and return JSON. Always respond with valid JSON only.' },
+          { role: 'user', content: prompt }
+        ],
+        max_completion_tokens: 200,
+        response_format: { type: 'json_object' },
+      });
+
+      const aiResponse = completion.choices[0]?.message?.content || '{}';
+      console.log(`[scrape] AI response: ${aiResponse}`);
+
+      // Parse AI response with validation
       let productTitle = '';
       let price = '';
       let sku = '';
-
-      // Try to extract SKU from URL first (works for B&Q and others)
-      // B&Q: /58025_BQ.prd -> 58025_BQ
-      // Screwfix: /7363v or /p/name/7363v -> 7363v  
-      // Toolstation: /p72594 or /product-name/p72594 -> 72594
-      const bqMatch = url.match(/\/(\d+_BQ)\.prd/i);
-      const screwfixMatch = url.match(/\/(\d+[a-z]*)(?:[/?]|$)/i);
-      const toolstationMatch = url.match(/\/p(\d+)(?:[/?]|$)/i);
       
-      if (supplierName === 'B&Q' && bqMatch) {
-        sku = bqMatch[1];
-        console.log(`[scrape] Extracted B&Q SKU from URL: ${sku}`);
-      } else if (supplierName === 'Screwfix' && screwfixMatch) {
-        sku = screwfixMatch[1];
-        console.log(`[scrape] Extracted Screwfix SKU from URL: ${sku}`);
-      } else if (supplierName === 'Toolstation' && toolstationMatch) {
-        sku = toolstationMatch[1];
-        console.log(`[scrape] Extracted Toolstation SKU from URL: ${sku}`);
-      }
-
-      // Try to extract title from various patterns
-      const titlePatterns = [
-        /<title[^>]*>([^<]+)<\/title>/i,  // Standard title tag
-        /property="og:title"[^>]*content="([^"]+)"/i,  // Open Graph title
-        /content="([^"]+)"[^>]*property="og:title"/i,  // OG title (attribute order)
-        /<h1[^>]*>([^<]+)<\/h1>/i,
-        /data-product-name="([^"]+)"/i,
-        /"name"\s*:\s*"([^"]+)"/i,
-        /itemprop="name"[^>]*>([^<]+)/i,
-      ];
-      for (const pattern of titlePatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-          productTitle = match[1].trim()
-            .replace(/&amp;/g, '&')
-            .replace(/&#39;/g, "'")
-            .replace(/&quot;/g, '"')
-            .replace(/\s+/g, ' ');
-          // Skip if it's just a site name
-          if (productTitle.length > 3 && !productTitle.match(/^(B&Q|Screwfix|Toolstation|Wickes|Howdens|Selco|Jewson|Travis Perkins)$/i)) {
-            console.log(`[scrape] Extracted title: ${productTitle}`);
-            break;
-          }
-          productTitle = '';
+      try {
+        const parsed = JSON.parse(aiResponse);
+        productTitle = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+        price = parsed.price != null ? String(parsed.price).replace(/[£$,]/g, '').trim() : '';
+        sku = typeof parsed.sku === 'string' ? parsed.sku.trim() : '';
+        
+        // Validate we got at least a title
+        if (!productTitle) {
+          console.warn('[scrape] AI returned empty title, extraction may have failed');
         }
+      } catch (parseError) {
+        console.error('[scrape] Failed to parse AI response:', parseError);
+        return res.status(500).json({ message: "AI failed to extract product data. Please try again or enter details manually." });
       }
 
-      // Try to extract price from HTML
-      const pricePatterns = [
-        /data-price="([\d.]+)"/i,
-        /"price"\s*:\s*"?([\d.]+)"?/i,
-        /itemprop="price"[^>]*content="([\d.]+)"/i,
-        /class="[^"]*price[^"]*"[^>]*>[\s\S]*?£([\d.]+)/i,
-        />£\s*([\d.]+)</,
-        /"salePrice"\s*:\s*([\d.]+)/i,
-        /"currentPrice"\s*:\s*([\d.]+)/i,
-      ];
-      for (const pattern of pricePatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-          price = match[1].trim();
-          console.log(`[scrape] Extracted price: £${price}`);
-          break;
-        }
-      }
-
-      // Try to extract SKU from HTML if not found in URL
-      if (!sku) {
-        const skuPatterns = [
-          /data-sku="([^"]+)"/i,
-          /"sku"\s*:\s*"([^"]+)"/i,
-          /itemprop="sku"[^>]*content="([^"]+)"/i,
-          /product\s*code[:\s]*([A-Z0-9-]+)/i,
-          /item\s*code[:\s]*([A-Z0-9-]+)/i,
-          /sku[:\s]*([A-Z0-9-]+)/i,
-          /part\s*number[:\s]*([A-Z0-9-]+)/i,
-        ];
-        for (const pattern of skuPatterns) {
-          const match = html.match(pattern);
-          if (match && match[1]) {
-            sku = match[1].trim();
-            console.log(`[scrape] Extracted SKU from HTML: ${sku}`);
-            break;
-          }
-        }
-      }
-
-      console.log(`[scrape] Final result - Title: "${productTitle}", SKU: "${sku}", Price: "${price}"`)
+      console.log(`[scrape] Final result - Title: "${productTitle}", SKU: "${sku}", Price: "${price}"`);
 
       // Return extracted data
       res.json({
