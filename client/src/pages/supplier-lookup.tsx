@@ -49,7 +49,18 @@ export default function SupplierLookup() {
 
   const searchMutation = useMutation({
     mutationFn: async (query: string) => {
-      const response = await fetch(`/api/suppliers/search?query=${encodeURIComponent(query)}&limit=3`);
+      const response = await fetch(`/api/suppliers/search?query=${encodeURIComponent(query)}&limit=3`, {
+        credentials: 'include',  // Send cookies for cross-origin requests
+      });
+      if (response.status === 401) {
+        toast({
+          title: "Session expired",
+          description: "Please log in again",
+          variant: "destructive",
+        });
+        window.location.href = "/employee-login";
+        throw new Error("Please log in again");
+      }
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Search failed");
@@ -67,11 +78,13 @@ export default function SupplierLookup() {
       }
     },
     onError: (error: Error) => {
-      toast({
-        title: "Search failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      if (error.message !== "Please log in again") {
+        toast({
+          title: "Search failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -81,7 +94,17 @@ export default function SupplierLookup() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(product),
+        credentials: 'include',  // Send cookies for cross-origin requests
       });
+      if (response.status === 401) {
+        toast({
+          title: "Session expired",
+          description: "Please log in again",
+          variant: "destructive",
+        });
+        window.location.href = "/employee-login";
+        throw new Error("Please log in again");
+      }
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Failed to save product");
@@ -97,11 +120,13 @@ export default function SupplierLookup() {
       });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Failed to save product",
-        description: error.message,
-        variant: "destructive",
-      });
+      if (error.message !== "Please log in again") {
+        toast({
+          title: "Failed to save product",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     },
   });
 
