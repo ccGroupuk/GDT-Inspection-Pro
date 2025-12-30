@@ -9576,6 +9576,24 @@ ${cleanedHtml}`;
     }
   });
 
+  // Get supplier search source status
+  app.get("/api/suppliers/status", async (req, res) => {
+    try {
+      const employee = (req as any).employee;
+      if (!employee) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { getSearchSourceStatus } = await import('./suppliers');
+      const sources = getSearchSourceStatus();
+      
+      res.json({ sources });
+    } catch (error) {
+      console.error("Supplier status error:", error);
+      res.status(500).json({ message: "Failed to get supplier status" });
+    }
+  });
+
   // Import product from supplier search result
   app.post("/api/products/import", async (req, res) => {
     try {
