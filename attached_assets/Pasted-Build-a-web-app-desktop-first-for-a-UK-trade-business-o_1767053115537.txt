@@ -1,0 +1,210 @@
+Build a web app (desktop-first) for a UK trade business owner that combines Work/Life Balance + Business Day Planner + Quoting/Invoices with a Supplier Product Finder.
+The user journey must start with a “Daily Start” flow on login.
+
+1) Login → “Daily Start” Flow (must appear first)
+
+Step A: Life Balance Dashboard (2–3 minutes)
+
+Display: time, today’s date, weather optional
+
+Quick check buttons:
+
+“Drank water in last hour?” (Yes/No)
+
+“Breakfast eaten?” (Yes/No)
+
+“Medication taken?” (Yes/No)
+
+“Stretch / 2 min walk?” (Start timer)
+
+Personal reminders feed:
+
+Cindy (admin role) can add: dentist, kids play dates, family tasks, time cut-offs for work
+
+Auto reminders:
+
+Water: every 60 minutes during working hours
+
+Break: every 2.5–3 hours
+
+“Stop work” cut-off time (editable)
+
+Output of Step A is a “Ready Score” (simple progress bar), then button: “Start Business Day”
+
+Step B: Business Day Planner Overview (single clean screen)
+
+At-a-glance cards:
+
+Today’s schedule (installs, quotes, meetings)
+
+Priority 3 tasks (must-do)
+
+Admin tasks (calls, emails, invoices)
+
+Team activity (what Cindy/team are doing)
+
+“Where I’m meant to be now” indicator:
+
+Uses current time + today schedule to show:
+
+“You should be: Installing / Quoting / Admin / Travel / Break”
+
+Quick action buttons:
+
+“Create Quote”
+
+“Create Invoice”
+
+“Add Task”
+
+“Log Tool/Van Fault”
+
+“Message Cindy”
+
+End of overview: button “Open Work Mode” (goes to main app navigation)
+
+2) Quoting + Invoicing System (core)
+
+Core features
+
+Clients: store client details, address, property notes
+
+Jobs: create job with status pipeline (Enquiry → Estimate → Quote Sent → Accepted → Scheduled → In Progress → Sign-off → Review Request)
+
+Quotes:
+
+Line items: product/material, labour, delivery, margin
+
+Save templates for common jobs
+
+Export PDF
+
+Invoices:
+
+Convert from accepted quote
+
+Deposit and staged payments
+
+Payment status tracking
+
+3) Product Catalog + Supplier Product Finder (the key feature)
+
+Goal: When creating quote/invoice line items, user can add products even if not already stored in the app.
+
+Flow in quote line items
+
+Search bar: “Search my catalog”
+
+If no match: show button “Search Supplier”
+
+Supplier selector list (multi-store support):
+
+B&Q, Howdens, Screwfix, Toolstation, Travis Perkins, Selco, Wickes (admin can add/remove suppliers)
+
+Two modes (implement Mode 1 first, design app to upgrade to Mode 2 later):
+
+Mode 1 (Option 2A): Supplier Link + Capture (MVP)
+
+Open supplier site inside in-app browser (or new tab if easier)
+
+User finds product page
+
+Button: “Capture to Quote”
+
+Capture fields (manual + auto where possible):
+
+supplier_name
+
+product_title
+
+sku_or_product_code
+
+price
+
+unit (each/pack/m/m²)
+
+product_url
+
+image_url (optional)
+
+captured_at timestamp
+
+After capture:
+
+Show confirmation modal:
+
+Quantity input
+
+Markup % (default from settings)
+
+“Add to this quote only” OR “Save to catalog”
+
+“Saved to catalog” creates a new internal product record with:
+
+internal_product_id
+
+supplier reference fields above
+
+category tags (user selects)
+
+Mode 2 (Option 2B): Supplier Aggregator (future upgrade)
+
+Backend service called “Supplier Aggregator”
+
+For supported suppliers, the backend can fetch product results by keyword and return:
+
+title, sku, price, unit, availability (if available), url, image
+
+The UI must allow choosing results from multiple suppliers and adding to quote
+
+Must store “last verified price time”
+
+If supplier fetch fails, fallback to Mode 1 capture
+
+4) Settings + Admin Controls
+
+Roles: Owner, Admin (Cindy), Staff, Trade Partner (optional future)
+
+Supplier management:
+
+Enable/disable suppliers
+
+Add custom supplier (name + homepage URL)
+
+Defaults:
+
+Markup % per category
+
+Labour rates
+
+Reminder intervals + working hours + stop-work cut-off time
+
+Data storage:
+
+database tables for clients, jobs, quotes, invoices, products, captured_products, reminders, tasks, users
+
+5) UX Rules (important)
+
+Must be fast and minimal (trade-owner friendly)
+
+The Day Overview must be “one screen, no clutter”
+
+Every key action should be max 2 clicks away:
+
+Quote, Invoice, Add Product, Add Task
+
+Supplier product capture must feel instant and not “techy”
+
+6) Deliverables
+
+Provide working screens:
+
+Daily Start (Life Balance → Business Overview)
+
+Quotes list + quote builder
+
+Product picker with Supplier Search + Capture
+
+Basic settings page with supplier list
+
+Use clean modern UI with large buttons and clear sections.
