@@ -2759,37 +2759,34 @@ export default function JobDetail() {
                 {!showCatalogInChangeOrder && (
                   <div className="p-4 border rounded-lg space-y-3">
                     <p className="text-sm font-medium">Add Manual Item</p>
-                    <div className="grid grid-cols-12 gap-2">
-                      <div className="col-span-6">
-                        <Input
-                          placeholder="Description"
-                          value={newItemDescription}
-                          onChange={(e) => setNewItemDescription(e.target.value)}
-                          data-testid="input-co-item-description"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <Input
-                          type="number"
-                          placeholder="Qty"
-                          value={newItemQuantity}
-                          onChange={(e) => setNewItemQuantity(e.target.value)}
-                          data-testid="input-co-item-qty"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="Unit £"
-                          value={newItemUnitPrice}
-                          onChange={(e) => setNewItemUnitPrice(e.target.value)}
-                          data-testid="input-co-item-price"
-                        />
-                      </div>
-                      <div className="col-span-2">
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Description"
+                        value={newItemDescription}
+                        onChange={(e) => setNewItemDescription(e.target.value)}
+                        data-testid="input-co-item-description"
+                      />
+                      <div className="flex gap-2 items-center">
+                        <div className="flex-1">
+                          <Input
+                            type="number"
+                            placeholder="Qty"
+                            value={newItemQuantity}
+                            onChange={(e) => setNewItemQuantity(e.target.value)}
+                            data-testid="input-co-item-qty"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Price £"
+                            value={newItemUnitPrice}
+                            onChange={(e) => setNewItemUnitPrice(e.target.value)}
+                            data-testid="input-co-item-price"
+                          />
+                        </div>
                         <Button
-                          className="w-full"
                           size="sm"
                           onClick={() => {
                             if (newItemDescription && newItemUnitPrice) {
@@ -2806,7 +2803,7 @@ export default function JobDetail() {
                           disabled={addChangeOrderItemMutation.isPending || !newItemDescription || !newItemUnitPrice}
                           data-testid="button-add-co-item"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
