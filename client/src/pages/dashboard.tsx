@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { DashboardSkeleton } from "@/components/loading-skeleton";
@@ -17,9 +18,13 @@ import {
   Bell,
   CalendarCheck,
   CalendarClock,
+  UserCheck,
+  Check,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Job, Contact, TradePartner, Task, JobScheduleProposal } from "@shared/schema";
 
 interface DashboardData {
@@ -31,8 +36,19 @@ interface DashboardData {
 }
 
 export default function Dashboard() {
+  const { toast } = useToast();
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ["/api/dashboard"],
+  });
+
+  const acknowledgePartnerAcceptanceMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      return apiRequest("POST", `/api/jobs/${jobId}/acknowledge-partner-acceptance`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      toast({ title: "Partner acceptance acknowledged" });
+    },
   });
 
   if (isLoading) {
@@ -59,6 +75,9 @@ export default function Dashboard() {
   const partnerJobs = jobs.filter(j => j.deliveryType === "partner" || j.deliveryType === "hybrid");
   const inHouseJobs = jobs.filter(j => j.deliveryType === "in_house");
   const pendingTasks = tasks.filter(t => t.status === "pending");
+  const unacknowledgedPartnerAcceptances = jobs.filter(j => 
+    j.partnerStatus === "accepted" && !j.partnerAcceptanceAcknowledged
+  );
   const recentJobs = [...jobs].sort((a, b) => 
     new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
   ).slice(0, 5);
@@ -105,6 +124,60 @@ export default function Dashboard() {
           description="Total quoted value"
         />
       </div>
+
+      {unacknowledgedPartnerAcceptances.length > 0 && (
+        <Card className="border-green-500/30 bg-green-500/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <CardTitle className="text-base font-semibold">Partner Acceptances</CardTitle>
+              <Badge variant="secondary" className="ml-auto">{unacknowledgedPartnerAcceptances.length}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {unacknowledgedPartnerAcceptances.map(job => {
+                const partner = partners.find(p => p.id === job.partnerId);
+                
+                return (
+                  <div 
+                    key={job.id}
+                    className="flex items-center justify-between gap-4 p-3 rounded-lg bg-background"
+                    data-testid={`notification-partner-acceptance-${job.id}`}
+                  >
+                    <Link href={`/jobs/${job.id}`} className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 shrink-0">
+                        <Handshake className="w-4 h-4" />
+                      </div>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-sm font-medium truncate">
+                          {job.jobNumber} - {job.serviceType}
+                        </span>
+                        <span className="text-xs text-muted-foreground truncate">
+                          {partner?.businessName || "Partner"} accepted
+                          {job.partnerRespondedAt && (
+                            <> on {new Date(job.partnerRespondedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</>
+                          )}
+                        </span>
+                      </div>
+                    </Link>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => acknowledgePartnerAcceptanceMutation.mutate(job.id)}
+                      disabled={acknowledgePartnerAcceptanceMutation.isPending}
+                      data-testid={`button-acknowledge-${job.id}`}
+                    >
+                      <Check className="w-4 h-4 mr-1" />
+                      Acknowledge
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {scheduleResponses.length > 0 && (
         <Card className="border-orange-500/30 bg-orange-500/5">

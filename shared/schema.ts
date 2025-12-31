@@ -94,6 +94,7 @@ export const jobs = pgTable("jobs", {
   partnerStatus: text("partner_status"), // offered, accepted, declined, in_progress, completed, invoiced, paid
   partnerRespondedAt: timestamp("partner_responded_at"), // When partner accepted/declined
   partnerDeclineReason: text("partner_decline_reason"), // Reason if declined
+  partnerAcceptanceAcknowledged: boolean("partner_acceptance_acknowledged").default(false), // Admin acknowledged the acceptance
   
   // Partner portal sharing
   shareQuoteWithPartner: boolean("share_quote_with_partner").default(false),

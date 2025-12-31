@@ -419,6 +419,20 @@ export default function JobDetail() {
     },
   });
 
+  const acknowledgePartnerAcceptanceMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/jobs/${id}/acknowledge-partner-acceptance`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      toast({ title: "Partner acceptance acknowledged" });
+    },
+    onError: () => {
+      toast({ title: "Error acknowledging acceptance", variant: "destructive" });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("DELETE", `/api/jobs/${id}`);
@@ -1674,6 +1688,31 @@ export default function JobDetail() {
                         ))}
                       </SelectContent>
                     </Select>
+                    
+                    {job.partnerStatus === "accepted" && !job.partnerAcceptanceAcknowledged && (
+                      <div className="mt-3 p-2 rounded-md bg-green-500/10 border border-green-500/20">
+                        <div className="flex items-center gap-2 text-green-700 dark:text-green-400 text-sm font-medium mb-2">
+                          <CheckCircle className="w-4 h-4" />
+                          Partner Accepted!
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          {partner.businessName} accepted this job
+                          {job.partnerRespondedAt && (
+                            <> on {new Date(job.partnerRespondedAt).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</>
+                          )}
+                        </p>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={() => acknowledgePartnerAcceptanceMutation.mutate()}
+                          disabled={acknowledgePartnerAcceptanceMutation.isPending}
+                          data-testid="button-acknowledge-partner"
+                        >
+                          Acknowledge
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

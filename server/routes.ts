@@ -1026,6 +1026,22 @@ export async function registerRoutes(
     }
   });
 
+  // Acknowledge partner acceptance
+  app.post("/api/jobs/:id/acknowledge-partner-acceptance", async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      await storage.updateJob(req.params.id, { partnerAcceptanceAcknowledged: true });
+      res.json({ message: "Partner acceptance acknowledged" });
+    } catch (error) {
+      console.error("Acknowledge partner acceptance error:", error);
+      res.status(500).json({ message: "Failed to acknowledge partner acceptance" });
+    }
+  });
+
   // Tasks
   app.get("/api/tasks", async (req, res) => {
     try {

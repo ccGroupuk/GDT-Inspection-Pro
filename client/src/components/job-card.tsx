@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, User, PoundSterling, Handshake, CheckCircle, XCircle, Clock } from "lucide-react";
+import { MapPin, User, PoundSterling, Handshake, CheckCircle, XCircle, Clock, Bell } from "lucide-react";
 import type { Job, Contact, TradePartner } from "@shared/schema";
 import { Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -71,7 +71,17 @@ export function JobCard({ job, contact, partner }: JobCardProps) {
                 <Handshake className="w-3 h-3 shrink-0" />
                 <span className="truncate">{partner.businessName}</span>
                 {/* Partner acceptance status indicator */}
-                {job.partnerStatus === "accepted" ? (
+                {job.partnerStatus === "accepted" && !job.partnerAcceptanceAcknowledged ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="ml-auto shrink-0 bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30 text-[10px] px-1.5 py-0">
+                        <Bell className="w-2.5 h-2.5 mr-0.5" />
+                        Accepted
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>Partner accepted - needs acknowledgment</TooltipContent>
+                  </Tooltip>
+                ) : job.partnerStatus === "accepted" ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-400 ml-auto shrink-0" />
