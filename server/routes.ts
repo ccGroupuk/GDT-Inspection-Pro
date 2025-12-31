@@ -2636,6 +2636,72 @@ export async function registerRoutes(
     }
   });
 
+  // Partner accepts a job assignment
+  app.post("/api/partner-portal/jobs/:jobId/accept", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      // Update job with acceptance
+      await storage.updateJob(job.id, {
+        partnerStatus: "accepted",
+        partnerRespondedAt: new Date(),
+        partnerDeclineReason: null,
+      });
+      
+      res.json({ message: "Job accepted successfully" });
+    } catch (error) {
+      console.error("Partner portal accept job error:", error);
+      res.status(500).json({ message: "Failed to accept job" });
+    }
+  });
+
+  // Partner declines a job assignment
+  app.post("/api/partner-portal/jobs/:jobId/decline", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const { reason } = req.body;
+      
+      // Update job with decline
+      await storage.updateJob(job.id, {
+        partnerStatus: "declined",
+        partnerRespondedAt: new Date(),
+        partnerDeclineReason: reason || null,
+      });
+      
+      res.json({ message: "Job declined" });
+    } catch (error) {
+      console.error("Partner portal decline job error:", error);
+      res.status(500).json({ message: "Failed to decline job" });
+    }
+  });
+
   // Partner portal auth check endpoint
   app.get("/api/partner-portal/auth/me", async (req, res) => {
     try {
