@@ -14,7 +14,7 @@ import { queryClient } from "@/lib/queryClient";
 import { 
   Briefcase, MapPin, User, Phone, Mail, LogOut, Loader2, 
   ArrowLeft, CheckCircle2, Circle, FileText, MessageSquare, Image,
-  Siren, AlertTriangle, CheckCircle
+  Siren, AlertTriangle, CheckCircle, XCircle, Clock
 } from "lucide-react";
 import type { Job, Contact, Task, QuoteItem, JobNote, JobNoteAttachment, EmergencyCallout } from "@shared/schema";
 import { NOTE_VISIBILITY } from "@shared/schema";
@@ -70,6 +70,10 @@ export default function PartnerPortalJobDetail() {
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [totalCollected, setTotalCollected] = useState<string>("");
   const [completionNotes, setCompletionNotes] = useState("");
+  
+  // Accept/Decline job state
+  const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -163,6 +167,42 @@ export default function PartnerPortalJobDetail() {
     },
   });
 
+  // Accept job mutation
+  const acceptJobMutation = useMutation({
+    mutationFn: async () => {
+      const res = await partnerApiRequest("POST", `/api/partner-portal/jobs/${jobId}/accept`, {}, token);
+      if (!res.ok) throw new Error("Failed to accept job");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs"] });
+      toast({ title: "Job Accepted", description: "You have accepted this job assignment." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error accepting job", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Decline job mutation
+  const declineJobMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      const res = await partnerApiRequest("POST", `/api/partner-portal/jobs/${jobId}/decline`, { reason }, token);
+      if (!res.ok) throw new Error("Failed to decline job");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs"] });
+      toast({ title: "Job Declined", description: "You have declined this job assignment." });
+      setDeclineDialogOpen(false);
+      setDeclineReason("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error declining job", description: error.message, variant: "destructive" });
+    },
+  });
+
   if (!isAuthenticated) {
     return null;
   }
@@ -220,6 +260,77 @@ export default function PartnerPortalJobDetail() {
                 {getStageLabel(job.status)}
               </Badge>
             </div>
+
+            {/* Partner Acceptance Section */}
+            {job.partnerStatus === "offered" || !job.partnerStatus ? (
+              <Card className="border-primary border-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-primary" />
+                    Action Required
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    You have been assigned to this job. Please accept or decline the assignment.
+                  </p>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => acceptJobMutation.mutate()}
+                      disabled={acceptJobMutation.isPending || declineJobMutation.isPending}
+                      className="flex-1"
+                      data-testid="button-accept-job"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Accept Job
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setDeclineDialogOpen(true)}
+                      disabled={acceptJobMutation.isPending || declineJobMutation.isPending}
+                      className="flex-1"
+                      data-testid="button-decline-job"
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Decline
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : job.partnerStatus === "accepted" ? (
+              <Card className="border-green-500 border-2">
+                <CardContent className="py-4">
+                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                    <CheckCircle className="w-5 h-5" />
+                    <span className="font-medium">You have accepted this job</span>
+                    {job.partnerRespondedAt && (
+                      <span className="text-sm text-muted-foreground ml-auto">
+                        {new Date(job.partnerRespondedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : job.partnerStatus === "declined" ? (
+              <Card className="border-red-500 border-2">
+                <CardContent className="py-4">
+                  <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                    <XCircle className="w-5 h-5" />
+                    <span className="font-medium">You declined this job</span>
+                    {job.partnerRespondedAt && (
+                      <span className="text-sm text-muted-foreground ml-auto">
+                        {new Date(job.partnerRespondedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  {job.partnerDeclineReason && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Reason: {job.partnerDeclineReason}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
 
             <Card>
               <CardHeader>
@@ -569,6 +680,51 @@ export default function PartnerPortalJobDetail() {
                 data-testid="button-confirm-complete"
               >
                 {completeMutation.isPending ? "Completing..." : "Complete & Submit"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Decline Job Dialog */}
+        <Dialog open={declineDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            setDeclineDialogOpen(false);
+            setDeclineReason("");
+          }
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-red-600" />
+                Decline Job Assignment
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to decline this job? Please provide a reason to help the admin understand why.
+              </p>
+              <div className="space-y-2">
+                <Label>Reason for Declining (Optional)</Label>
+                <Textarea
+                  placeholder="e.g., Schedule conflict, outside my area, not my trade..."
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  className="min-h-[80px]"
+                  data-testid="textarea-decline-reason"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeclineDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => declineJobMutation.mutate(declineReason)}
+                disabled={declineJobMutation.isPending}
+                data-testid="button-confirm-decline"
+              >
+                {declineJobMutation.isPending ? "Declining..." : "Decline Job"}
               </Button>
             </DialogFooter>
           </DialogContent>
