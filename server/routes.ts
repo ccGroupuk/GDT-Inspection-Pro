@@ -10629,20 +10629,34 @@ ${cleanedHtml}`;
     try {
       const { dateFrom, dateTo } = req.query;
       
-      // Get all instances (optionally filtered by date range)
-      const allInstances = await storage.getChecklistInstances();
-      const templates = await storage.getChecklistTemplates();
+      // Batch load all data upfront for efficiency
+      const [allInstances, templates] = await Promise.all([
+        storage.getChecklistInstances(),
+        storage.getChecklistTemplates(),
+      ]);
+      
+      // Preload all items for all templates in parallel
+      const allItemsMap: Record<string, Awaited<ReturnType<typeof storage.getChecklistItems>>> = {};
+      await Promise.all(templates.map(async (t) => {
+        allItemsMap[t.id] = await storage.getChecklistItems(t.id);
+      }));
+      
+      // Preload all responses for all instances in parallel
+      const allResponsesMap: Record<string, Awaited<ReturnType<typeof storage.getChecklistResponses>>> = {};
+      await Promise.all(allInstances.map(async (inst) => {
+        allResponsesMap[inst.id] = await storage.getChecklistResponses(inst.id);
+      }));
       
       // Filter by date range if provided
       let instances = allInstances;
       if (dateFrom) {
         const from = new Date(dateFrom as string);
-        instances = instances.filter(i => new Date(i.createdAt!) >= from);
+        instances = instances.filter(i => i.createdAt && new Date(i.createdAt) >= from);
       }
       if (dateTo) {
         const to = new Date(dateTo as string);
         to.setHours(23, 59, 59, 999);
-        instances = instances.filter(i => new Date(i.createdAt!) <= to);
+        instances = instances.filter(i => i.createdAt && new Date(i.createdAt) <= to);
       }
       
       // Overall completion metrics
@@ -10664,49 +10678,54 @@ ${cleanedHtml}`;
         .map(i => {
           const created = new Date(i.createdAt!).getTime();
           const completed = new Date(i.completedAt!).getTime();
-          return (completed - created) / (1000 * 60 * 60); // in hours
+          return (completed - created) / (1000 * 60 * 60);
         });
       const avgCompletionTimeHours = completionTimes.length > 0
         ? Math.round(completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length * 10) / 10
         : 0;
       
-      // Per-template analytics
-      const templateAnalytics = await Promise.all(templates.map(async (template) => {
+      // Per-template analytics (using preloaded data)
+      const templateAnalytics = templates.map((template) => {
         const templateInstances = instances.filter(i => i.templateId === template.id);
         const templateCompleted = templateInstances.filter(i => i.status === 'completed');
         const templateOverdue = templateInstances.filter(i => 
           i.status !== 'completed' && i.dueDate && new Date(i.dueDate) < new Date()
         );
         
-        // Get items for this template to find bottlenecks
-        const items = await storage.getChecklistItems(template.id);
+        const items = allItemsMap[template.id] || [];
         
-        // Get all responses for instances of this template
-        const itemCompletionCounts: Record<string, { completed: number; total: number; label: string }> = {};
-        
+        // Track completion counts per item
+        // Count responses that exist for each item (not all instances, just those with responses)
+        const itemCompletionCounts: Record<string, { completed: number; responded: number; label: string }> = {};
         for (const item of items) {
-          itemCompletionCounts[item.id] = { completed: 0, total: templateInstances.length, label: item.label };
+          itemCompletionCounts[item.id] = { completed: 0, responded: 0, label: item.label };
         }
         
+        // Count completions from preloaded responses
         for (const instance of templateInstances) {
-          const responses = await storage.getChecklistResponses(instance.id);
+          const responses = allResponsesMap[instance.id] || [];
           for (const response of responses) {
-            if (response.value === true && itemCompletionCounts[response.itemId]) {
-              itemCompletionCounts[response.itemId].completed++;
+            if (itemCompletionCounts[response.itemId]) {
+              itemCompletionCounts[response.itemId].responded++;
+              if (response.value === true) {
+                itemCompletionCounts[response.itemId].completed++;
+              }
             }
           }
         }
         
-        // Find bottleneck items (lowest completion rates)
-        const itemStats = Object.entries(itemCompletionCounts).map(([itemId, stats]) => ({
-          itemId,
-          label: stats.label,
-          completionRate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0,
-          completed: stats.completed,
-          total: stats.total,
-        })).sort((a, b) => a.completionRate - b.completionRate);
+        // Find bottleneck items (lowest completion rates among items that have responses)
+        const itemStats = Object.entries(itemCompletionCounts)
+          .filter(([_, stats]) => stats.responded > 0)
+          .map(([itemId, stats]) => ({
+            itemId,
+            label: stats.label,
+            completionRate: Math.round((stats.completed / stats.responded) * 100),
+            completed: stats.completed,
+            total: stats.responded,
+          }))
+          .sort((a, b) => a.completionRate - b.completionRate);
         
-        // Top 3 bottleneck items for this template
         const bottleneckItems = itemStats.slice(0, 3);
         
         return {
@@ -10722,21 +10741,30 @@ ${cleanedHtml}`;
             : 0,
           bottleneckItems,
         };
-      }));
+      });
       
-      // Completion trends (last 30 days)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
+      // Completion trends (last 30 days) - use immutable dates
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
       const dailyTrends: { date: string; completed: number; created: number }[] = [];
-      for (let d = new Date(thirtyDaysAgo); d <= new Date(); d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
-        const created = instances.filter(i => 
-          i.createdAt && new Date(i.createdAt).toISOString().split('T')[0] === dateStr
-        ).length;
-        const completed = instances.filter(i => 
-          i.completedAt && new Date(i.completedAt).toISOString().split('T')[0] === dateStr
-        ).length;
+      
+      for (let i = 30; i >= 0; i--) {
+        const day = new Date(now);
+        day.setDate(day.getDate() - i);
+        const dateStr = day.toISOString().split('T')[0];
+        
+        const created = instances.filter(i => {
+          if (!i.createdAt) return false;
+          const d = new Date(i.createdAt);
+          return d.toISOString().split('T')[0] === dateStr;
+        }).length;
+        
+        const completed = instances.filter(i => {
+          if (!i.completedAt) return false;
+          const d = new Date(i.completedAt);
+          return d.toISOString().split('T')[0] === dateStr;
+        }).length;
+        
         dailyTrends.push({ date: dateStr, completed, created });
       }
       
