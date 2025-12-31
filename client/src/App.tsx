@@ -56,6 +56,7 @@ import QuoteTemplates from "@/pages/quote-templates";
 import Assets from "@/pages/assets";
 import JobHub from "@/pages/job-hub";
 import Checklists from "@/pages/checklists";
+import ChecklistAnalytics from "@/pages/checklist-analytics";
 import Wellbeing from "@/pages/wellbeing";
 import Communications from "@/pages/communications";
 import ProductFinder from "@/pages/product-finder";
@@ -86,6 +87,7 @@ function AdminRouter() {
       <Route path="/templates" component={QuoteTemplates} />
       <Route path="/assets" component={Assets} />
       <Route path="/checklists" component={Checklists} />
+      <Route path="/checklist-analytics" component={ChecklistAnalytics} />
       <Route path="/communications" component={Communications} />
       <Route path="/daily-activities" component={DailyActivities} />
       <Route path="/seo" component={SEOPowerHouse} />

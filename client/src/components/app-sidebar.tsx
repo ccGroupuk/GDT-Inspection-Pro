@@ -25,6 +25,7 @@ import {
   MessageSquare,
   Search,
   Phone,
+  BarChart3,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -126,6 +127,11 @@ const menuItems = [
     title: "Checklists",
     url: "/checklists",
     icon: ClipboardCheck,
+  },
+  {
+    title: "Checklist Analytics",
+    url: "/checklist-analytics",
+    icon: BarChart3,
   },
   {
     title: "Quote Templates",
