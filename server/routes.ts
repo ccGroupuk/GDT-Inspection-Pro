@@ -750,6 +750,36 @@ export async function registerRoutes(
     }
   });
 
+  // Reset trade partner password (admin only)
+  app.post("/api/partners/:id/reset-password", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      const partner = await storage.getTradePartner(req.params.id);
+      
+      if (!partner) {
+        return res.status(404).json({ message: "Partner not found" });
+      }
+
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      // Get the partner's portal access
+      const access = await storage.getPartnerPortalAccess(partner.id);
+      if (!access) {
+        return res.status(400).json({ message: "Partner does not have portal access. Send an invitation first." });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await storage.updatePartnerPortalAccessPassword(access.id, passwordHash);
+
+      res.json({ message: "Password reset successfully. Partner can now log in with the new password." });
+    } catch (error) {
+      console.error("Reset partner password error:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
   // Jobs
   app.get("/api/jobs", async (req, res) => {
     try {

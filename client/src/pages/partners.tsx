@@ -20,7 +20,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, Handshake, Phone, Mail, Star, Edit, Trash2, CheckCircle, UserPlus, Copy, ExternalLink, MessageSquare } from "lucide-react";
+import { Plus, Search, Handshake, Phone, Mail, Star, Edit, Trash2, CheckCircle, UserPlus, Copy, ExternalLink, MessageSquare, KeyRound, Eye, EyeOff } from "lucide-react";
 import { SendMessageDialog } from "@/components/send-message-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TradePartner, InsertTradePartner } from "@shared/schema";
@@ -49,6 +49,9 @@ export default function Partners() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPartner, setEditingPartner] = useState<TradePartner | null>(null);
+  const [resetPasswordPartner, setResetPasswordPartner] = useState<TradePartner | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
 
   const { data: partners = [], isLoading } = useQuery<TradePartner[]>({
@@ -135,6 +138,29 @@ export default function Partners() {
       toast({
         title: "Error",
         description: error.message || "Failed to send invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ partnerId, password }: { partnerId: string; password: string }) => {
+      const response = await apiRequest("POST", `/api/partners/${partnerId}/reset-password`, { newPassword: password });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Password Reset",
+        description: data.message || "Password has been reset successfully.",
+      });
+      setResetPasswordPartner(null);
+      setNewPassword("");
+      setShowPassword(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset password",
         variant: "destructive",
       });
     },
@@ -484,6 +510,23 @@ export default function Partners() {
                         </Button>
                       }
                     />
+                    {(partnerPortalAccessMap[partner.id]?.isActive || partnerPortalAccessMap[partner.id]?.inviteStatus === "pending") && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setResetPasswordPartner(partner)}
+                            data-testid={`button-reset-password-partner-${partner.id}`}
+                          >
+                            <KeyRound className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Reset Password</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -634,6 +677,80 @@ export default function Partners() {
           ))}
         </div>
       )}
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetPasswordPartner} onOpenChange={(open) => {
+        if (!open) {
+          setResetPasswordPartner(null);
+          setNewPassword("");
+          setShowPassword(false);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Partner Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Set a new password for <strong>{resetPasswordPartner?.businessName}</strong>.
+              {partnerPortalAccessMap[resetPasswordPartner?.id || ""]?.inviteStatus === "pending" 
+                ? " Once they accept the invite, they can log in with this password."
+                : " They can use this password to log in to the partner portal."
+              }
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="newPassword"
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  data-testid="input-partner-new-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0"
+                  onClick={() => setShowPassword(!showPassword)}
+                  data-testid="button-toggle-password-visibility"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
+              {newPassword.length > 0 && newPassword.length < 6 && (
+                <p className="text-sm text-destructive">Password must be at least 6 characters</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setResetPasswordPartner(null);
+                  setNewPassword("");
+                  setShowPassword(false);
+                }}
+                data-testid="button-cancel-reset-password"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (resetPasswordPartner && newPassword.length >= 6) {
+                    resetPasswordMutation.mutate({ partnerId: resetPasswordPartner.id, password: newPassword });
+                  }
+                }}
+                disabled={newPassword.length < 6 || resetPasswordMutation.isPending}
+                data-testid="button-confirm-reset-password"
+              >
+                {resetPasswordMutation.isPending ? "Resetting..." : "Reset Password"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
