@@ -62,7 +62,7 @@ export default function Landing() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href="/portal">
+              <Link href="/portal/login">
                 <Button className="w-full" variant="outline" data-testid="button-client-login">
                   Client Login
                 </Button>
@@ -81,7 +81,7 @@ export default function Landing() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href="/partner-portal">
+              <Link href="/partner-portal/login">
                 <Button className="w-full" variant="outline" data-testid="button-partner-login">
                   Partner Login
                 </Button>
