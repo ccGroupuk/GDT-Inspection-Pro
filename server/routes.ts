@@ -898,6 +898,57 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Job not found" });
       }
       
+      // Auto-send email notification when status changes to a notifiable status
+      if (data.status && data.status !== currentJob.status && currentJob.contactId) {
+        // Define which status changes should notify clients
+        const clientNotifiableStatuses: Record<string, { message: string; actionRequired: boolean }> = {
+          'quote_sent': { message: 'A quote is ready for your review', actionRequired: true },
+          'quote_approved': { message: 'Quote has been approved', actionRequired: false },
+          'scheduled': { message: 'Your project has been scheduled', actionRequired: false },
+          'in_progress': { message: 'Work has started on your project', actionRequired: false },
+          'completed': { message: 'Work has been completed', actionRequired: false },
+          'awaiting_materials': { message: 'Waiting for materials to arrive', actionRequired: false },
+          'on_hold': { message: 'Project is on hold', actionRequired: false },
+          'invoice_sent': { message: 'An invoice is ready for payment', actionRequired: true },
+          'final_inspection': { message: 'Final inspection is complete', actionRequired: false },
+        };
+        
+        const statusInfo = clientNotifiableStatuses[data.status];
+        if (statusInfo) {
+          (async () => {
+            try {
+              const { sendJobStatusUpdate, isEmailConfigured } = await import("./email");
+              if (!isEmailConfigured()) return;
+              
+              const contact = await storage.getContact(currentJob.contactId!);
+              if (!contact?.email) return;
+              
+              const portalAccess = await storage.getClientPortalAccess(currentJob.contactId!);
+              if (!portalAccess?.accessToken) return;
+              
+              const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
+              
+              // Format status for display
+              const displayStatus = data.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              
+              await sendJobStatusUpdate(
+                contact.email,
+                contact.name,
+                job.serviceType,
+                displayStatus,
+                statusInfo.message,
+                statusInfo.actionRequired,
+                portalUrl,
+                portalAccess.accessToken
+              );
+              console.log(`[auto-notify] Job status update notification emailed to ${contact.email} for status: ${data.status}`);
+            } catch (emailError) {
+              console.error("[auto-notify] Failed to send job status notification:", emailError);
+            }
+          })();
+        }
+      }
+      
       // Auto-create finance transaction when job moves to "paid" status
       if (data.status === "paid" && currentJob.status !== "paid" && job.quotedValue != null) {
         try {
