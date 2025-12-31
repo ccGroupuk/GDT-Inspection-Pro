@@ -1675,6 +1675,36 @@ export async function registerRoutes(
     }
   });
 
+  // Reset client portal password (admin only)
+  app.post("/api/contacts/:id/reset-password", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      const contact = await storage.getContact(req.params.id);
+      
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      // Get the client's portal access
+      const access = await storage.getClientPortalAccess(contact.id);
+      if (!access) {
+        return res.status(400).json({ message: "Client does not have portal access. Send an invitation first." });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await storage.updateClientPortalAccessPassword(access.id, passwordHash);
+
+      res.json({ message: "Password reset successfully. Client can now log in with the new password." });
+    } catch (error) {
+      console.error("Reset client password error:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
   // Payment Requests
   app.get("/api/jobs/:jobId/payment-requests", async (req, res) => {
     try {

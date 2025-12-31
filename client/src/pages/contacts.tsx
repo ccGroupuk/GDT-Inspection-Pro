@@ -18,7 +18,7 @@ import { TableRowSkeleton } from "@/components/loading-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2, UserPlus, CheckCircle, Copy, ExternalLink, MessageSquare, Upload, FileSpreadsheet, ArrowRight, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Plus, Search, Users, Phone, Mail, MapPin, Edit, Trash2, UserPlus, CheckCircle, Copy, ExternalLink, MessageSquare, Upload, FileSpreadsheet, ArrowRight, ArrowLeft, AlertCircle, CheckCircle2, KeyRound, Eye, EyeOff } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SendMessageDialog } from "@/components/send-message-dialog";
@@ -69,6 +69,9 @@ export default function Contacts() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [resetPasswordContact, setResetPasswordContact] = useState<Contact | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
   
   // Import dialog state
@@ -163,6 +166,29 @@ export default function Contacts() {
       toast({
         title: "Error",
         description: error.message || "Failed to send invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ contactId, password }: { contactId: string; password: string }) => {
+      const response = await apiRequest("POST", `/api/contacts/${contactId}/reset-password`, { newPassword: password });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Password Reset",
+        description: data.message || "Password has been reset successfully.",
+      });
+      setResetPasswordContact(null);
+      setNewPassword("");
+      setShowPassword(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset password",
         variant: "destructive",
       });
     },
@@ -757,6 +783,23 @@ export default function Contacts() {
                               <p>{portalAccess.isActive ? "View portal as client" : "Open invite page"}</p>
                             </TooltipContent>
                           </Tooltip>
+                          {portalAccess.isActive && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setResetPasswordContact(contact)}
+                                  data-testid={`button-reset-password-${contact.id}`}
+                                >
+                                  <KeyRound className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Reset Password</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
                       ) : hasPortalAccess ? (
                         <Badge variant="secondary" className="gap-1" data-testid={`badge-portal-access-${contact.id}`}>
@@ -845,6 +888,76 @@ export default function Contacts() {
           </CardContent>
         </Card>
       )}
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetPasswordContact} onOpenChange={(open) => {
+        if (!open) {
+          setResetPasswordContact(null);
+          setNewPassword("");
+          setShowPassword(false);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Client Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Set a new password for <strong>{resetPasswordContact?.name}</strong>. They can use this password to log in to the client portal.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="newPassword"
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  data-testid="input-client-new-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0"
+                  onClick={() => setShowPassword(!showPassword)}
+                  data-testid="button-toggle-password-visibility"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
+              {newPassword.length > 0 && newPassword.length < 6 && (
+                <p className="text-sm text-destructive">Password must be at least 6 characters</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setResetPasswordContact(null);
+                  setNewPassword("");
+                  setShowPassword(false);
+                }}
+                data-testid="button-cancel-reset-password"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (resetPasswordContact && newPassword.length >= 6) {
+                    resetPasswordMutation.mutate({ contactId: resetPasswordContact.id, password: newPassword });
+                  }
+                }}
+                disabled={newPassword.length < 6 || resetPasswordMutation.isPending}
+                data-testid="button-confirm-reset-password"
+              >
+                {resetPasswordMutation.isPending ? "Resetting..." : "Reset Password"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

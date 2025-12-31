@@ -46,6 +46,7 @@ import Landing from "@/pages/landing";
 import EmployeePortalLogin from "@/pages/employee-portal-login";
 import EmployeePortalHome from "@/pages/employee-portal-home";
 import EmployeePortalChangePassword from "@/pages/employee-portal-change-password";
+import ClientPortalLogin from "@/pages/client-portal-login";
 import EmployeePortalAdminView from "@/pages/employee-portal-admin-view";
 import EmployeesAdmin from "@/pages/employees-admin";
 import EmergencyCallouts from "@/pages/emergency-callouts";
@@ -212,6 +213,7 @@ function ProtectedAdminLayout() {
 function App() {
   const [location] = useLocation();
   const isLandingPage = location === "/landing";
+  const isClientPortalLogin = location === "/client-portal-login";
   const isPortalRoute = location.startsWith("/portal");
   const isPartnerPortalRoute = location.startsWith("/partner-portal");
   const isEmployeePortalRoute = location.startsWith("/employee-portal");
@@ -219,6 +221,7 @@ function App() {
 
   const getContent = () => {
     if (isLandingPage) return <Landing />;
+    if (isClientPortalLogin) return <ClientPortalLogin />;
     if (isJobHubRoute) return <Route path="/job-hub/:token" component={JobHub} />;
     if (isPartnerPortalRoute) return <PartnerPortalRouter />;
     if (isPortalRoute) return <PortalRouter />;
