@@ -63,16 +63,27 @@ The CRM is built with a clear separation of concerns, utilizing a modern web sta
 - **YouTube/Loom**: Supported for video embeds within Help Center articles.
 - **Resend (Email)**: Transactional email service for sending login credentials, portal access links, reminders, and notifications. Backend ready in `server/email.ts` - requires `RESEND_API_KEY` secret or Replit Resend integration to enable.
 
-## Pending Integrations
-- **Email (Resend)**: Backend email service is fully implemented with templates for:
+## Email Notifications
+- **Email (Resend)**: Transactional email service fully integrated with templates for:
   - Employee login credentials
   - Client portal access links
   - Partner portal access links
   - Job reminders
   - Quote notifications
+  - Invoice notifications
+  - Job status updates
+  - Portal message notifications
   - Generic emails
   
-  To enable: Either use Replit's Resend integration (recommended) or add `RESEND_API_KEY` as a secret. Also set `EMAIL_FROM` env var for custom sender address (default: `CCC Group <noreply@cccgroup.co.uk>`).
+  **Automatic Client Notifications:** The system automatically emails clients (who have email AND portal access) when:
+  - A quote is sent to their portal
+  - An invoice is sent to their portal  
+  - Their job status changes to: scheduled, in_progress, completed, awaiting_materials, on_hold, or final_inspection
+  - An admin sends them a portal message
+  
+  Notifications use a non-blocking async pattern to ensure main operations complete even if email fails.
+  
+  To configure: Replit's Resend integration is already set up. The `EMAIL_FROM` env var can customize the sender address (default: `CCC Group <noreply@cccgroup.co.uk>`).
 
 ## Future Business Plans (Saved December 2024)
 
