@@ -1,8 +1,9 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, User, PoundSterling, Handshake, CheckCircle } from "lucide-react";
+import { MapPin, User, PoundSterling, Handshake, CheckCircle, XCircle, Clock } from "lucide-react";
 import type { Job, Contact, TradePartner } from "@shared/schema";
 import { Link } from "wouter";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface JobCardProps {
   job: Job;
