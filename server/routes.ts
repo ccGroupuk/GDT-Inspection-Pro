@@ -10621,4 +10621,156 @@ ${cleanedHtml}`;
       res.status(500).json({ message: "Failed to get end of day summary" });
     }
   });
+
+  // =====================================
+  // CHECKLIST ANALYTICS ENDPOINT
+  // =====================================
+  app.get("/api/checklist-analytics", async (req, res) => {
+    try {
+      const { dateFrom, dateTo } = req.query;
+      
+      // Get all instances (optionally filtered by date range)
+      const allInstances = await storage.getChecklistInstances();
+      const templates = await storage.getChecklistTemplates();
+      
+      // Filter by date range if provided
+      let instances = allInstances;
+      if (dateFrom) {
+        const from = new Date(dateFrom as string);
+        instances = instances.filter(i => new Date(i.createdAt!) >= from);
+      }
+      if (dateTo) {
+        const to = new Date(dateTo as string);
+        to.setHours(23, 59, 59, 999);
+        instances = instances.filter(i => new Date(i.createdAt!) <= to);
+      }
+      
+      // Overall completion metrics
+      const totalInstances = instances.length;
+      const completedInstances = instances.filter(i => i.status === 'completed');
+      const pendingInstances = instances.filter(i => i.status === 'pending');
+      const inProgressInstances = instances.filter(i => i.status === 'in_progress');
+      const overdueInstances = instances.filter(i => 
+        i.status !== 'completed' && i.dueDate && new Date(i.dueDate) < new Date()
+      );
+      
+      const overallCompletionRate = totalInstances > 0 
+        ? Math.round((completedInstances.length / totalInstances) * 100) 
+        : 0;
+      
+      // Calculate average completion time (from creation to completion)
+      const completionTimes = completedInstances
+        .filter(i => i.completedAt && i.createdAt)
+        .map(i => {
+          const created = new Date(i.createdAt!).getTime();
+          const completed = new Date(i.completedAt!).getTime();
+          return (completed - created) / (1000 * 60 * 60); // in hours
+        });
+      const avgCompletionTimeHours = completionTimes.length > 0
+        ? Math.round(completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length * 10) / 10
+        : 0;
+      
+      // Per-template analytics
+      const templateAnalytics = await Promise.all(templates.map(async (template) => {
+        const templateInstances = instances.filter(i => i.templateId === template.id);
+        const templateCompleted = templateInstances.filter(i => i.status === 'completed');
+        const templateOverdue = templateInstances.filter(i => 
+          i.status !== 'completed' && i.dueDate && new Date(i.dueDate) < new Date()
+        );
+        
+        // Get items for this template to find bottlenecks
+        const items = await storage.getChecklistItems(template.id);
+        
+        // Get all responses for instances of this template
+        const itemCompletionCounts: Record<string, { completed: number; total: number; label: string }> = {};
+        
+        for (const item of items) {
+          itemCompletionCounts[item.id] = { completed: 0, total: templateInstances.length, label: item.label };
+        }
+        
+        for (const instance of templateInstances) {
+          const responses = await storage.getChecklistResponses(instance.id);
+          for (const response of responses) {
+            if (response.value === true && itemCompletionCounts[response.itemId]) {
+              itemCompletionCounts[response.itemId].completed++;
+            }
+          }
+        }
+        
+        // Find bottleneck items (lowest completion rates)
+        const itemStats = Object.entries(itemCompletionCounts).map(([itemId, stats]) => ({
+          itemId,
+          label: stats.label,
+          completionRate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0,
+          completed: stats.completed,
+          total: stats.total,
+        })).sort((a, b) => a.completionRate - b.completionRate);
+        
+        // Top 3 bottleneck items for this template
+        const bottleneckItems = itemStats.slice(0, 3);
+        
+        return {
+          templateId: template.id,
+          templateName: template.name,
+          templateCode: template.code,
+          targetType: template.targetType,
+          totalInstances: templateInstances.length,
+          completedInstances: templateCompleted.length,
+          overdueInstances: templateOverdue.length,
+          completionRate: templateInstances.length > 0 
+            ? Math.round((templateCompleted.length / templateInstances.length) * 100) 
+            : 0,
+          bottleneckItems,
+        };
+      }));
+      
+      // Completion trends (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const dailyTrends: { date: string; completed: number; created: number }[] = [];
+      for (let d = new Date(thirtyDaysAgo); d <= new Date(); d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        const created = instances.filter(i => 
+          i.createdAt && new Date(i.createdAt).toISOString().split('T')[0] === dateStr
+        ).length;
+        const completed = instances.filter(i => 
+          i.completedAt && new Date(i.completedAt).toISOString().split('T')[0] === dateStr
+        ).length;
+        dailyTrends.push({ date: dateStr, completed, created });
+      }
+      
+      // By target type breakdown
+      const targetTypeBreakdown = ['job', 'job_emergency', 'asset_tool', 'asset_vehicle', 'payroll', 'team_paid', 'general'].map(targetType => {
+        const typeInstances = instances.filter(i => i.targetType === targetType);
+        const typeCompleted = typeInstances.filter(i => i.status === 'completed');
+        return {
+          targetType,
+          total: typeInstances.length,
+          completed: typeCompleted.length,
+          completionRate: typeInstances.length > 0 
+            ? Math.round((typeCompleted.length / typeInstances.length) * 100) 
+            : 0,
+        };
+      }).filter(t => t.total > 0);
+      
+      res.json({
+        overview: {
+          totalInstances,
+          completedInstances: completedInstances.length,
+          pendingInstances: pendingInstances.length,
+          inProgressInstances: inProgressInstances.length,
+          overdueInstances: overdueInstances.length,
+          overallCompletionRate,
+          avgCompletionTimeHours,
+        },
+        templateAnalytics: templateAnalytics.sort((a, b) => b.totalInstances - a.totalInstances),
+        dailyTrends,
+        targetTypeBreakdown,
+      });
+    } catch (error) {
+      console.error("Checklist analytics error:", error);
+      res.status(500).json({ message: "Failed to get checklist analytics" });
+    }
+  });
 }
