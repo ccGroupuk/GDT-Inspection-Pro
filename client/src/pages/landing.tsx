@@ -61,12 +61,15 @@ export default function Landing() {
                 View your projects, accept quotes, and track progress
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Link href="/portal/login">
+            <CardContent className="space-y-2">
+              <Link href="/client-portal-login">
                 <Button className="w-full" variant="outline" data-testid="button-client-login">
                   Client Login
                 </Button>
               </Link>
+              <p className="text-xs text-muted-foreground text-center">
+                Login with email and password
+              </p>
             </CardContent>
           </Card>
 

@@ -177,6 +177,8 @@ export default function Contacts() {
       return response.json();
     },
     onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts/portal-access"] });
       toast({
         title: "Password Reset",
         description: data.message || "Password has been reset successfully.",
