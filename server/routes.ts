@@ -899,17 +899,16 @@ export async function registerRoutes(
       }
       
       // Auto-send email notification when status changes to a notifiable status
+      // Note: quote_sent and invoice_sent are handled by POST /api/invoices/:id/send with specific templates
       if (data.status && data.status !== currentJob.status && currentJob.contactId) {
-        // Define which status changes should notify clients
+        // Define which status changes should notify clients (excludes quote_sent/invoice_sent)
         const clientNotifiableStatuses: Record<string, { message: string; actionRequired: boolean }> = {
-          'quote_sent': { message: 'A quote is ready for your review', actionRequired: true },
           'quote_approved': { message: 'Quote has been approved', actionRequired: false },
           'scheduled': { message: 'Your project has been scheduled', actionRequired: false },
           'in_progress': { message: 'Work has started on your project', actionRequired: false },
           'completed': { message: 'Work has been completed', actionRequired: false },
           'awaiting_materials': { message: 'Waiting for materials to arrive', actionRequired: false },
           'on_hold': { message: 'Project is on hold', actionRequired: false },
-          'invoice_sent': { message: 'An invoice is ready for payment', actionRequired: true },
           'final_inspection': { message: 'Final inspection is complete', actionRequired: false },
         };
         
@@ -1304,42 +1303,11 @@ export async function registerRoutes(
         const newStatus = invoice.type === "invoice" ? "invoice_sent" : "quote_sent";
         await storage.updateJob(invoice.jobId, { status: newStatus });
         
-        // Auto-send email notification to client for quotes
-        if (invoice.type === "quote" && job.contactId) {
+        // Send email notification to client (non-blocking)
+        if (job.contactId) {
           (async () => {
             try {
-              const { sendQuoteNotification, isEmailConfigured } = await import("./email");
-              if (!isEmailConfigured()) return;
-              
-              const contact = await storage.getContact(job.contactId!);
-              if (!contact?.email) return;
-              
-              const portalAccess = await storage.getClientPortalAccess(job.contactId!);
-              if (!portalAccess?.accessToken) return;
-              
-              const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
-              const amount = invoice.grandTotal ? `£${parseFloat(invoice.grandTotal).toFixed(2)}` : 'See portal';
-              
-              await sendQuoteNotification(
-                contact.email,
-                contact.name,
-                job.serviceType,
-                amount,
-                portalUrl,
-                portalAccess.accessToken
-              );
-              console.log(`[auto-notify] Quote sent notification emailed to ${contact.email}`);
-            } catch (emailError) {
-              console.error("[auto-notify] Failed to send quote notification:", emailError);
-            }
-          })();
-        }
-        
-        // Auto-send email notification for invoices
-        if (invoice.type === "invoice" && job.contactId) {
-          (async () => {
-            try {
-              const { sendJobStatusUpdate, isEmailConfigured } = await import("./email");
+              const { sendQuoteNotification, sendJobStatusUpdate, isEmailConfigured } = await import("./email");
               if (!isEmailConfigured()) return;
               
               const contact = await storage.getContact(job.contactId!);
@@ -1350,19 +1318,37 @@ export async function registerRoutes(
               
               const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
               
-              await sendJobStatusUpdate(
-                contact.email,
-                contact.name,
-                job.serviceType,
-                'invoice_sent',
-                'An invoice is ready for payment',
-                true,
-                portalUrl,
-                portalAccess.accessToken
-              );
-              console.log(`[auto-notify] Invoice sent notification emailed to ${contact.email}`);
+              if (invoice.type === "quote") {
+                // Format quote amount safely
+                const amount = invoice.grandTotal 
+                  ? `£${Number(invoice.grandTotal).toFixed(2)}`
+                  : 'See portal for details';
+                  
+                await sendQuoteNotification(
+                  contact.email,
+                  contact.name,
+                  job.serviceType,
+                  amount,
+                  portalUrl,
+                  portalAccess.accessToken
+                );
+                console.log(`[auto-notify] Quote sent notification emailed to ${contact.email}`);
+              } else {
+                // Invoice notification
+                await sendJobStatusUpdate(
+                  contact.email,
+                  contact.name,
+                  job.serviceType,
+                  'Invoice Sent',
+                  'An invoice is ready for payment',
+                  true,
+                  portalUrl,
+                  portalAccess.accessToken
+                );
+                console.log(`[auto-notify] Invoice sent notification emailed to ${contact.email}`);
+              }
             } catch (emailError) {
-              console.error("[auto-notify] Failed to send invoice notification:", emailError);
+              console.error("[auto-notify] Failed to send quote/invoice notification:", emailError);
             }
           })();
         }
@@ -7533,7 +7519,8 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   // Register object storage routes
   registerObjectStorageRoutes(app);
 
-  // Email endpoints
+  // Email endpoints - functions are imported for use in manual email API endpoints
+  // Note: Auto-notifications use dynamic imports inline to avoid module ordering issues
   const { 
     isEmailConfigured, 
     sendEmployeeLoginCredentials, 
@@ -7541,112 +7528,8 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     sendPartnerPortalAccess,
     sendJobReminder,
     sendQuoteNotification,
-    sendGenericEmail,
-    sendJobStatusUpdate,
-    sendPortalMessageNotification,
-    sendQuoteUpdatedNotification
+    sendGenericEmail
   } = await import("./email");
-  
-  // Helper function to send client notification emails (non-blocking)
-  const notifyClient = async (
-    contactId: string,
-    notificationType: 'quote_sent' | 'quote_updated' | 'status_change' | 'message',
-    data: {
-      jobTitle?: string;
-      quoteAmount?: string;
-      newStatus?: string;
-      statusMessage?: string;
-      actionRequired?: boolean;
-      messageTitle?: string;
-      messagePreview?: string;
-      urgency?: string;
-    },
-    baseUrl: string
-  ) => {
-    try {
-      const contact = await storage.getContact(contactId);
-      if (!contact?.email) {
-        console.log(`[notify] Skipping - no email for contact ${contactId}`);
-        return;
-      }
-      
-      const portalAccess = await storage.getClientPortalAccess(contactId);
-      if (!portalAccess?.accessToken) {
-        console.log(`[notify] Skipping - no portal access for contact ${contactId}`);
-        return;
-      }
-      
-      const portalUrl = `${baseUrl}/portal`;
-      
-      switch (notificationType) {
-        case 'quote_sent':
-          await sendQuoteNotification(
-            contact.email,
-            contact.name,
-            data.jobTitle || 'Project',
-            data.quoteAmount || '0',
-            portalUrl,
-            portalAccess.accessToken
-          );
-          console.log(`[notify] Quote sent notification sent to ${contact.email}`);
-          break;
-          
-        case 'quote_updated':
-          await sendQuoteUpdatedNotification(
-            contact.email,
-            contact.name,
-            data.jobTitle || 'Project',
-            data.quoteAmount || '0',
-            portalUrl,
-            portalAccess.accessToken
-          );
-          console.log(`[notify] Quote updated notification sent to ${contact.email}`);
-          break;
-          
-        case 'status_change':
-          await sendJobStatusUpdate(
-            contact.email,
-            contact.name,
-            data.jobTitle || 'Project',
-            data.newStatus || '',
-            data.statusMessage || '',
-            data.actionRequired || false,
-            portalUrl,
-            portalAccess.accessToken
-          );
-          console.log(`[notify] Status update notification sent to ${contact.email}`);
-          break;
-          
-        case 'message':
-          await sendPortalMessageNotification(
-            contact.email,
-            contact.name,
-            data.messageTitle || 'New Message',
-            data.messagePreview || '',
-            data.urgency || 'normal',
-            portalUrl,
-            portalAccess.accessToken
-          );
-          console.log(`[notify] Portal message notification sent to ${contact.email}`);
-          break;
-      }
-    } catch (error) {
-      console.error(`[notify] Failed to send ${notificationType} notification:`, error);
-    }
-  };
-  
-  // Status changes that should notify clients (with human-readable messages)
-  const clientNotifiableStatuses: Record<string, { message: string; actionRequired: boolean }> = {
-    'quote_sent': { message: 'A quote is ready for your review', actionRequired: true },
-    'quote_approved': { message: 'Quote has been approved', actionRequired: false },
-    'scheduled': { message: 'Your project has been scheduled', actionRequired: false },
-    'in_progress': { message: 'Work has started on your project', actionRequired: false },
-    'completed': { message: 'Work has been completed', actionRequired: false },
-    'awaiting_materials': { message: 'Waiting for materials to arrive', actionRequired: false },
-    'on_hold': { message: 'Project is on hold', actionRequired: false },
-    'invoice_sent': { message: 'An invoice is ready for payment', actionRequired: true },
-    'final_inspection': { message: 'Final inspection is complete', actionRequired: false },
-  };
 
   app.get("/api/email/status", isAdminAuthenticated, async (req, res) => {
     res.json({ configured: isEmailConfigured() });
