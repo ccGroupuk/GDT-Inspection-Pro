@@ -70,6 +70,31 @@ export function JobCard({ job, contact, partner }: JobCardProps) {
               <div className="flex items-center gap-1.5 pt-2 border-t border-border text-xs text-muted-foreground">
                 <Handshake className="w-3 h-3 shrink-0" />
                 <span className="truncate">{partner.businessName}</span>
+                {/* Partner acceptance status indicator */}
+                {job.partnerStatus === "accepted" ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-400 ml-auto shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent>Partner accepted</TooltipContent>
+                  </Tooltip>
+                ) : job.partnerStatus === "declined" ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <XCircle className="w-3 h-3 text-red-600 dark:text-red-400 ml-auto shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Partner declined{job.partnerDeclineReason ? `: ${job.partnerDeclineReason}` : ""}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400 ml-auto shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent>Awaiting partner response</TooltipContent>
+                  </Tooltip>
+                )}
               </div>
             )}
           </div>

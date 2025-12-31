@@ -893,6 +893,13 @@ export async function registerRoutes(
         }
       }
       
+      // Auto-set partnerStatus to "offered" when a partner is first assigned to the job
+      if (data.partnerId && data.partnerId !== currentJob.partnerId) {
+        (data as any).partnerStatus = "offered";
+        (data as any).partnerRespondedAt = null;
+        (data as any).partnerDeclineReason = null;
+      }
+      
       const job = await storage.updateJob(req.params.id, data);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
