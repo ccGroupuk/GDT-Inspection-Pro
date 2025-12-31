@@ -464,3 +464,167 @@ export async function sendGenericEmail(
 
   return sendEmail(to, subject, html);
 }
+
+export async function sendJobStatusUpdate(
+  to: string,
+  clientName: string,
+  jobTitle: string,
+  newStatus: string,
+  statusMessage: string,
+  actionRequired: boolean,
+  portalUrl: string,
+  accessToken: string
+): Promise<EmailResult> {
+  const subject = actionRequired 
+    ? `Action Required: ${jobTitle} - ${statusMessage}`
+    : `Update: ${jobTitle} - ${statusMessage}`;
+  
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #1a1a2e; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0;">CCC Group</h1>
+        <p style="color: #cccccc; margin: 5px 0 0 0;">Job Update</p>
+      </div>
+      
+      <div style="padding: 30px; background-color: #f9f9f9;">
+        <h2 style="color: #333; margin-top: 0;">Hello ${clientName},</h2>
+        
+        <p style="color: #555; line-height: 1.6;">
+          ${actionRequired ? 'Your attention is needed on your project:' : 'We have an update on your project:'}
+        </p>
+        
+        <div style="background-color: #ffffff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="color: #333; margin-top: 0;">${jobTitle}</h3>
+          <p style="margin: 10px 0;"><strong>Status:</strong> ${statusMessage}</p>
+          ${actionRequired ? '<p style="color: #dc2626; font-weight: bold; margin: 10px 0;">Action Required</p>' : ''}
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${portalUrl}?token=${accessToken}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            View in Portal
+          </a>
+        </div>
+        
+        <p style="color: #888; font-size: 12px;">
+          Log in to your client portal to view full details and take any required actions.
+        </p>
+      </div>
+      
+      <div style="background-color: #333; padding: 15px; text-align: center;">
+        <p style="color: #888; font-size: 12px; margin: 0;">
+          Cardiff & Caerphilly Carpentry | CCC Group
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(to, subject, html);
+}
+
+export async function sendPortalMessageNotification(
+  to: string,
+  clientName: string,
+  messageTitle: string,
+  messagePreview: string,
+  urgency: string,
+  portalUrl: string,
+  accessToken: string
+): Promise<EmailResult> {
+  const isUrgent = urgency === 'high' || urgency === 'urgent';
+  const subject = isUrgent 
+    ? `URGENT: New message from CCC Group - ${messageTitle}`
+    : `New message from CCC Group - ${messageTitle}`;
+  
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #1a1a2e; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0;">CCC Group</h1>
+        <p style="color: #cccccc; margin: 5px 0 0 0;">New Message</p>
+      </div>
+      
+      <div style="padding: 30px; background-color: #f9f9f9;">
+        <h2 style="color: #333; margin-top: 0;">Hello ${clientName},</h2>
+        
+        <p style="color: #555; line-height: 1.6;">
+          You have a new message from CCC Group:
+        </p>
+        
+        <div style="background-color: #ffffff; border: 1px solid ${isUrgent ? '#dc2626' : '#ddd'}; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          ${isUrgent ? '<p style="color: #dc2626; font-weight: bold; margin: 0 0 10px 0;">URGENT</p>' : ''}
+          <h3 style="color: #333; margin-top: 0;">${messageTitle}</h3>
+          <p style="color: #555; line-height: 1.6; margin: 0;">${messagePreview}</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${portalUrl}?token=${accessToken}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            View Full Message
+          </a>
+        </div>
+        
+        <p style="color: #888; font-size: 12px;">
+          Log in to your client portal to view the full message and respond if needed.
+        </p>
+      </div>
+      
+      <div style="background-color: #333; padding: 15px; text-align: center;">
+        <p style="color: #888; font-size: 12px; margin: 0;">
+          Cardiff & Caerphilly Carpentry | CCC Group
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(to, subject, html);
+}
+
+export async function sendQuoteUpdatedNotification(
+  to: string,
+  clientName: string,
+  jobTitle: string,
+  newAmount: string,
+  portalUrl: string,
+  accessToken: string
+): Promise<EmailResult> {
+  const subject = `Quote Updated: ${jobTitle}`;
+  
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #1a1a2e; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0;">CCC Group</h1>
+        <p style="color: #cccccc; margin: 5px 0 0 0;">Quote Updated</p>
+      </div>
+      
+      <div style="padding: 30px; background-color: #f9f9f9;">
+        <h2 style="color: #333; margin-top: 0;">Hello ${clientName},</h2>
+        
+        <p style="color: #555; line-height: 1.6;">
+          The quote for your project has been updated. Please review the changes:
+        </p>
+        
+        <div style="background-color: #ffffff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+          <h3 style="color: #333; margin-top: 0;">${jobTitle}</h3>
+          <p style="font-size: 24px; color: #4f46e5; font-weight: bold; margin: 15px 0;">${newAmount}</p>
+          <p style="color: #d97706; font-weight: bold; margin: 0;">Updated Quote</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${portalUrl}?token=${accessToken}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            Review Updated Quote
+          </a>
+        </div>
+        
+        <p style="color: #888; font-size: 12px;">
+          Log in to your client portal to review the updated quote details and accept or request changes.
+        </p>
+      </div>
+      
+      <div style="background-color: #333; padding: 15px; text-align: center;">
+        <p style="color: #888; font-size: 12px; margin: 0;">
+          Cardiff & Caerphilly Carpentry | CCC Group
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(to, subject, html);
+}
