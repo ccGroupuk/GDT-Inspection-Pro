@@ -935,7 +935,7 @@ export async function registerRoutes(
               const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
               
               // Format status for display
-              const displayStatus = data.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              const displayStatus = data.status!.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
               
               await sendJobStatusUpdate(
                 contact.email,
@@ -1000,6 +1000,34 @@ export async function registerRoutes(
             profitAmount: cccMargin.toFixed(2),
           });
           console.log(`Auto-created income transaction for job ${job.jobNumber} - CCC Margin: £${cccMargin.toFixed(2)}`);
+          
+          // Create fee accrual for partner jobs - this tracks what partner owes CCC
+          if (job.deliveryType === "partner" && job.partnerId && job.partnerCharge) {
+            try {
+              const existingAccrual = await storage.getPartnerFeeAccrualByJob(job.id);
+              if (!existingAccrual) {
+                const partnerCharge = parseFloat(job.partnerCharge);
+                const feeType = job.partnerChargeType === "percentage" ? "percentage" : "flat";
+                const feeValue = partnerCharge;
+                const feeAmount = cccMargin;
+                
+                await storage.createPartnerFeeAccrual({
+                  partnerId: job.partnerId,
+                  jobId: job.id,
+                  feeType,
+                  feeValue: feeValue.toFixed(2),
+                  jobValue: grossAmount.toFixed(2),
+                  feeAmount: feeAmount.toFixed(2),
+                  description: `Fee for ${job.jobNumber} - ${job.partnerChargeType === "percentage" ? partnerCharge + "%" : "£" + partnerCharge} of £${grossAmount.toFixed(2)}`,
+                  status: "pending",
+                  accrualDate: new Date(),
+                });
+                console.log(`Auto-created fee accrual for partner job ${job.jobNumber} - Fee: £${feeAmount.toFixed(2)}`);
+              }
+            } catch (accrualError) {
+              console.error("Failed to auto-create fee accrual:", accrualError);
+            }
+          }
         } catch (financeError) {
           // Log but don't fail the job update if finance transaction fails
           console.error("Failed to auto-create finance transaction:", financeError);
@@ -6918,6 +6946,418 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     } catch (error) {
       console.error("Get partner outstanding fees error:", error);
       res.status(500).json({ message: "Failed to get outstanding fees" });
+    }
+  });
+
+  // ==================== PARTNER FEE ACCRUALS & INVOICES ====================
+
+  // Get all partner fee accruals (admin)
+  app.get("/api/partner-fee-accruals", async (req, res) => {
+    try {
+      const { partnerId, status } = req.query;
+      let accruals;
+      if (status) {
+        accruals = await storage.getPartnerFeeAccrualsByStatus(status as string);
+      } else if (partnerId) {
+        accruals = await storage.getPartnerFeeAccruals(partnerId as string);
+      } else {
+        accruals = await storage.getPartnerFeeAccruals();
+      }
+      const partners = await storage.getTradePartners();
+      const jobs = await storage.getJobs();
+      
+      const enrichedAccruals = accruals.map(a => ({
+        ...a,
+        partner: partners.find(p => p.id === a.partnerId),
+        job: jobs.find(j => j.id === a.jobId),
+      }));
+      
+      res.json(enrichedAccruals);
+    } catch (error) {
+      console.error("Get partner fee accruals error:", error);
+      res.status(500).json({ message: "Failed to get fee accruals" });
+    }
+  });
+
+  // Get pending accruals for a specific partner
+  app.get("/api/partner-fee-accruals/pending/:partnerId", async (req, res) => {
+    try {
+      const accruals = await storage.getPendingAccrualsForPartner(req.params.partnerId);
+      const jobs = await storage.getJobs();
+      
+      const enrichedAccruals = accruals.map(a => ({
+        ...a,
+        job: jobs.find(j => j.id === a.jobId),
+      }));
+      
+      res.json(enrichedAccruals);
+    } catch (error) {
+      console.error("Get pending accruals error:", error);
+      res.status(500).json({ message: "Failed to get pending accruals" });
+    }
+  });
+
+  // Get all partner invoices
+  app.get("/api/partner-invoices", async (req, res) => {
+    try {
+      const { partnerId, status } = req.query;
+      let invoices;
+      if (status) {
+        invoices = await storage.getPartnerInvoicesByStatus(status as string);
+      } else if (partnerId) {
+        invoices = await storage.getPartnerInvoices(partnerId as string);
+      } else {
+        invoices = await storage.getPartnerInvoices();
+      }
+      const partners = await storage.getTradePartners();
+      
+      const enrichedInvoices = invoices.map(inv => ({
+        ...inv,
+        partner: partners.find(p => p.id === inv.partnerId),
+      }));
+      
+      res.json(enrichedInvoices);
+    } catch (error) {
+      console.error("Get partner invoices error:", error);
+      res.status(500).json({ message: "Failed to get invoices" });
+    }
+  });
+
+  // Get single partner invoice with line items
+  app.get("/api/partner-invoices/:id", async (req, res) => {
+    try {
+      const invoice = await storage.getPartnerInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      const partner = await storage.getTradePartner(invoice.partnerId);
+      const accruals = await storage.getPartnerFeeAccruals(invoice.partnerId);
+      const invoiceAccruals = accruals.filter(a => a.invoiceId === invoice.id);
+      const jobs = await storage.getJobs();
+      const payments = await storage.getPartnerInvoicePayments(invoice.id);
+      
+      const enrichedAccruals = invoiceAccruals.map(a => ({
+        ...a,
+        job: jobs.find(j => j.id === a.jobId),
+      }));
+      
+      res.json({
+        ...invoice,
+        partner,
+        lineItems: enrichedAccruals,
+        payments,
+      });
+    } catch (error) {
+      console.error("Get partner invoice error:", error);
+      res.status(500).json({ message: "Failed to get invoice" });
+    }
+  });
+
+  // Generate weekly invoice for a partner
+  app.post("/api/partner-invoices/generate", async (req, res) => {
+    try {
+      const { partnerId, periodStart, periodEnd } = req.body;
+      
+      if (!partnerId || !periodStart || !periodEnd) {
+        return res.status(400).json({ message: "partnerId, periodStart, and periodEnd are required" });
+      }
+      
+      const partner = await storage.getTradePartner(partnerId);
+      if (!partner) {
+        return res.status(404).json({ message: "Partner not found" });
+      }
+      
+      // Get pending accruals for this partner
+      const pendingAccruals = await storage.getPendingAccrualsForPartner(partnerId);
+      
+      if (pendingAccruals.length === 0) {
+        return res.status(400).json({ message: "No pending fees to invoice" });
+      }
+      
+      // Calculate totals
+      const subtotal = pendingAccruals.reduce((sum, a) => sum + parseFloat(a.feeAmount), 0);
+      
+      // Generate invoice number
+      const invoiceNumber = await storage.getNextPartnerInvoiceNumber();
+      
+      // Create invoice
+      const invoice = await storage.createPartnerInvoice({
+        invoiceNumber,
+        partnerId,
+        periodStart: new Date(periodStart),
+        periodEnd: new Date(periodEnd),
+        subtotal: subtotal.toFixed(2),
+        totalAmount: subtotal.toFixed(2),
+        amountPaid: "0",
+        amountDue: subtotal.toFixed(2),
+        status: "draft",
+        notes: `Fees for period ${new Date(periodStart).toLocaleDateString()} - ${new Date(periodEnd).toLocaleDateString()}`,
+      });
+      
+      // Link accruals to invoice
+      for (const accrual of pendingAccruals) {
+        await storage.updatePartnerFeeAccrual(accrual.id, {
+          invoiceId: invoice.id,
+          status: "invoiced",
+        });
+      }
+      
+      res.status(201).json(invoice);
+    } catch (error) {
+      console.error("Generate partner invoice error:", error);
+      res.status(500).json({ message: "Failed to generate invoice" });
+    }
+  });
+
+  // Update partner invoice (e.g., mark as sent)
+  app.patch("/api/partner-invoices/:id", async (req, res) => {
+    try {
+      const invoice = await storage.updatePartnerInvoice(req.params.id, req.body);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.json(invoice);
+    } catch (error) {
+      console.error("Update partner invoice error:", error);
+      res.status(500).json({ message: "Failed to update invoice" });
+    }
+  });
+
+  // Issue invoice (sets issue date, due date, and marks as issued)
+  app.post("/api/partner-invoices/:id/issue", async (req, res) => {
+    try {
+      const invoice = await storage.getPartnerInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      const issueDate = new Date();
+      const dueDate = new Date(issueDate);
+      dueDate.setDate(dueDate.getDate() + 14); // 14 day payment terms
+      
+      const updated = await storage.updatePartnerInvoice(req.params.id, {
+        status: "issued",
+        issueDate,
+        dueDate,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Issue partner invoice error:", error);
+      res.status(500).json({ message: "Failed to issue invoice" });
+    }
+  });
+
+  // Record payment against partner invoice
+  app.post("/api/partner-invoices/:id/payments", async (req, res) => {
+    try {
+      const invoice = await storage.getPartnerInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      const { amount, paymentMethod, paymentReference, notes, paymentDate } = req.body;
+      
+      if (!amount || parseFloat(amount) <= 0) {
+        return res.status(400).json({ message: "Valid payment amount required" });
+      }
+      
+      // Create payment record
+      const payment = await storage.createPartnerInvoicePayment({
+        invoiceId: invoice.id,
+        partnerId: invoice.partnerId,
+        amount,
+        paymentMethod,
+        paymentReference,
+        notes,
+        paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+      });
+      
+      // Update invoice amounts
+      const newAmountPaid = parseFloat(invoice.amountPaid || "0") + parseFloat(amount);
+      const newAmountDue = parseFloat(invoice.totalAmount) - newAmountPaid;
+      const newStatus = newAmountDue <= 0 ? "paid" : "partial";
+      
+      await storage.updatePartnerInvoice(invoice.id, {
+        amountPaid: newAmountPaid.toFixed(2),
+        amountDue: Math.max(0, newAmountDue).toFixed(2),
+        status: newStatus,
+        paidDate: newAmountDue <= 0 ? new Date() : undefined,
+      });
+      
+      // Update accrual statuses to paid
+      if (newAmountDue <= 0) {
+        const accruals = await storage.getPartnerFeeAccruals(invoice.partnerId);
+        const invoiceAccruals = accruals.filter(a => a.invoiceId === invoice.id);
+        for (const accrual of invoiceAccruals) {
+          await storage.updatePartnerFeeAccrual(accrual.id, { status: "paid" });
+        }
+      }
+      
+      // Create income transaction in finance system
+      try {
+        const partner = await storage.getTradePartner(invoice.partnerId);
+        const incomeCategory = await storage.getFinancialCategoryByName("Partner Fee Payments");
+        
+        await storage.createFinancialTransaction({
+          date: payment.paymentDate || new Date(),
+          type: "income",
+          categoryId: incomeCategory?.id,
+          amount,
+          description: `Partner fee payment from ${partner?.businessName || "Partner"} - ${invoice.invoiceNumber}`,
+          partnerId: invoice.partnerId,
+          sourceType: "partner_fee_payment",
+        });
+        console.log(`Created finance transaction for partner fee payment: £${amount}`);
+      } catch (financeError) {
+        console.error("Failed to create finance transaction for partner payment:", financeError);
+      }
+      
+      res.status(201).json(payment);
+    } catch (error) {
+      console.error("Record partner invoice payment error:", error);
+      res.status(500).json({ message: "Failed to record payment" });
+    }
+  });
+
+  // Get payments for a partner invoice
+  app.get("/api/partner-invoices/:id/payments", async (req, res) => {
+    try {
+      const payments = await storage.getPartnerInvoicePayments(req.params.id);
+      res.json(payments);
+    } catch (error) {
+      console.error("Get partner invoice payments error:", error);
+      res.status(500).json({ message: "Failed to get payments" });
+    }
+  });
+
+  // Delete partner invoice (only if in draft status)
+  app.delete("/api/partner-invoices/:id", async (req, res) => {
+    try {
+      const invoice = await storage.getPartnerInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      if (invoice.status !== "draft") {
+        return res.status(400).json({ message: "Can only delete draft invoices" });
+      }
+      
+      // Unlink accruals from invoice
+      const accruals = await storage.getPartnerFeeAccruals(invoice.partnerId);
+      const invoiceAccruals = accruals.filter(a => a.invoiceId === invoice.id);
+      for (const accrual of invoiceAccruals) {
+        await storage.updatePartnerFeeAccrual(accrual.id, {
+          invoiceId: null as any,
+          status: "pending",
+        });
+      }
+      
+      await storage.deletePartnerInvoice(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete partner invoice error:", error);
+      res.status(500).json({ message: "Failed to delete invoice" });
+    }
+  });
+
+  // Partner Portal: Get invoices for authenticated partner
+  app.get("/api/partner-portal/invoices", async (req, res) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    const partner = await storage.getTradePartnerByAccessToken(token ?? "");
+    if (!partner) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    try {
+      const invoices = await storage.getPartnerInvoices(partner.id);
+      // Only show issued invoices to partners
+      const issuedInvoices = invoices.filter(inv => inv.status !== "draft");
+      res.json(issuedInvoices);
+    } catch (error) {
+      console.error("Get partner portal invoices error:", error);
+      res.status(500).json({ message: "Failed to get invoices" });
+    }
+  });
+
+  // Partner Portal: Get single invoice with line items
+  app.get("/api/partner-portal/invoices/:id", async (req, res) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    const partner = await storage.getTradePartnerByAccessToken(token ?? "");
+    if (!partner) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    try {
+      const invoice = await storage.getPartnerInvoice(req.params.id);
+      if (!invoice || invoice.partnerId !== partner.id) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      if (invoice.status === "draft") {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      const accruals = await storage.getPartnerFeeAccruals(partner.id);
+      const invoiceAccruals = accruals.filter(a => a.invoiceId === invoice.id);
+      const jobs = await storage.getJobs();
+      const payments = await storage.getPartnerInvoicePayments(invoice.id);
+      
+      const enrichedAccruals = invoiceAccruals.map(a => {
+        const job = jobs.find(j => j.id === a.jobId);
+        return {
+          ...a,
+          job: job ? { id: job.id, jobNumber: job.jobNumber, serviceType: job.serviceType } : null,
+        };
+      });
+      
+      res.json({
+        ...invoice,
+        lineItems: enrichedAccruals,
+        payments,
+      });
+    } catch (error) {
+      console.error("Get partner portal invoice error:", error);
+      res.status(500).json({ message: "Failed to get invoice" });
+    }
+  });
+
+  // Partner Portal: Get outstanding balance summary
+  app.get("/api/partner-portal/balance", async (req, res) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    const partner = await storage.getTradePartnerByAccessToken(token ?? "");
+    if (!partner) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    try {
+      const accruals = await storage.getPartnerFeeAccruals(partner.id);
+      const invoices = await storage.getPartnerInvoices(partner.id);
+      
+      // Pending accruals (not yet invoiced)
+      const pendingAccruals = accruals.filter(a => a.status === "pending");
+      const pendingTotal = pendingAccruals.reduce((sum, a) => sum + parseFloat(a.feeAmount), 0);
+      
+      // Invoiced but unpaid
+      const unpaidInvoices = invoices.filter(inv => 
+        inv.status !== "paid" && inv.status !== "draft"
+      );
+      const invoicedTotal = unpaidInvoices.reduce((sum, inv) => sum + parseFloat(inv.amountDue || "0"), 0);
+      
+      // Total owed
+      const totalOwed = pendingTotal + invoicedTotal;
+      
+      res.json({
+        pendingFees: pendingTotal.toFixed(2),
+        pendingCount: pendingAccruals.length,
+        invoicedBalance: invoicedTotal.toFixed(2),
+        invoiceCount: unpaidInvoices.length,
+        totalOwed: totalOwed.toFixed(2),
+      });
+    } catch (error) {
+      console.error("Get partner balance error:", error);
+      res.status(500).json({ message: "Failed to get balance" });
     }
   });
 
