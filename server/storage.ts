@@ -77,6 +77,9 @@ import {
   activityReportSnapshots, type ActivityReportSnapshot, type InsertActivityReportSnapshot,
   changeOrders, type ChangeOrder, type InsertChangeOrder,
   changeOrderItems, type ChangeOrderItem, type InsertChangeOrderItem,
+  partnerFeeAccruals, type PartnerFeeAccrual, type InsertPartnerFeeAccrual,
+  partnerInvoices, type PartnerInvoice, type InsertPartnerInvoice,
+  partnerInvoicePayments, type PartnerInvoicePayment, type InsertPartnerInvoicePayment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -612,6 +615,33 @@ export interface IStorage {
   getActivityReportSnapshots(periodType: string): Promise<ActivityReportSnapshot[]>;
   getActivityReportSnapshot(id: string): Promise<ActivityReportSnapshot | undefined>;
   createActivityReportSnapshot(snapshot: InsertActivityReportSnapshot): Promise<ActivityReportSnapshot>;
+
+  // Partner Fee Accruals
+  getPartnerFeeAccruals(partnerId?: string): Promise<PartnerFeeAccrual[]>;
+  getPartnerFeeAccrualsByStatus(status: string): Promise<PartnerFeeAccrual[]>;
+  getPendingAccrualsForPartner(partnerId: string): Promise<PartnerFeeAccrual[]>;
+  getPartnerFeeAccrual(id: string): Promise<PartnerFeeAccrual | undefined>;
+  getPartnerFeeAccrualByJob(jobId: string): Promise<PartnerFeeAccrual | undefined>;
+  createPartnerFeeAccrual(accrual: InsertPartnerFeeAccrual): Promise<PartnerFeeAccrual>;
+  updatePartnerFeeAccrual(id: string, accrual: Partial<InsertPartnerFeeAccrual>): Promise<PartnerFeeAccrual | undefined>;
+  deletePartnerFeeAccrual(id: string): Promise<boolean>;
+
+  // Partner Invoices
+  getPartnerInvoices(partnerId?: string): Promise<PartnerInvoice[]>;
+  getPartnerInvoicesByStatus(status: string): Promise<PartnerInvoice[]>;
+  getPartnerInvoice(id: string): Promise<PartnerInvoice | undefined>;
+  createPartnerInvoice(invoice: InsertPartnerInvoice): Promise<PartnerInvoice>;
+  updatePartnerInvoice(id: string, invoice: Partial<InsertPartnerInvoice>): Promise<PartnerInvoice | undefined>;
+  deletePartnerInvoice(id: string): Promise<boolean>;
+  getNextPartnerInvoiceNumber(): Promise<string>;
+
+  // Partner Invoice Payments
+  getPartnerInvoicePayments(invoiceId?: string): Promise<PartnerInvoicePayment[]>;
+  getPartnerInvoicePaymentsByPartner(partnerId: string): Promise<PartnerInvoicePayment[]>;
+  getPartnerInvoicePayment(id: string): Promise<PartnerInvoicePayment | undefined>;
+  createPartnerInvoicePayment(payment: InsertPartnerInvoicePayment): Promise<PartnerInvoicePayment>;
+  updatePartnerInvoicePayment(id: string, payment: Partial<InsertPartnerInvoicePayment>): Promise<PartnerInvoicePayment | undefined>;
+  deletePartnerInvoicePayment(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3036,6 +3066,147 @@ export class DatabaseStorage implements IStorage {
   async createActivityReportSnapshot(snapshot: InsertActivityReportSnapshot): Promise<ActivityReportSnapshot> {
     const [created] = await db.insert(activityReportSnapshots).values(snapshot).returning();
     return created;
+  }
+
+  // Partner Fee Accruals
+  async getPartnerFeeAccruals(partnerId?: string): Promise<PartnerFeeAccrual[]> {
+    if (partnerId) {
+      return db.select().from(partnerFeeAccruals)
+        .where(eq(partnerFeeAccruals.partnerId, partnerId))
+        .orderBy(desc(partnerFeeAccruals.accrualDate));
+    }
+    return db.select().from(partnerFeeAccruals).orderBy(desc(partnerFeeAccruals.accrualDate));
+  }
+
+  async getPartnerFeeAccrualsByStatus(status: string): Promise<PartnerFeeAccrual[]> {
+    return db.select().from(partnerFeeAccruals)
+      .where(eq(partnerFeeAccruals.status, status))
+      .orderBy(desc(partnerFeeAccruals.accrualDate));
+  }
+
+  async getPendingAccrualsForPartner(partnerId: string): Promise<PartnerFeeAccrual[]> {
+    return db.select().from(partnerFeeAccruals)
+      .where(and(
+        eq(partnerFeeAccruals.partnerId, partnerId),
+        eq(partnerFeeAccruals.status, "pending")
+      ))
+      .orderBy(desc(partnerFeeAccruals.accrualDate));
+  }
+
+  async getPartnerFeeAccrual(id: string): Promise<PartnerFeeAccrual | undefined> {
+    const [accrual] = await db.select().from(partnerFeeAccruals).where(eq(partnerFeeAccruals.id, id));
+    return accrual || undefined;
+  }
+
+  async getPartnerFeeAccrualByJob(jobId: string): Promise<PartnerFeeAccrual | undefined> {
+    const [accrual] = await db.select().from(partnerFeeAccruals).where(eq(partnerFeeAccruals.jobId, jobId));
+    return accrual || undefined;
+  }
+
+  async createPartnerFeeAccrual(accrual: InsertPartnerFeeAccrual): Promise<PartnerFeeAccrual> {
+    const [created] = await db.insert(partnerFeeAccruals).values(accrual).returning();
+    return created;
+  }
+
+  async updatePartnerFeeAccrual(id: string, accrual: Partial<InsertPartnerFeeAccrual>): Promise<PartnerFeeAccrual | undefined> {
+    const [updated] = await db.update(partnerFeeAccruals)
+      .set(accrual)
+      .where(eq(partnerFeeAccruals.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deletePartnerFeeAccrual(id: string): Promise<boolean> {
+    await db.delete(partnerFeeAccruals).where(eq(partnerFeeAccruals.id, id));
+    return true;
+  }
+
+  // Partner Invoices
+  async getPartnerInvoices(partnerId?: string): Promise<PartnerInvoice[]> {
+    if (partnerId) {
+      return db.select().from(partnerInvoices)
+        .where(eq(partnerInvoices.partnerId, partnerId))
+        .orderBy(desc(partnerInvoices.createdAt));
+    }
+    return db.select().from(partnerInvoices).orderBy(desc(partnerInvoices.createdAt));
+  }
+
+  async getPartnerInvoicesByStatus(status: string): Promise<PartnerInvoice[]> {
+    return db.select().from(partnerInvoices)
+      .where(eq(partnerInvoices.status, status))
+      .orderBy(desc(partnerInvoices.createdAt));
+  }
+
+  async getPartnerInvoice(id: string): Promise<PartnerInvoice | undefined> {
+    const [invoice] = await db.select().from(partnerInvoices).where(eq(partnerInvoices.id, id));
+    return invoice || undefined;
+  }
+
+  async createPartnerInvoice(invoice: InsertPartnerInvoice): Promise<PartnerInvoice> {
+    const [created] = await db.insert(partnerInvoices).values(invoice).returning();
+    return created;
+  }
+
+  async updatePartnerInvoice(id: string, invoice: Partial<InsertPartnerInvoice>): Promise<PartnerInvoice | undefined> {
+    const [updated] = await db.update(partnerInvoices)
+      .set({ ...invoice, updatedAt: new Date() })
+      .where(eq(partnerInvoices.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deletePartnerInvoice(id: string): Promise<boolean> {
+    await db.delete(partnerInvoices).where(eq(partnerInvoices.id, id));
+    return true;
+  }
+
+  async getNextPartnerInvoiceNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const allInvoices = await db.select().from(partnerInvoices);
+    const yearInvoices = allInvoices.filter(inv => 
+      inv.invoiceNumber?.startsWith(`PI-${year}`)
+    );
+    const nextNumber = yearInvoices.length + 1;
+    return `PI-${year}-${String(nextNumber).padStart(3, '0')}`;
+  }
+
+  // Partner Invoice Payments
+  async getPartnerInvoicePayments(invoiceId?: string): Promise<PartnerInvoicePayment[]> {
+    if (invoiceId) {
+      return db.select().from(partnerInvoicePayments)
+        .where(eq(partnerInvoicePayments.invoiceId, invoiceId))
+        .orderBy(desc(partnerInvoicePayments.paymentDate));
+    }
+    return db.select().from(partnerInvoicePayments).orderBy(desc(partnerInvoicePayments.paymentDate));
+  }
+
+  async getPartnerInvoicePaymentsByPartner(partnerId: string): Promise<PartnerInvoicePayment[]> {
+    return db.select().from(partnerInvoicePayments)
+      .where(eq(partnerInvoicePayments.partnerId, partnerId))
+      .orderBy(desc(partnerInvoicePayments.paymentDate));
+  }
+
+  async getPartnerInvoicePayment(id: string): Promise<PartnerInvoicePayment | undefined> {
+    const [payment] = await db.select().from(partnerInvoicePayments).where(eq(partnerInvoicePayments.id, id));
+    return payment || undefined;
+  }
+
+  async createPartnerInvoicePayment(payment: InsertPartnerInvoicePayment): Promise<PartnerInvoicePayment> {
+    const [created] = await db.insert(partnerInvoicePayments).values(payment).returning();
+    return created;
+  }
+
+  async updatePartnerInvoicePayment(id: string, payment: Partial<InsertPartnerInvoicePayment>): Promise<PartnerInvoicePayment | undefined> {
+    const [updated] = await db.update(partnerInvoicePayments)
+      .set(payment)
+      .where(eq(partnerInvoicePayments.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deletePartnerInvoicePayment(id: string): Promise<boolean> {
+    await db.delete(partnerInvoicePayments).where(eq(partnerInvoicePayments.id, id));
+    return true;
   }
 }
 

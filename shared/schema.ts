@@ -2974,3 +2974,150 @@ export const activityReportSnapshots = pgTable("activity_report_snapshots", {
 export const insertActivityReportSnapshotSchema = createInsertSchema(activityReportSnapshots).omit({ id: true, createdAt: true });
 export type InsertActivityReportSnapshot = z.infer<typeof insertActivityReportSnapshotSchema>;
 export type ActivityReportSnapshot = typeof activityReportSnapshots.$inferSelect;
+
+// Partner Fee Accruals - tracks individual fees owed per job
+export const partnerFeeAccruals = pgTable("partner_fee_accruals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  
+  // Fee calculation
+  feeType: text("fee_type").notNull().default("percentage"), // percentage or fixed
+  feeValue: decimal("fee_value", { precision: 10, scale: 2 }).notNull(), // The % or fixed amount used
+  jobValue: decimal("job_value", { precision: 10, scale: 2 }).notNull(), // Value of the job for calculation
+  feeAmount: decimal("fee_amount", { precision: 10, scale: 2 }).notNull(), // Calculated fee owed
+  
+  // Description for invoice
+  description: text("description"), // e.g., "Job #J-2025-001 - Kitchen Renovation (10%)"
+  
+  // Status tracking
+  status: text("status").notNull().default("pending"), // pending, invoiced, paid, written_off
+  
+  // Link to invoice when invoiced
+  invoiceId: varchar("invoice_id").references(() => partnerInvoices.id),
+  
+  // Timestamps
+  accrualDate: timestamp("accrual_date").notNull().defaultNow(), // When the fee was accrued
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const partnerFeeAccrualsRelations = relations(partnerFeeAccruals, ({ one }) => ({
+  partner: one(tradePartners, {
+    fields: [partnerFeeAccruals.partnerId],
+    references: [tradePartners.id],
+  }),
+  job: one(jobs, {
+    fields: [partnerFeeAccruals.jobId],
+    references: [jobs.id],
+  }),
+  invoice: one(partnerInvoices, {
+    fields: [partnerFeeAccruals.invoiceId],
+    references: [partnerInvoices.id],
+  }),
+}));
+
+export const insertPartnerFeeAccrualSchema = createInsertSchema(partnerFeeAccruals).omit({ id: true, createdAt: true });
+export type InsertPartnerFeeAccrual = z.infer<typeof insertPartnerFeeAccrualSchema>;
+export type PartnerFeeAccrual = typeof partnerFeeAccruals.$inferSelect;
+
+// Partner Invoices - weekly consolidated invoices sent to partners
+export const partnerInvoices = pgTable("partner_invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceNumber: text("invoice_number").notNull().unique(), // e.g., "PI-2025-001"
+  partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
+  
+  // Invoice period
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Totals
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }).notNull().default("0"),
+  amountDue: decimal("amount_due", { precision: 10, scale: 2 }).notNull().default("0"),
+  
+  // Status
+  status: text("status").notNull().default("draft"), // draft, sent, partially_paid, paid, overdue, cancelled
+  
+  // Dates
+  issueDate: timestamp("issue_date"),
+  dueDate: timestamp("due_date"),
+  paidDate: timestamp("paid_date"),
+  
+  // Notes
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const partnerInvoicesRelations = relations(partnerInvoices, ({ one, many }) => ({
+  partner: one(tradePartners, {
+    fields: [partnerInvoices.partnerId],
+    references: [tradePartners.id],
+  }),
+  accruals: many(partnerFeeAccruals),
+  payments: many(partnerInvoicePayments),
+}));
+
+export const insertPartnerInvoiceSchema = createInsertSchema(partnerInvoices).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPartnerInvoice = z.infer<typeof insertPartnerInvoiceSchema>;
+export type PartnerInvoice = typeof partnerInvoices.$inferSelect;
+
+// Partner Invoice Payments - payments received from partners
+export const partnerInvoicePayments = pgTable("partner_invoice_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => partnerInvoices.id),
+  partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
+  
+  // Payment details
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paymentMethod: text("payment_method"), // bank_transfer, cash, card, cheque
+  paymentReference: text("payment_reference"), // Bank reference, cheque number, etc.
+  
+  // Link to finance system
+  financialTransactionId: varchar("financial_transaction_id").references(() => financialTransactions.id),
+  
+  // Notes
+  notes: text("notes"),
+  
+  paymentDate: timestamp("payment_date").notNull().defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const partnerInvoicePaymentsRelations = relations(partnerInvoicePayments, ({ one }) => ({
+  invoice: one(partnerInvoices, {
+    fields: [partnerInvoicePayments.invoiceId],
+    references: [partnerInvoices.id],
+  }),
+  partner: one(tradePartners, {
+    fields: [partnerInvoicePayments.partnerId],
+    references: [tradePartners.id],
+  }),
+  financialTransaction: one(financialTransactions, {
+    fields: [partnerInvoicePayments.financialTransactionId],
+    references: [financialTransactions.id],
+  }),
+}));
+
+export const insertPartnerInvoicePaymentSchema = createInsertSchema(partnerInvoicePayments).omit({ id: true, createdAt: true });
+export type InsertPartnerInvoicePayment = z.infer<typeof insertPartnerInvoicePaymentSchema>;
+export type PartnerInvoicePayment = typeof partnerInvoicePayments.$inferSelect;
+
+// Partner fee accrual status constants
+export const PARTNER_FEE_STATUSES = [
+  { value: "pending", label: "Pending" },
+  { value: "invoiced", label: "Invoiced" },
+  { value: "paid", label: "Paid" },
+  { value: "written_off", label: "Written Off" },
+] as const;
+
+// Partner invoice status constants
+export const PARTNER_INVOICE_STATUSES = [
+  { value: "draft", label: "Draft" },
+  { value: "sent", label: "Sent" },
+  { value: "partially_paid", label: "Partially Paid" },
+  { value: "paid", label: "Paid" },
+  { value: "overdue", label: "Overdue" },
+  { value: "cancelled", label: "Cancelled" },
+] as const;
