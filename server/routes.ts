@@ -2405,14 +2405,15 @@ export async function registerRoutes(
       const surveysArrays = await Promise.all(surveyPromises);
       const allSurveys = surveysArrays.flat();
       
-      // Filter to surveys awaiting client response
-      const pendingSurveys = allSurveys.filter((s: any) => 
-        s.bookingStatus === "pending_client" && 
-        s.status === "accepted"
+      // Filter to surveys that are relevant to the client (pending response, accepted, or confirmed)
+      const relevantSurveys = allSurveys.filter((s: any) => 
+        s.status === "accepted" && 
+        s.bookingStatus && 
+        ["pending_client", "client_accepted", "client_counter", "confirmed"].includes(s.bookingStatus)
       );
       
       // Add job and partner info to surveys
-      const surveysWithDetails = await Promise.all(pendingSurveys.map(async (survey: any) => {
+      const surveysWithDetails = await Promise.all(relevantSurveys.map(async (survey: any) => {
         const job = jobs.find((j: any) => j.id === survey.jobId);
         const partner = survey.partnerId ? await storage.getTradePartner(survey.partnerId) : null;
         return {
@@ -2470,6 +2471,34 @@ export async function registerRoutes(
       
       if (response === "accept") {
         updateData.bookingStatus = "client_accepted";
+        
+        // Create a calendar event for the partner to see in their diary
+        if (survey.proposedDate && survey.partnerId) {
+          const contact = await storage.getContact(job.contactId);
+          
+          // Parse time to create proper start/end dates
+          const proposedTime = survey.proposedTime || "09:00";
+          const [hours, minutes] = proposedTime.split(":").map(Number);
+          const startDate = new Date(survey.proposedDate);
+          startDate.setHours(hours || 9, minutes || 0, 0, 0);
+          const endDate = new Date(startDate);
+          endDate.setHours(endDate.getHours() + 1); // 1 hour duration
+          
+          await storage.createCalendarEvent({
+            title: `Survey: ${job.jobNumber} - ${job.serviceType || 'Site Survey'}`,
+            startDate,
+            endDate,
+            allDay: false,
+            jobId: job.id,
+            partnerId: survey.partnerId,
+            teamType: "partner",
+            eventType: "home_visit_partner",
+            status: "pending",
+            confirmedByAdmin: true, // Admin implicitly confirmed by approving the survey flow
+            confirmedByPartner: false,
+            notes: `Survey at ${job.jobAddress || 'TBC'}${contact ? ` - Client: ${contact.name}` : ''}`,
+          });
+        }
       } else if (response === "decline") {
         updateData.bookingStatus = "client_declined";
       } else if (response === "counter") {
