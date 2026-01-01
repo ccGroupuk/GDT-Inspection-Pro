@@ -2474,30 +2474,40 @@ export async function registerRoutes(
         
         // Create a calendar event for the partner to see in their diary
         if (survey.proposedDate && survey.partnerId) {
-          const contact = await storage.getContact(job.contactId);
+          // Check if a calendar event already exists for this job and partner on this date
+          const existingEvents = await storage.getCalendarEventsByJob(job.id);
+          const eventExists = existingEvents.some((e: any) => 
+            e.partnerId === survey.partnerId && 
+            e.eventType === "home_visit_partner" &&
+            new Date(e.startDate).toDateString() === new Date(survey.proposedDate!).toDateString()
+          );
           
-          // Parse time to create proper start/end dates
-          const proposedTime = survey.proposedTime || "09:00";
-          const [hours, minutes] = proposedTime.split(":").map(Number);
-          const startDate = new Date(survey.proposedDate);
-          startDate.setHours(hours || 9, minutes || 0, 0, 0);
-          const endDate = new Date(startDate);
-          endDate.setHours(endDate.getHours() + 1); // 1 hour duration
-          
-          await storage.createCalendarEvent({
-            title: `Survey: ${job.jobNumber} - ${job.serviceType || 'Site Survey'}`,
-            startDate,
-            endDate,
-            allDay: false,
-            jobId: job.id,
-            partnerId: survey.partnerId,
-            teamType: "partner",
-            eventType: "home_visit_partner",
-            status: "pending",
-            confirmedByAdmin: true, // Admin implicitly confirmed by approving the survey flow
-            confirmedByPartner: false,
-            notes: `Survey at ${job.jobAddress || 'TBC'}${contact ? ` - Client: ${contact.name}` : ''}`,
-          });
+          if (!eventExists) {
+            const contact = await storage.getContact(job.contactId);
+            
+            // Parse time to create proper start/end dates
+            const proposedTime = survey.proposedTime || "09:00";
+            const [hours, minutes] = proposedTime.split(":").map(Number);
+            const startDate = new Date(survey.proposedDate);
+            startDate.setHours(hours || 9, minutes || 0, 0, 0);
+            const endDate = new Date(startDate);
+            endDate.setHours(endDate.getHours() + 1); // 1 hour duration
+            
+            await storage.createCalendarEvent({
+              title: `Survey: ${job.jobNumber} - ${job.serviceType || 'Site Survey'}`,
+              startDate,
+              endDate,
+              allDay: false,
+              jobId: job.id,
+              partnerId: survey.partnerId,
+              teamType: "partner",
+              eventType: "home_visit_partner",
+              status: "pending",
+              confirmedByAdmin: true, // Admin implicitly confirmed by approving the survey flow
+              confirmedByPartner: false,
+              notes: `Survey at ${job.jobAddress || 'TBC'}${contact ? ` - Client: ${contact.name}` : ''}`,
+            });
+          }
         }
       } else if (response === "decline") {
         updateData.bookingStatus = "client_declined";

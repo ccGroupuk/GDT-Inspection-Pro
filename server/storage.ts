@@ -220,6 +220,7 @@ export interface IStorage {
   getCalendarEvent(id: string): Promise<CalendarEvent | undefined>;
   getCalendarEventsByDateRange(startDate: Date, endDate: Date): Promise<CalendarEvent[]>;
   getCalendarEventsByPartner(partnerId: string): Promise<CalendarEvent[]>;
+  getCalendarEventsByJob(jobId: string): Promise<CalendarEvent[]>;
   getCalendarEventsForPartnerPortal(partnerId: string, startDate: Date, endDate: Date): Promise<CalendarEvent[]>;
   createCalendarEvent(event: InsertCalendarEvent): Promise<CalendarEvent>;
   updateCalendarEvent(id: string, event: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined>;
@@ -1188,6 +1189,13 @@ export class DatabaseStorage implements IStorage {
     return db.select()
       .from(calendarEvents)
       .where(eq(calendarEvents.partnerId, partnerId))
+      .orderBy(asc(calendarEvents.startDate));
+  }
+
+  async getCalendarEventsByJob(jobId: string): Promise<CalendarEvent[]> {
+    return db.select()
+      .from(calendarEvents)
+      .where(eq(calendarEvents.jobId, jobId))
       .orderBy(asc(calendarEvents.startDate));
   }
 
