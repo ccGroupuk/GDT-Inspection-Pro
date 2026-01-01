@@ -2273,6 +2273,8 @@ export async function registerRoutes(
   app.post("/api/portal/login", async (req, res) => {
     try {
       const { email, password } = req.body;
+      console.log("[portal-login] Attempt for email:", email);
+      
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password required" });
       }
@@ -2281,28 +2283,38 @@ export async function registerRoutes(
       const contacts = await storage.getContacts();
       const contact = contacts.find(c => c.email?.toLowerCase() === email.toLowerCase());
       if (!contact) {
+        console.log("[portal-login] No contact found for email:", email);
         return res.status(401).json({ message: "Invalid email or password" });
       }
+      console.log("[portal-login] Found contact:", contact.id, contact.name);
       
       // Get portal access for this contact
       const access = await storage.getClientPortalAccess(contact.id);
-      if (!access || !access.isActive) {
-        return res.status(401).json({ message: "Portal access not available" });
+      if (!access) {
+        console.log("[portal-login] No portal access record for contact:", contact.id);
+        return res.status(401).json({ message: "Portal access not set up. Please contact admin to set up portal access." });
+      }
+      if (!access.isActive) {
+        console.log("[portal-login] Portal access inactive for contact:", contact.id);
+        return res.status(401).json({ message: "Portal access is inactive. Please contact admin." });
       }
       
       // Check if password is set
       if (!access.passwordHash) {
-        return res.status(400).json({ message: "No password set. Please use your access link." });
+        console.log("[portal-login] No password set for contact:", contact.id);
+        return res.status(400).json({ message: "No password set. Please use your access link or ask admin to reset password." });
       }
       
       // Verify password
       const isValid = await bcrypt.compare(password, access.passwordHash);
+      console.log("[portal-login] Password check result:", isValid);
       if (!isValid) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
       
       // Update last login
       await storage.updateClientPortalAccessLastLogin(access.id);
+      console.log("[portal-login] Login successful for:", email);
       
       res.json({ 
         token: access.accessToken,
@@ -3698,6 +3710,8 @@ export async function registerRoutes(
   app.post("/api/partner-portal/login", async (req, res) => {
     try {
       const { email, password } = req.body;
+      console.log("[partner-login] Attempt for email:", email);
+      
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password required" });
       }
@@ -3706,28 +3720,38 @@ export async function registerRoutes(
       const partners = await storage.getTradePartners();
       const partner = partners.find(p => p.email?.toLowerCase() === email.toLowerCase());
       if (!partner) {
+        console.log("[partner-login] No partner found for email:", email);
         return res.status(401).json({ message: "Invalid email or password" });
       }
+      console.log("[partner-login] Found partner:", partner.id, partner.businessName);
       
       // Get portal access for this partner
       const access = await storage.getPartnerPortalAccess(partner.id);
-      if (!access || !access.isActive) {
-        return res.status(401).json({ message: "Portal access not available" });
+      if (!access) {
+        console.log("[partner-login] No portal access record for partner:", partner.id);
+        return res.status(401).json({ message: "Portal access not set up. Please contact admin to set up portal access." });
+      }
+      if (!access.isActive) {
+        console.log("[partner-login] Portal access inactive for partner:", partner.id);
+        return res.status(401).json({ message: "Portal access is inactive. Please contact admin." });
       }
       
       // Check if password is set
       if (!access.passwordHash) {
-        return res.status(400).json({ message: "No password set. Please use your invite link." });
+        console.log("[partner-login] No password set for partner:", partner.id);
+        return res.status(400).json({ message: "No password set. Please use your invite link or ask admin to reset password." });
       }
       
       // Verify password
       const isValid = await bcrypt.compare(password, access.passwordHash);
+      console.log("[partner-login] Password check result:", isValid);
       if (!isValid) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
       
       // Update last login
       await storage.updatePartnerPortalAccessLastLogin(access.id);
+      console.log("[partner-login] Login successful for:", email);
       
       res.json({ 
         token: access.accessToken,
@@ -7446,30 +7470,42 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       
       // Check rate limit
       if (!checkRateLimit(clientIp)) {
+        console.log("[employee-login] Rate limited IP:", clientIp);
         return res.status(429).json({ message: "Too many login attempts. Please try again later." });
       }
 
       const { email, password } = req.body;
+      console.log("[employee-login] Attempt for email:", email);
+      
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password required" });
       }
 
       const employee = await storage.getEmployeeByEmail(email);
-      if (!employee || !employee.isActive) {
+      if (!employee) {
+        console.log("[employee-login] No employee found for email:", email);
         return res.status(401).json({ message: "Invalid credentials" });
       }
+      if (!employee.isActive) {
+        console.log("[employee-login] Employee inactive:", email);
+        return res.status(401).json({ message: "Account is inactive. Please contact admin." });
+      }
+      console.log("[employee-login] Found employee:", employee.id, employee.firstName, employee.lastName);
 
       const credential = await storage.getEmployeeCredential(employee.id);
       if (!credential) {
-        return res.status(401).json({ message: "Invalid credentials" });
+        console.log("[employee-login] No credential found for employee:", employee.id);
+        return res.status(401).json({ message: "Password not set. Please contact admin to reset password." });
       }
 
       // Check if account is locked
       if (credential.lockedUntil && credential.lockedUntil > new Date()) {
-        return res.status(423).json({ message: "Account is temporarily locked" });
+        console.log("[employee-login] Account locked until:", credential.lockedUntil);
+        return res.status(423).json({ message: "Account is temporarily locked. Try again later." });
       }
 
       const isValid = await bcrypt.compare(password, credential.passwordHash);
+      console.log("[employee-login] Password check result:", isValid);
       if (!isValid) {
         await storage.updateEmployeeCredential(employee.id, {
           failedLoginAttempts: (credential.failedLoginAttempts || 0) + 1,
@@ -7507,6 +7543,8 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         path: "/",
       });
 
+      console.log("[employee-login] Login successful for:", email);
+      
       res.json({
         employee: {
           id: employee.id,
