@@ -2780,10 +2780,12 @@ export async function registerRoutes(
       const { preferredDate, preferredTime, notes } = req.body;
       
       // Create a survey request initiated by the partner
+      // If partner provides dates, set bookingStatus to pending_client so client can respond
       const survey = await storage.createJobSurvey({
         jobId: job.id,
         partnerId: access.partnerId,
         status: "accepted", // Partner-initiated surveys are auto-accepted
+        bookingStatus: preferredDate ? "pending_client" : null, // Client can respond if dates provided
         proposedDate: preferredDate ? new Date(preferredDate) : null,
         proposedTime: preferredTime || null,
         partnerNotes: notes || null,
