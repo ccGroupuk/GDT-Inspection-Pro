@@ -2598,6 +2598,31 @@ export async function registerRoutes(
     }
   });
 
+  // Helper function to get postcode area only (e.g., "CF14 3XX" -> "CF14")
+  function getPostcodeArea(postcode: string | null | undefined): string | null {
+    if (!postcode) return null;
+    const parts = postcode.trim().split(' ');
+    return parts[0] || null;
+  }
+
+  // Helper function to limit contact info before partner accepts
+  function getLimitedContact(contact: any, isAccepted: boolean) {
+    if (!contact) return null;
+    if (isAccepted) return contact; // Full access after acceptance
+    
+    // Before acceptance: only name and postcode area
+    return {
+      id: contact.id,
+      name: contact.name,
+      postcode: getPostcodeArea(contact.postcode),
+      // Hide sensitive data
+      email: null,
+      phone: null,
+      address: null,
+      notes: null,
+    };
+  }
+
   // Get partner's jobs
   app.get("/api/partner-portal/jobs", async (req, res) => {
     try {
@@ -2616,11 +2641,12 @@ export async function registerRoutes(
       
       const jobs = await storage.getJobsByPartner(access.partnerId);
       
-      // Include contact info for each job
+      // Include contact info for each job - limited until accepted
       const jobsWithContacts = await Promise.all(
         jobs.map(async (job) => {
           const contact = await storage.getContact(job.contactId);
-          return { ...job, contact };
+          const isAccepted = job.partnerStatus === "accepted";
+          return { ...job, contact: getLimitedContact(contact, isAccepted) };
         })
       );
       
@@ -2651,8 +2677,10 @@ export async function registerRoutes(
       
       const contact = await storage.getContact(job.contactId);
       const tasks = (await storage.getTasks()).filter(t => t.jobId === job.id);
+      const isAccepted = job.partnerStatus === "accepted";
       
-      res.json({ ...job, contact, tasks });
+      // Return limited contact info before acceptance
+      res.json({ ...job, contact: getLimitedContact(contact, isAccepted), tasks });
     } catch (error) {
       console.error("Partner portal job detail error:", error);
       res.status(500).json({ message: "Failed to load job" });
@@ -4467,7 +4495,7 @@ export async function registerRoutes(
     }
   });
 
-  // Partner portal: Get quote items (if sharing is enabled)
+  // Partner portal: Get quote items (if sharing is enabled AND partner has accepted)
   app.get("/api/partner-portal/jobs/:jobId/quote-items", async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
@@ -4483,6 +4511,11 @@ export async function registerRoutes(
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Partner must accept the job before seeing quote items
+      if (job.partnerStatus !== "accepted") {
+        return res.json([]);
       }
 
       // Check if quote sharing is enabled

@@ -436,6 +436,15 @@ export default function PartnerPortalJobDetail() {
                   <CardTitle className="text-lg">Client Details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {/* Show notice when limited info is displayed (before acceptance) */}
+                  {job.partnerStatus !== "accepted" && (
+                    <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-sm mb-4 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span>
+                        <strong>Limited information:</strong> Full client details (phone, email, address) will be available after you accept this job.
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <User className="w-4 h-4 text-muted-foreground" />
                     <span>{job.contact.name}</span>
@@ -456,10 +465,13 @@ export default function PartnerPortalJobDetail() {
                       </a>
                     </div>
                   )}
-                  {(job.contact.address || job.jobPostcode) && (
+                  {(job.contact.address || job.contact.postcode) && (
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-muted-foreground" />
-                      <span>{job.contact.address}{job.contact.address && job.jobPostcode ? ', ' : ''}{job.jobPostcode}</span>
+                      <span>
+                        {job.contact.address && <>{job.contact.address}, </>}
+                        {job.contact.postcode}
+                      </span>
                     </div>
                   )}
                 </CardContent>
