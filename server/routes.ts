@@ -2399,11 +2399,18 @@ export async function registerRoutes(
       
       // Get all jobs for this contact
       const jobs = await storage.getJobsByContact(access.contactId);
+      console.log(`[portal/surveys] Contact ${access.contactId} has ${jobs.length} jobs`);
       
       // Get surveys for those jobs that need client response
       const surveyPromises = jobs.map((job: any) => storage.getJobSurveysByJob(job.id));
       const surveysArrays = await Promise.all(surveyPromises);
       const allSurveys = surveysArrays.flat();
+      console.log(`[portal/surveys] Found ${allSurveys.length} total surveys across all jobs`);
+      
+      // Log each survey's status for debugging
+      allSurveys.forEach((s: any) => {
+        console.log(`[portal/surveys] Survey ${s.id}: status="${s.status}", bookingStatus="${s.bookingStatus}", proposedDate="${s.proposedDate}"`);
+      });
       
       // Filter to surveys that are relevant to the client (pending response, accepted, or confirmed)
       const relevantSurveys = allSurveys.filter((s: any) => 
@@ -2411,6 +2418,7 @@ export async function registerRoutes(
         s.bookingStatus && 
         ["pending_client", "client_accepted", "client_counter", "confirmed"].includes(s.bookingStatus)
       );
+      console.log(`[portal/surveys] ${relevantSurveys.length} surveys match filter (status=accepted AND bookingStatus in [pending_client, client_accepted, client_counter, confirmed])`);
       
       // Add job and partner info to surveys
       const surveysWithDetails = await Promise.all(relevantSurveys.map(async (survey: any) => {
@@ -2817,6 +2825,8 @@ export async function registerRoutes(
       }
       
       const { preferredDate, preferredTime, notes } = req.body;
+      console.log(`[partner/request-survey] Partner ${access.partnerId} requesting survey for job ${job.id}`);
+      console.log(`[partner/request-survey] preferredDate=${preferredDate}, preferredTime=${preferredTime}`);
       
       // Create a survey request initiated by the partner
       // If partner provides dates, set bookingStatus to pending_client so client can respond
@@ -2830,6 +2840,8 @@ export async function registerRoutes(
         partnerNotes: notes || null,
         adminNotes: `Partner-initiated survey request${notes ? `: ${notes}` : ''}`,
       });
+      
+      console.log(`[partner/request-survey] Survey created: id=${survey.id}, status=${survey.status}, bookingStatus=${survey.bookingStatus}`);
       
       // Update job status to survey_booked if not already past that stage
       const stageIndex = ["new_enquiry", "contacted"].indexOf(job.status);
