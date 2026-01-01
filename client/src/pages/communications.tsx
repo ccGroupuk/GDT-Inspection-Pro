@@ -70,16 +70,23 @@ export default function CommunicationsPage() {
   });
 
   const sendMessageMutation = useMutation({
-    mutationFn: (data: { recipientId: string; content: string }) =>
-      apiRequest("POST", "/api/messages", data),
+    mutationFn: async (data: { recipientId: string; content: string }) => {
+      const response = await apiRequest("POST", "/api/messages", data);
+      return response;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/communications/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/messages/conversation", selectedConversation] });
       setNewMessage("");
     },
-    onError: () => {
-      toast({ title: "Failed to send message", variant: "destructive" });
+    onError: (error: Error) => {
+      console.error("Send message error:", error);
+      toast({ 
+        title: "Failed to send message", 
+        description: error.message || "Please try logging out and back in",
+        variant: "destructive" 
+      });
     },
   });
 
