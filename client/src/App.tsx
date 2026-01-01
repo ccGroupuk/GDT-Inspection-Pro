@@ -39,6 +39,7 @@ import PartnerPortalJobDetail from "@/pages/partner-portal/job-detail";
 import PartnerPortalCalendar from "@/pages/partner-portal/calendar";
 import PartnerPortalHelp from "@/pages/partner-portal/help";
 import PartnerPortalProfile from "@/pages/partner-portal/profile";
+import PartnerPortalBilling from "@/pages/partner-portal/billing";
 import PartnerPortalSurveys from "@/pages/partner-portal/surveys";
 import PartnerPortalQuotes from "@/pages/partner-portal/quotes";
 import PartnerPortalEmergencyCallouts from "@/pages/partner-portal/emergency-callouts";
@@ -62,6 +63,7 @@ import Communications from "@/pages/communications";
 import ProductFinder from "@/pages/product-finder";
 import SupplierLookup from "@/pages/supplier-lookup";
 import DailyActivities from "@/pages/daily-activities";
+import PartnerInvoicing from "@/pages/partner-invoicing";
 
 function AdminRouter() {
   return (
@@ -77,6 +79,7 @@ function AdminRouter() {
       <Route path="/tasks" component={Tasks} />
       <Route path="/calendar" component={CalendarPage} />
       <Route path="/finance" component={Finance} />
+      <Route path="/partner-invoicing" component={PartnerInvoicing} />
       <Route path="/employees" component={EmployeesAdmin} />
       <Route path="/employees/:employeeId/portal" component={EmployeePortalAdminView} />
       <Route path="/emergency-callouts" component={EmergencyCallouts} />
@@ -141,6 +144,7 @@ function PartnerPortalRouter() {
       <Route path="/partner-portal/calendar" component={PartnerPortalCalendar} />
       <Route path="/partner-portal/help" component={PartnerPortalHelp} />
       <Route path="/partner-portal/profile" component={PartnerPortalProfile} />
+      <Route path="/partner-portal/billing" component={PartnerPortalBilling} />
       <Route component={NotFound} />
     </Switch>
   );

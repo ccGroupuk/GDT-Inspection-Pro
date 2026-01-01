@@ -26,6 +26,7 @@ import {
   Search,
   Phone,
   BarChart3,
+  Receipt,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -87,6 +88,11 @@ const menuItems = [
     title: "Finance",
     url: "/finance",
     icon: PoundSterling,
+  },
+  {
+    title: "Partner Invoicing",
+    url: "/partner-invoicing",
+    icon: Receipt,
   },
   {
     title: "Employees",
