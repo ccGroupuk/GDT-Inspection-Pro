@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { StatusBadge } from "@/components/status-badge";
 import { FormSkeleton } from "@/components/loading-skeleton";
 import { ChecklistCompletion, PendingChecklistsWarning } from "@/components/checklist-completion";
+import { SendMessageDialog } from "@/components/send-message-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useUpload } from "@/hooks/use-upload";
@@ -1668,6 +1669,18 @@ export default function JobDetail() {
                     <Phone className="w-4 h-4" />
                     <a href={`tel:${partner.phone}`} className="hover:underline">{partner.phone}</a>
                   </div>
+                  
+                  <SendMessageDialog
+                    recipientId={partner.id}
+                    recipientName={partner.businessName}
+                    recipientType="partner"
+                    trigger={
+                      <Button variant="outline" size="sm" className="w-full" data-testid="button-message-partner">
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        Message Partner
+                      </Button>
+                    }
+                  />
                   
                   <div className="pt-3 border-t border-border">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">

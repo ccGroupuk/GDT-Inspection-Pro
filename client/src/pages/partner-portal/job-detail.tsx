@@ -14,7 +14,7 @@ import { queryClient } from "@/lib/queryClient";
 import { 
   Briefcase, MapPin, User, Phone, Mail, LogOut, Loader2, 
   ArrowLeft, CheckCircle2, Circle, FileText, MessageSquare, Image,
-  Siren, AlertTriangle, CheckCircle, XCircle, Clock
+  Siren, AlertTriangle, CheckCircle, XCircle, Clock, Calendar
 } from "lucide-react";
 import type { Job, Contact, Task, QuoteItem, JobNote, JobNoteAttachment, EmergencyCallout } from "@shared/schema";
 import { NOTE_VISIBILITY } from "@shared/schema";
@@ -74,6 +74,12 @@ export default function PartnerPortalJobDetail() {
   // Accept/Decline job state
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
+  
+  // Survey request state
+  const [requestSurveyDialogOpen, setRequestSurveyDialogOpen] = useState(false);
+  const [surveyPreferredDate, setSurveyPreferredDate] = useState("");
+  const [surveyPreferredTime, setSurveyPreferredTime] = useState("");
+  const [surveyNotes, setSurveyNotes] = useState("");
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -181,6 +187,27 @@ export default function PartnerPortalJobDetail() {
     },
     onError: (error: Error) => {
       toast({ title: "Error accepting job", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Request survey mutation
+  const requestSurveyMutation = useMutation({
+    mutationFn: async (data: { preferredDate?: string; preferredTime?: string; notes?: string }) => {
+      const res = await partnerApiRequest("POST", `/api/partner-portal/jobs/${jobId}/request-survey`, data, token);
+      if (!res.ok) throw new Error("Failed to request survey");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/surveys"] });
+      toast({ title: "Survey Requested", description: "Your survey request has been submitted to the admin." });
+      setRequestSurveyDialogOpen(false);
+      setSurveyPreferredDate("");
+      setSurveyPreferredTime("");
+      setSurveyNotes("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error requesting survey", description: error.message, variant: "destructive" });
     },
   });
 
@@ -298,19 +325,49 @@ export default function PartnerPortalJobDetail() {
                 </CardContent>
               </Card>
             ) : job.partnerStatus === "accepted" ? (
-              <Card className="border-green-500 border-2">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                    <CheckCircle className="w-5 h-5" />
-                    <span className="font-medium">You have accepted this job</span>
-                    {job.partnerRespondedAt && (
-                      <span className="text-sm text-muted-foreground ml-auto">
-                        {new Date(job.partnerRespondedAt).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <>
+                <Card className="border-green-500 border-2">
+                  <CardContent className="py-4">
+                    <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                      <CheckCircle className="w-5 h-5" />
+                      <span className="font-medium">You have accepted this job</span>
+                      {job.partnerRespondedAt && (
+                        <span className="text-sm text-muted-foreground ml-auto">
+                          {new Date(job.partnerRespondedAt).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Link href={`/partner-portal/quotes/new?jobId=${job.id}`}>
+                        <Button variant="outline" className="w-full" data-testid="button-create-quote">
+                          <FileText className="w-4 h-4 mr-2" />
+                          Create Quote
+                        </Button>
+                      </Link>
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => setRequestSurveyDialogOpen(true)}
+                        data-testid="button-request-survey"
+                      >
+                        <Calendar className="w-4 h-4 mr-2" />
+                        Book Survey
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3 text-center">
+                      Create a quote for this job or request a survey visit with the client.
+                    </p>
+                  </CardContent>
+                </Card>
+              </>
             ) : job.partnerStatus === "declined" ? (
               <Card className="border-red-500 border-2">
                 <CardContent className="py-4">
@@ -737,6 +794,76 @@ export default function PartnerPortalJobDetail() {
                 data-testid="button-confirm-decline"
               >
                 {declineJobMutation.isPending ? "Declining..." : "Decline Job"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Request Survey Dialog */}
+        <Dialog open={requestSurveyDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            setRequestSurveyDialogOpen(false);
+            setSurveyPreferredDate("");
+            setSurveyPreferredTime("");
+            setSurveyNotes("");
+          }
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-primary" />
+                Book Survey Visit
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                Request a survey visit with the client to assess the job requirements.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Preferred Date</Label>
+                  <Input
+                    type="date"
+                    value={surveyPreferredDate}
+                    onChange={(e) => setSurveyPreferredDate(e.target.value)}
+                    data-testid="input-survey-date"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Preferred Time</Label>
+                  <Input
+                    type="time"
+                    value={surveyPreferredTime}
+                    onChange={(e) => setSurveyPreferredTime(e.target.value)}
+                    data-testid="input-survey-time"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes (Optional)</Label>
+                <Textarea
+                  placeholder="Any specific requirements or access instructions..."
+                  value={surveyNotes}
+                  onChange={(e) => setSurveyNotes(e.target.value)}
+                  className="min-h-[80px]"
+                  data-testid="textarea-survey-notes"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRequestSurveyDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => requestSurveyMutation.mutate({
+                  preferredDate: surveyPreferredDate || undefined,
+                  preferredTime: surveyPreferredTime || undefined,
+                  notes: surveyNotes || undefined,
+                })}
+                disabled={requestSurveyMutation.isPending}
+                data-testid="button-confirm-survey"
+              >
+                {requestSurveyMutation.isPending ? "Requesting..." : "Request Survey"}
               </Button>
             </DialogFooter>
           </DialogContent>

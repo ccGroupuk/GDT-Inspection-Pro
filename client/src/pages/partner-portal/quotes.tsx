@@ -13,7 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { 
   Briefcase, LogOut, Loader2, Calendar, HelpCircle, Settings, 
-  ClipboardCheck, FileText, Plus, Trash2, Save, Send, ArrowLeft, Siren
+  ClipboardCheck, FileText, Plus, Trash2, Save, Send, ArrowLeft, Siren,
+  Search, ExternalLink, Store
 } from "lucide-react";
 import type { PartnerQuote, PartnerQuoteItem, Job } from "@shared/schema";
 
@@ -26,6 +27,22 @@ interface QuoteLineItem {
   description: string;
   quantity: string;
   unitPrice: string;
+}
+
+interface ProductResult {
+  productName: string;
+  brand: string | null;
+  price: number | null;
+  currency: string;
+  sizeValue: number | null;
+  sizeUnit: string | null;
+  sizeLabel: string | null;
+  storeName: string;
+  productUrl: string;
+  sku: string | null;
+  inStock: boolean | null;
+  lastCheckedAt: string;
+  imageUrl?: string | null;
 }
 
 function getQuoteStatusColor(status: string) {
@@ -58,6 +75,53 @@ export default function PartnerPortalQuotes() {
   const [notes, setNotes] = useState("");
   const [taxEnabled, setTaxEnabled] = useState(true);
   const [taxRate, setTaxRate] = useState("20");
+  
+  // Product search state
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [productSearchResults, setProductSearchResults] = useState<ProductResult[]>([]);
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
+  
+  const searchProducts = async () => {
+    if (!productSearchQuery.trim() || productSearchQuery.trim().length < 2) {
+      toast({ title: "Search query must be at least 2 characters", variant: "destructive" });
+      return;
+    }
+    
+    setIsSearchingProducts(true);
+    try {
+      const res = await fetch(`/api/partner-portal/suppliers/search?query=${encodeURIComponent(productSearchQuery.trim())}&limit=3`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Search failed");
+      }
+      const results = await res.json();
+      setProductSearchResults(results);
+      if (results.length === 0) {
+        toast({ title: "No products found", description: "Try a different search term" });
+      }
+    } catch (error: any) {
+      toast({ title: "Search failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSearchingProducts(false);
+    }
+  };
+  
+  const addProductToQuote = (product: ProductResult) => {
+    const description = product.brand 
+      ? `${product.brand} - ${product.productName}${product.sizeLabel ? ` (${product.sizeLabel})` : ''}`
+      : `${product.productName}${product.sizeLabel ? ` (${product.sizeLabel})` : ''}`;
+    
+    const newItem: QuoteLineItem = {
+      description: description.substring(0, 200),
+      quantity: "1",
+      unitPrice: product.price?.toFixed(2) || "0",
+    };
+    
+    setItems([...items, newItem]);
+    toast({ title: "Product added to quote" });
+  };
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -308,6 +372,75 @@ export default function PartnerPortalQuotes() {
               <CardTitle className="text-lg">Quote Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Product Search Section */}
+              <div className="space-y-4 p-4 rounded-md border border-dashed">
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium">Search Supplier Products</Label>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={productSearchQuery}
+                    onChange={(e) => setProductSearchQuery(e.target.value)}
+                    placeholder="Search for products (e.g., timber, screws, plywood...)"
+                    className="flex-1"
+                    onKeyDown={(e) => e.key === 'Enter' && searchProducts()}
+                    data-testid="input-product-search"
+                  />
+                  <Button 
+                    onClick={searchProducts} 
+                    disabled={isSearchingProducts}
+                    data-testid="button-search-products"
+                  >
+                    {isSearchingProducts ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  </Button>
+                </div>
+                
+                {productSearchResults.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    <p className="text-xs text-muted-foreground">Found {productSearchResults.length} products - click to add to quote:</p>
+                    {productSearchResults.map((product, idx) => (
+                      <div 
+                        key={idx} 
+                        className="flex items-center justify-between gap-3 p-3 rounded-md border bg-muted/30 hover-elevate cursor-pointer"
+                        onClick={() => addProductToQuote(product)}
+                        data-testid={`product-result-${idx}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {product.brand ? `${product.brand} - ` : ''}{product.productName}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{product.storeName}</span>
+                            {product.sizeLabel && <span>{product.sizeLabel}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {product.price !== null && (
+                            <span className="font-semibold text-sm">{product.currency === 'GBP' ? '£' : product.currency}{product.price.toFixed(2)}</span>
+                          )}
+                          {product.productUrl && (
+                            <a 
+                              href={product.productUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-muted-foreground hover:text-primary"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                          <Button size="sm" variant="outline" data-testid={`button-add-product-${idx}`}>
+                            <Plus className="w-3 h-3 mr-1" />
+                            Add
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
               <div className="space-y-4">
                 <Label className="text-sm font-medium">Line Items</Label>
                 {items.map((item, index) => (

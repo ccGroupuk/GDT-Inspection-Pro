@@ -2747,6 +2747,50 @@ export async function registerRoutes(
     }
   });
 
+  // Partner requests a survey for a job
+  app.post("/api/partner-portal/jobs/:jobId/request-survey", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const { preferredDate, preferredTime, notes } = req.body;
+      
+      // Create a survey request initiated by the partner
+      const survey = await storage.createJobSurvey({
+        jobId: job.id,
+        partnerId: access.partnerId,
+        status: "accepted", // Partner-initiated surveys are auto-accepted
+        proposedDate: preferredDate ? new Date(preferredDate) : null,
+        proposedTime: preferredTime || null,
+        partnerNotes: notes || null,
+        adminNotes: `Partner-initiated survey request${notes ? `: ${notes}` : ''}`,
+      });
+      
+      // Update job status to survey_booked if not already past that stage
+      const stageIndex = ["new_enquiry", "contacted"].indexOf(job.status);
+      if (stageIndex >= 0) {
+        await storage.updateJob(job.id, { status: "survey_booked" });
+      }
+      
+      res.json({ message: "Survey requested successfully", survey });
+    } catch (error) {
+      console.error("Partner portal request survey error:", error);
+      res.status(500).json({ message: "Failed to request survey" });
+    }
+  });
+
   // Partner declines a job assignment
   app.post("/api/partner-portal/jobs/:jobId/decline", async (req, res) => {
     try {
@@ -3587,6 +3631,38 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Partner portal delete quote error:", error);
       res.status(500).json({ message: "Failed to delete quote" });
+    }
+  });
+
+  // Partner portal supplier product search
+  app.get("/api/partner-portal/suppliers/search", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const query = req.query.query as string;
+      const limit = parseInt(req.query.limit as string) || 3;
+
+      if (!query || query.trim().length < 2) {
+        return res.status(400).json({ message: "Search query must be at least 2 characters" });
+      }
+
+      console.log(`[partner-supplier-search] Partner ${access.partnerId} searching for "${query}" (limit: ${limit})`);
+
+      const { searchSuppliers } = await import('./suppliers');
+      const results = await searchSuppliers(query.trim(), limit);
+
+      res.json(results);
+    } catch (error) {
+      console.error("Partner portal supplier search error:", error);
+      res.status(500).json({ message: "Failed to search suppliers. Please try again." });
     }
   });
 
