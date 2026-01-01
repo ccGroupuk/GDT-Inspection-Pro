@@ -1643,7 +1643,7 @@ export default function JobDetail() {
                   <span>{contact.address}</span>
                 </div>
               )}
-              <Link href={`/contacts/${contact.id}`}>
+              <Link href={`/contacts?selected=${contact.id}`}>
                 <Button variant="outline" size="sm" className="w-full mt-2">View Contact</Button>
               </Link>
             </CardContent>

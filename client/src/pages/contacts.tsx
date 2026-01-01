@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useSearch } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +88,31 @@ export default function Contacts() {
   const { data: contacts = [], isLoading } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
   });
+
+  // Handle URL query parameter to auto-select a contact
+  const searchString = useSearch();
+  useEffect(() => {
+    if (!contacts.length) return;
+    
+    const params = new URLSearchParams(searchString);
+    const selectedId = params.get("selected");
+    
+    if (selectedId) {
+      const contact = contacts.find(c => c.id === selectedId);
+      if (contact) {
+        setEditingContact(contact);
+        form.reset({
+          name: contact.name,
+          email: contact.email || "",
+          phone: contact.phone,
+          address: contact.address || "",
+          postcode: contact.postcode || "",
+          notes: contact.notes || "",
+        });
+        setIsDialogOpen(true);
+      }
+    }
+  }, [contacts, searchString]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
