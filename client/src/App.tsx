@@ -66,6 +66,7 @@ import SupplierLookup from "@/pages/supplier-lookup";
 import DailyActivities from "@/pages/daily-activities";
 import PartnerInvoicing from "@/pages/partner-invoicing";
 import AIBridge from "@/pages/ai-bridge";
+import AgentInbox from "@/pages/agent-inbox";
 
 function AdminRouter() {
   return (
@@ -100,6 +101,7 @@ function AdminRouter() {
       <Route path="/wellbeing" component={Wellbeing} />
       <Route path="/help-center" component={HelpCenterAdmin} />
       <Route path="/ai-bridge" component={AIBridge} />
+      <Route path="/agent-inbox" component={AgentInbox} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

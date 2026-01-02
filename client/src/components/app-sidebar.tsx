@@ -29,6 +29,7 @@ import {
   BarChart3,
   Receipt,
   Sparkles,
+  Inbox,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -165,6 +166,11 @@ const menuItems = [
     title: "AI Assistant",
     url: "/ai-bridge",
     icon: Sparkles,
+  },
+  {
+    title: "Agent Inbox",
+    url: "/agent-inbox",
+    icon: Inbox,
   },
   {
     title: "Help Center",
