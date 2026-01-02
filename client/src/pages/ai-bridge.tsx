@@ -84,8 +84,9 @@ export default function AIBridge() {
       setSendDescription("");
       setCodeToSend(null);
       toast({
-        title: "Sent to Agent",
-        description: "Code request added to the Agent's Inbox for review.",
+        title: "NEW_TASK_READY",
+        description: "Build request queued! Tell your Agent: 'Check inbox and build pending tasks'",
+        duration: 15000,
       });
     },
     onError: (error: Error) => {

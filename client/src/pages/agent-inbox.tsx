@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,9 @@ import {
   Rocket,
   FileCode,
   Loader2,
-  Trash2
+  Trash2,
+  Bell,
+  Zap
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { formatDistanceToNow } from "date-fns";
@@ -40,9 +42,29 @@ export default function AgentInbox() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState("pending");
 
+  const prevPendingCountRef = useRef<number>(0);
+  const [newTaskAlert, setNewTaskAlert] = useState(false);
+
   const { data: requests = [], isLoading } = useQuery<BuildRequest[]>({
     queryKey: ["/api/build-requests"],
+    refetchInterval: 10000, // Poll every 10 seconds for new tasks
   });
+
+  // Watch for new pending tasks and show alert
+  useEffect(() => {
+    const currentPendingCount = requests.filter(r => r.status === "pending").length;
+    
+    if (currentPendingCount > prevPendingCountRef.current && prevPendingCountRef.current !== 0) {
+      setNewTaskAlert(true);
+      toast({
+        title: "NEW_TASK_READY",
+        description: `New build request detected! ${currentPendingCount} pending task(s) in queue.`,
+        duration: 10000,
+      });
+    }
+    
+    prevPendingCountRef.current = currentPendingCount;
+  }, [requests, toast]);
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, status, notes }: { id: string; status: string; notes?: string }) => {
@@ -137,6 +159,29 @@ export default function AgentInbox() {
           </Badge>
         )}
       </div>
+
+      {pendingCount > 0 && (
+        <Card className="border-yellow-500/50 bg-yellow-500/10">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-yellow-500/20">
+                <Zap className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-yellow-700 dark:text-yellow-300">NEW_TASK_READY</p>
+                <p className="text-sm text-muted-foreground">
+                  {pendingCount} task{pendingCount !== 1 ? 's' : ''} waiting to be built. 
+                  Tell your Agent: <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded">"Check inbox and build pending tasks"</span>
+                </p>
+              </div>
+              <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">
+                <Bell className="h-3 w-3 mr-1" />
+                Auto-polling every 10s
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
