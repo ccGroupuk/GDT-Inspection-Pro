@@ -202,6 +202,90 @@ export async function registerRoutes(
     res.status(401).json({ message: "Unauthorized" });
   });
 
+  // ==================== AI BRIDGE ====================
+  
+  // Generate code using Gemini
+  app.post("/api/ai-bridge/generate", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { prompt } = req.body;
+      
+      if (!prompt || typeof prompt !== 'string') {
+        return res.status(400).json({ message: "Prompt is required" });
+      }
+      
+      const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+      
+      if (!GEMINI_API_KEY) {
+        return res.status(500).json({ message: "Gemini API key not configured" });
+      }
+      
+      const systemPrompt = `You are an expert code assistant. Generate clean, well-structured code based on the user's request. 
+
+Guidelines:
+- Provide complete, working code
+- Include helpful comments where appropriate
+- Use modern best practices
+- If creating React components, use TypeScript and functional components with hooks
+- Format code properly with consistent indentation
+
+User request: ${prompt}
+
+Respond with ONLY the code, no additional explanation unless specifically requested.`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: systemPrompt }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 8000,
+            }
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[ai-bridge] Gemini API error:', error);
+        return res.status(500).json({ message: "Failed to generate code" });
+      }
+      
+      const data = await response.json();
+      let code = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      
+      if (!code) {
+        return res.status(500).json({ message: "No code generated" });
+      }
+      
+      // Strip markdown code fences if present
+      code = code.trim();
+      if (code.startsWith('```')) {
+        const lines = code.split('\n');
+        // Remove first line (```language) and last line (```)
+        if (lines[lines.length - 1].trim() === '```') {
+          lines.pop();
+        }
+        lines.shift();
+        code = lines.join('\n');
+      }
+      
+      console.log(`[ai-bridge] Generated code for prompt: "${prompt.substring(0, 50)}..."`);
+      res.json({ code });
+    } catch (error) {
+      console.error("AI Bridge generate error:", error);
+      res.status(500).json({ message: "Failed to generate code" });
+    }
+  });
+
   // Register checklist, wellbeing, messages, and product routes AFTER auth middleware
   registerChecklistRoutes(app);
   
@@ -11457,4 +11541,5 @@ ${cleanedHtml}`;
       res.status(500).json({ message: "Failed to get checklist analytics" });
     }
   });
+
 }

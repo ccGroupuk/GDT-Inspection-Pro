@@ -27,6 +27,7 @@ import {
   Phone,
   BarChart3,
   Receipt,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -153,6 +154,11 @@ const menuItems = [
     title: "Work-Life Balance",
     url: "/wellbeing",
     icon: Heart,
+  },
+  {
+    title: "AI Bridge",
+    url: "/ai-bridge",
+    icon: Sparkles,
   },
   {
     title: "Help Center",
