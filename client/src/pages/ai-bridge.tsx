@@ -7,14 +7,21 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Sparkles, Code, Copy, Check, Loader2, Send, Trash2, User, Bot, MessageCircle } from "lucide-react";
+import { Sparkles, Code, Copy, Check, Loader2, Send, Trash2, User, Bot, MessageCircle, Rocket } from "lucide-react";
 import type { AiConversation } from "@shared/schema";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 
 export default function AIBridge() {
   const { toast } = useToast();
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
   const [currentCode, setCurrentCode] = useState<string | null>(null);
+  const [showSendDialog, setShowSendDialog] = useState(false);
+  const [sendFilename, setSendFilename] = useState("");
+  const [sendDescription, setSendDescription] = useState("");
+  const [codeToSend, setCodeToSend] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<AiConversation[]>({
@@ -58,6 +65,63 @@ export default function AIBridge() {
       });
     },
   });
+
+  const sendToAgentMutation = useMutation({
+    mutationFn: async (data: { code: string; filename: string; description: string }) => {
+      const response = await apiRequest("POST", "/api/build-requests", {
+        code: data.code,
+        filename: data.filename || null,
+        description: data.description || null,
+        language: detectLanguage(data.code),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/build-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/build-requests/pending/count"] });
+      setShowSendDialog(false);
+      setSendFilename("");
+      setSendDescription("");
+      setCodeToSend(null);
+      toast({
+        title: "Sent to Agent",
+        description: "Code request added to the Agent's Inbox for review.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send code request.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const detectLanguage = (code: string): string => {
+    if (code.includes('import React') || code.includes('useState') || code.includes('export default function')) return 'tsx';
+    if (code.includes('const ') && code.includes('=>')) return 'typescript';
+    if (code.includes('def ') || code.includes('import ')) return 'python';
+    if (code.includes('SELECT ') || code.includes('INSERT ')) return 'sql';
+    if (code.includes('<html') || code.includes('<div')) return 'html';
+    if (code.includes('.') && code.includes('{')) return 'css';
+    return 'text';
+  };
+
+  const handleOpenSendDialog = (code: string) => {
+    setCodeToSend(code);
+    setSendFilename("");
+    setSendDescription("");
+    setShowSendDialog(true);
+  };
+
+  const handleSendToAgent = () => {
+    if (!codeToSend) return;
+    sendToAgentMutation.mutate({
+      code: codeToSend,
+      filename: sendFilename,
+      description: sendDescription,
+    });
+  };
 
   const handleSend = () => {
     if (!message.trim()) return;
@@ -245,24 +309,35 @@ export default function AIBridge() {
               Code Window
             </CardTitle>
             {currentCode && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopy}
-                data-testid="button-copy-code"
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4 mr-1" />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4 mr-1" />
-                    Copy
-                  </>
-                )}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleOpenSendDialog(currentCode)}
+                  data-testid="button-send-to-agent"
+                >
+                  <Rocket className="h-4 w-4 mr-1" />
+                  Send to Replit Agent
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopy}
+                  data-testid="button-copy-code"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4 mr-1" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 mr-1" />
+                      Copy
+                    </>
+                  )}
+                </Button>
+              </div>
             )}
           </CardHeader>
           <CardContent className="flex-1 overflow-hidden p-0">
@@ -284,6 +359,65 @@ export default function AIBridge() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Rocket className="h-5 w-5" />
+              Send to Replit Agent
+            </DialogTitle>
+            <DialogDescription>
+              Add this code to the Agent's Inbox for review and implementation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="filename">Filename (optional)</Label>
+              <Input
+                id="filename"
+                placeholder="e.g., components/Button.tsx"
+                value={sendFilename}
+                onChange={(e) => setSendFilename(e.target.value)}
+                data-testid="input-filename"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description (optional)</Label>
+              <Textarea
+                id="description"
+                placeholder="Briefly describe what this code does..."
+                value={sendDescription}
+                onChange={(e) => setSendDescription(e.target.value)}
+                className="min-h-[80px]"
+                data-testid="input-description"
+              />
+            </div>
+            <div className="bg-muted rounded-md p-3 max-h-[150px] overflow-auto">
+              <pre className="text-xs font-mono whitespace-pre-wrap">
+                {codeToSend?.substring(0, 500)}{codeToSend && codeToSend.length > 500 ? '...' : ''}
+              </pre>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              onClick={handleSendToAgent}
+              disabled={sendToAgentMutation.isPending}
+              data-testid="button-confirm-send"
+            >
+              {sendToAgentMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <Rocket className="h-4 w-4 mr-1" />
+              )}
+              Send to Agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
