@@ -107,10 +107,61 @@ export default function AIBridge() {
     return 'text';
   };
 
+  const extractFilenameFromMessage = (content: string): string => {
+    // Look for patterns like: `client/src/components/Widget.tsx` or "components/Widget.tsx"
+    const backtickMatch = content.match(/`((?:client\/|server\/|shared\/)?[\w\/\-]+\.(?:tsx?|jsx?|py|sql|css|html))`/i);
+    if (backtickMatch) return backtickMatch[1];
+    
+    // Look for "at path/file.tsx" or "file path/file.tsx"
+    const pathMatch = content.match(/(?:at|path|file|create|named?)\s+[`"]?((?:client\/|server\/|shared\/)?[\w\/\-]+\.(?:tsx?|jsx?|py|sql|css|html))[`"]?/i);
+    if (pathMatch) return pathMatch[1];
+    
+    // Look for exported component names and guess the filename
+    const exportMatch = content.match(/export\s+(?:default\s+)?function\s+(\w+)/);
+    if (exportMatch) {
+      const componentName = exportMatch[1];
+      const lang = detectLanguage(content);
+      return `client/src/components/${componentName}.${lang === 'tsx' ? 'tsx' : 'ts'}`;
+    }
+    
+    return "";
+  };
+
+  const extractDescriptionFromMessage = (content: string): string => {
+    // Look for first sentence or line that describes the code
+    const lines = content.split('\n').filter(l => l.trim() && !l.startsWith('```'));
+    
+    // Find lines that start with "Here" or describe what the code does
+    for (const line of lines) {
+      if (line.match(/^(Here|This|I've|I have|Created?|The following|Below)/i)) {
+        // Return first ~150 chars
+        return line.substring(0, 150).trim();
+      }
+    }
+    
+    // Otherwise return first non-empty line
+    if (lines.length > 0) {
+      return lines[0].substring(0, 150).trim();
+    }
+    
+    return "";
+  };
+
   const handleOpenSendDialog = (code: string) => {
     setCodeToSend(code);
-    setSendFilename("");
-    setSendDescription("");
+    
+    // Try to auto-fill from the last assistant message
+    const lastAssistantMessage = [...conversations].reverse().find(c => c.role === 'assistant');
+    if (lastAssistantMessage) {
+      const autoFilename = extractFilenameFromMessage(lastAssistantMessage.content + '\n' + code);
+      const autoDescription = extractDescriptionFromMessage(lastAssistantMessage.content);
+      setSendFilename(autoFilename);
+      setSendDescription(autoDescription);
+    } else {
+      setSendFilename("");
+      setSendDescription("");
+    }
+    
     setShowSendDialog(true);
   };
 
