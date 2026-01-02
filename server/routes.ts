@@ -298,7 +298,7 @@ USER'S LATEST MESSAGE: ${message}`;
       try {
         // Initialize Gemini SDK
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         
         // Generate content
         const result = await model.generateContent(systemPrompt);
@@ -376,7 +376,7 @@ Provide:
 
       try {
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         
         const result = await model.generateContent(systemPrompt);
         const response = await result.response;
