@@ -3161,3 +3161,45 @@ export const BUILD_REQUEST_STATUSES = [
   { value: "rejected", label: "Rejected" },
   { value: "implemented", label: "Implemented" },
 ] as const;
+
+// Repository Knowledge - stores codebase understanding for AI context
+export const repoKnowledge = pgTable("repo_knowledge", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // 'manifest', 'file_summary', 'feature_chunk'
+  key: text("key").notNull(), // file path or feature name
+  content: text("content").notNull(), // summary content
+  metadata: text("metadata"), // JSON: file size, last commit, dependencies
+  branch: text("branch").default("main"),
+  priority: integer("priority").default(0), // higher = included first
+  tokenCount: integer("token_count"), // estimated tokens
+  lastUpdated: timestamp("last_updated").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRepoKnowledgeSchema = createInsertSchema(repoKnowledge).omit({ id: true, createdAt: true, lastUpdated: true });
+export type InsertRepoKnowledge = z.infer<typeof insertRepoKnowledgeSchema>;
+export type RepoKnowledge = typeof repoKnowledge.$inferSelect;
+
+// Repository Knowledge Versions - version history for restore points
+export const repoKnowledgeVersions = pgTable("repo_knowledge_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  versionNumber: integer("version_number").notNull(),
+  snapshot: text("snapshot").notNull(), // JSON: full knowledge state
+  commitSha: text("commit_sha"), // GitHub commit this corresponds to
+  commitMessage: text("commit_message"),
+  branch: text("branch").default("main"),
+  filesChanged: text("files_changed"), // JSON: list of changed files
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRepoKnowledgeVersionSchema = createInsertSchema(repoKnowledgeVersions).omit({ id: true, createdAt: true });
+export type InsertRepoKnowledgeVersion = z.infer<typeof insertRepoKnowledgeVersionSchema>;
+export type RepoKnowledgeVersion = typeof repoKnowledgeVersions.$inferSelect;
+
+// Knowledge types constants
+export const REPO_KNOWLEDGE_TYPES = [
+  { value: "manifest", label: "Repository Manifest" },
+  { value: "file_summary", label: "File Summary" },
+  { value: "feature_chunk", label: "Feature Description" },
+] as const;

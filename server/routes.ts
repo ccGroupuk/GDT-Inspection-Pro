@@ -9,6 +9,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as github from "./github";
+import * as githubKnowledge from "./github-knowledge";
 
 // Simple in-memory rate limiter for login endpoints
 const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
@@ -259,7 +260,33 @@ export async function registerRoutes(
         `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
       ).join('\n\n');
       
+      // Get repository knowledge context for AI understanding
+      let knowledgeContext = '';
+      try {
+        const context = await githubKnowledge.getKnowledgeContext('main', 10000);
+        if (context.manifest || context.fileSummaries.length > 0 || context.featureChunks.length > 0) {
+          knowledgeContext = `
+## REPOSITORY KNOWLEDGE BASE (Auto-generated from codebase analysis)
+
+### File Structure:
+${context.manifest || 'Not yet indexed - user should click "Refresh Knowledge"'}
+
+### Key File Summaries:
+${context.fileSummaries.length > 0 ? context.fileSummaries.join('\n\n') : 'No file summaries yet'}
+
+### Feature Overview:
+${context.featureChunks.length > 0 ? context.featureChunks.join('\n\n') : 'No feature descriptions yet'}
+
+---
+`;
+        }
+      } catch (error) {
+        console.log('Could not load knowledge context:', error);
+      }
+      
       const systemPrompt = `You are a patient, friendly AI Co-Developer named "AI Assistant" for the CCC Group CRM system. You are an expert in React, TypeScript, Node.js, Express, Drizzle ORM, PostgreSQL, and Tailwind CSS. You write production-ready code and help build features for this CRM application.
+
+${knowledgeContext}
 
 PERSONALITY:
 - Be warm, encouraging, and professional
@@ -637,6 +664,19 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       );
       
       console.log(`[github] Committed file: ${path} to ${branch || "main"}`);
+      
+      // Auto-refresh knowledge after successful commit
+      try {
+        await githubKnowledge.refreshAllKnowledge(
+          branch || "main",
+          result.commit.sha,
+          message
+        );
+        console.log(`[github-knowledge] Auto-refreshed after commit to ${path}`);
+      } catch (knowledgeError) {
+        console.log(`[github-knowledge] Could not refresh knowledge:`, knowledgeError);
+      }
+      
       res.json({
         success: true,
         path: result.content.path,
@@ -646,6 +686,50 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       });
     } catch (error: any) {
       console.error("[github] Commit error:", error.message);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Repository Knowledge Management Endpoints
+  app.get("/api/github/knowledge/stats", isAdminAuthenticated, async (req, res) => {
+    try {
+      const branch = (req.query.branch as string) || "main";
+      const stats = await githubKnowledge.getKnowledgeStats(branch);
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/github/knowledge/refresh", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { branch } = req.body;
+      await githubKnowledge.refreshAllKnowledge(branch || "main");
+      const stats = await githubKnowledge.getKnowledgeStats(branch || "main");
+      res.json({ success: true, stats });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/github/knowledge/versions", isAdminAuthenticated, async (req, res) => {
+    try {
+      const branch = (req.query.branch as string) || "main";
+      const limit = parseInt(req.query.limit as string) || 20;
+      const versions = await githubKnowledge.getVersionHistory(branch, limit);
+      res.json(versions);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/github/knowledge/restore/:versionId", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { versionId } = req.params;
+      await githubKnowledge.restoreVersion(versionId);
+      const stats = await githubKnowledge.getKnowledgeStats("main");
+      res.json({ success: true, stats });
+    } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
