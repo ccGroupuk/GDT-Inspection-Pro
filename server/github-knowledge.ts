@@ -107,8 +107,8 @@ function formatManifest(structure: FileStructure[], indent: string = ''): string
   let result = '';
   
   for (const item of structure) {
-    const icon = item.type === 'dir' ? '📁' : '📄';
-    result += `${indent}${icon} ${item.name}\n`;
+    const prefix = item.type === 'dir' ? '[DIR]' : '[FILE]';
+    result += `${indent}${prefix} ${item.name}\n`;
     
     if (item.children && item.children.length > 0) {
       result += formatManifest(item.children, indent + '  ');

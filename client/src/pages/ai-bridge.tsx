@@ -201,6 +201,7 @@ export default function AIBridge() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/github/knowledge/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/github/knowledge/versions"] });
       setShowVersionHistory(false);
       toast({
         title: "Version Restored",
