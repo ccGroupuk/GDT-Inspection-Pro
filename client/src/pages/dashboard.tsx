@@ -26,6 +26,7 @@ import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Job, Contact, TradePartner, Task, JobScheduleProposal } from "@shared/schema";
+import { ProjectCountdownWidget } from "@/components/ProjectCountdownWidget";
 
 interface DashboardData {
   jobs: Job[];
@@ -123,6 +124,10 @@ export default function Dashboard() {
           icon={PoundSterling}
           description="Total quoted value"
         />
+      </div>
+
+      <div className="flex justify-center">
+        <ProjectCountdownWidget />
       </div>
 
       {unacknowledgedPartnerAcceptances.length > 0 && (
