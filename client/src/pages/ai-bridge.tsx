@@ -7,11 +7,34 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Sparkles, Code, Copy, Check, Loader2, Send, Trash2, User, Bot, MessageCircle, Rocket, TrendingUp } from "lucide-react";
+import { 
+  Sparkles, Code, Copy, Check, Loader2, Send, Trash2, User, Bot, MessageCircle, 
+  Rocket, TrendingUp, GitBranch, FolderOpen, FileCode, ChevronRight, ChevronDown, 
+  RefreshCw, Eye, GitCommit, Github, File, Folder, ArrowLeft
+} from "lucide-react";
 import type { AiConversation } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+interface GitHubFile {
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  type: 'file' | 'dir';
+}
+
+interface GitHubStatus {
+  configured: boolean;
+  repo?: string;
+  defaultBranch?: string;
+  isPrivate?: boolean;
+  error?: string;
+}
 
 export default function AIBridge() {
   const { toast } = useToast();
@@ -23,9 +46,85 @@ export default function AIBridge() {
   const [sendDescription, setSendDescription] = useState("");
   const [codeToSend, setCodeToSend] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // GitHub state
+  const [selectedBranch, setSelectedBranch] = useState("main");
+  const [currentPath, setCurrentPath] = useState("");
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [showCommitDialog, setShowCommitDialog] = useState(false);
+  const [commitPath, setCommitPath] = useState("");
+  const [commitMessage, setCommitMessage] = useState("");
+  const [commitBranch, setCommitBranch] = useState("main");
+  const [activeTab, setActiveTab] = useState<string>("chat");
+
+  // GitHub queries
+  const { data: githubStatus, isLoading: statusLoading } = useQuery<GitHubStatus>({
+    queryKey: ["/api/github/status"],
+  });
+
+  const { data: branches = [] } = useQuery<{ name: string; protected: boolean }[]>({
+    queryKey: ["/api/github/branches"],
+    enabled: githubStatus?.configured,
+  });
+
+  const { data: directoryContents = [], isLoading: directoryLoading, refetch: refetchDirectory } = useQuery<GitHubFile[]>({
+    queryKey: ["/api/github/directory", currentPath, selectedBranch],
+    enabled: githubStatus?.configured,
+  });
 
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<AiConversation[]>({
     queryKey: ["/api/ai-assistant/conversations"],
+  });
+
+  // Fetch file content mutation
+  const fetchFileMutation = useMutation({
+    mutationFn: async (path: string) => {
+      const response = await apiRequest("GET", `/api/github/file?path=${encodeURIComponent(path)}&branch=${selectedBranch}`);
+      return response.json();
+    },
+    onSuccess: (data, path) => {
+      setFileContent(data.content);
+      setSelectedFile(path);
+      toast({
+        title: "File Loaded",
+        description: `Loaded ${path.split('/').pop()}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to load file",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Direct commit mutation
+  const directCommitMutation = useMutation({
+    mutationFn: async (data: { path: string; content: string; message: string; branch: string }) => {
+      const response = await apiRequest("POST", "/api/github/commit", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setShowCommitDialog(false);
+      setCommitPath("");
+      setCommitMessage("");
+      toast({
+        title: "Committed Successfully",
+        description: `File committed to ${data.path}`,
+        duration: 5000,
+      });
+      refetchDirectory();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Commit Failed",
+        description: error.message || "Failed to commit file",
+        variant: "destructive",
+      });
+    },
   });
 
   const chatMutation = useMutation({
@@ -111,10 +210,7 @@ export default function AIBridge() {
   };
 
   const extractFilenameFromMessage = (messageContent: string, codeContent: string): string => {
-    // Regex to find all file paths ending in .tsx, .ts, .js, .jsx
     const filePathRegex = /(?:^|[\s`"'(])(((?:client|server|shared)\/)?(?:src\/)?[\w\-\/]+\.(?:tsx?|jsx?))/gm;
-    
-    // Find all file path matches in the message
     const allMatches: { path: string; index: number }[] = [];
     let match;
     while ((match = filePathRegex.exec(messageContent)) !== null) {
@@ -122,28 +218,21 @@ export default function AIBridge() {
     }
     
     if (allMatches.length > 0) {
-      // Find the code block position to pick the closest path
       const codeBlockIndex = messageContent.indexOf('```');
-      
       if (codeBlockIndex !== -1 && allMatches.length > 1) {
-        // Sort by distance to code block and pick the closest
         allMatches.sort((a, b) => 
           Math.abs(a.index - codeBlockIndex) - Math.abs(b.index - codeBlockIndex)
         );
       }
-      
-      // Return the best match (closest to code block, or first found)
       return allMatches[0].path;
     }
     
-    // Fallback: Extract component name from code and generate filename
     const exportMatch = codeContent.match(/export\s+(?:default\s+)?function\s+(\w+)/);
     if (exportMatch) {
       const componentName = exportMatch[1];
       return `client/src/components/${componentName}.tsx`;
     }
     
-    // Try named export
     const namedExportMatch = codeContent.match(/export\s+(?:const|class)\s+(\w+)/);
     if (namedExportMatch) {
       const name = namedExportMatch[1];
@@ -154,37 +243,27 @@ export default function AIBridge() {
   };
 
   const extractDescriptionFromMessage = (content: string): string => {
-    // Remove code blocks first to get clean text
     const textOnly = content.replace(/```[\s\S]*?```/g, '').trim();
-    
-    // Get first 100 characters of the response as description
     if (textOnly.length > 0) {
-      // Clean up whitespace and get first 100 chars
       const cleaned = textOnly.replace(/\s+/g, ' ').trim();
       return cleaned.substring(0, 100) + (cleaned.length > 100 ? '...' : '');
     }
-    
     return "";
   };
 
   const handleOpenSendDialog = (code: string) => {
     setCodeToSend(code);
-    
-    // Try to auto-fill from the last assistant message
     const lastAssistantMessage = [...conversations].reverse().find(c => c.role === 'assistant');
     if (lastAssistantMessage) {
-      // Pass both message content and code content for smart extraction
       const autoFilename = extractFilenameFromMessage(lastAssistantMessage.content, code);
       const autoDescription = extractDescriptionFromMessage(lastAssistantMessage.content);
       setSendFilename(autoFilename);
       setSendDescription(autoDescription);
     } else {
-      // Fallback: try to extract from code alone
       const fallbackFilename = extractFilenameFromMessage("", code);
       setSendFilename(fallbackFilename);
       setSendDescription("");
     }
-    
     setShowSendDialog(true);
   };
 
@@ -222,6 +301,54 @@ export default function AIBridge() {
     }
   };
 
+  const handleDirectCommit = (code: string) => {
+    setCodeToSend(code);
+    const lastAssistantMessage = [...conversations].reverse().find(c => c.role === 'assistant');
+    if (lastAssistantMessage) {
+      const autoFilename = extractFilenameFromMessage(lastAssistantMessage.content, code);
+      setCommitPath(autoFilename);
+      setCommitMessage(`[AI Bridge] Update ${autoFilename || 'file'}`);
+    }
+    setCommitBranch(selectedBranch);
+    setShowCommitDialog(true);
+  };
+
+  const handleConfirmCommit = () => {
+    if (!codeToSend || !commitPath || !commitMessage) return;
+    directCommitMutation.mutate({
+      path: commitPath,
+      content: codeToSend,
+      message: commitMessage,
+      branch: commitBranch,
+    });
+  };
+
+  const handleFileClick = (file: GitHubFile) => {
+    if (file.type === 'dir') {
+      setCurrentPath(file.path);
+    } else {
+      fetchFileMutation.mutate(file.path);
+    }
+  };
+
+  const handleSendFileToAI = () => {
+    if (!selectedFile || !fileContent) return;
+    const fileName = selectedFile.split('/').pop();
+    const contextMessage = `I'm looking at the file \`${selectedFile}\` from my GitHub repository. Here's the current content:\n\n\`\`\`\n${fileContent}\n\`\`\`\n\nPlease help me understand or modify this file.`;
+    setMessage(contextMessage);
+    setActiveTab("chat");
+    toast({
+      title: "File Context Added",
+      description: `${fileName} content added to your message`,
+    });
+  };
+
+  const navigateUp = () => {
+    const parts = currentPath.split('/').filter(Boolean);
+    parts.pop();
+    setCurrentPath(parts.join('/'));
+  };
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -252,14 +379,29 @@ export default function AIBridge() {
     });
   };
 
+  const getFileIcon = (file: GitHubFile) => {
+    if (file.type === 'dir') return <Folder className="h-4 w-4 text-blue-500" />;
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (['ts', 'tsx', 'js', 'jsx'].includes(ext || '')) return <FileCode className="h-4 w-4 text-yellow-500" />;
+    return <File className="h-4 w-4 text-muted-foreground" />;
+  };
+
   return (
     <div className="p-6 h-full" data-testid="page-ai-bridge">
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold" data-testid="text-page-title">AI Assistant</h1>
-          <p className="text-muted-foreground" data-testid="text-page-description">Your patient coding tutor powered by Gemini</p>
+          <p className="text-muted-foreground" data-testid="text-page-description">
+            Your coding partner with full GitHub integration
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {githubStatus?.configured && (
+            <Badge variant="outline" className="gap-1" data-testid="badge-github">
+              <Github className="h-3 w-3" />
+              {githubStatus.repo}
+            </Badge>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -277,7 +419,142 @@ export default function AIBridge() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
+        {/* Left Panel - Repository Browser */}
+        <Card className="flex flex-col" data-testid="card-repo-browser">
+          <CardHeader className="pb-3 border-b">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-lg flex items-center gap-2" data-testid="text-repo-title">
+                <FolderOpen className="h-5 w-5 text-primary" />
+                Repository
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                {branches.length > 0 && (
+                  <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                    <SelectTrigger className="w-[120px] h-8 text-xs" data-testid="select-branch">
+                      <GitBranch className="h-3 w-3 mr-1" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches.map(b => (
+                        <SelectItem key={b.name} value={b.name}>{b.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => refetchDirectory()}
+                  data-testid="button-refresh-repo"
+                >
+                  <RefreshCw className={`h-4 w-4 ${directoryLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-hidden p-0">
+            {!githubStatus?.configured ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+                <Github className="h-12 w-12 mb-4 opacity-50" />
+                <p className="text-sm text-center">GitHub not configured</p>
+                <p className="text-xs text-center mt-1">Add GITHUB_PAT, GITHUB_REPO_OWNER, and GITHUB_REPO_NAME to secrets</p>
+              </div>
+            ) : (
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+                <TabsList className="w-full justify-start rounded-none border-b px-2">
+                  <TabsTrigger value="browse" className="text-xs">Browse</TabsTrigger>
+                  <TabsTrigger value="file" className="text-xs" disabled={!selectedFile}>
+                    {selectedFile ? selectedFile.split('/').pop() : 'File'}
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="browse" className="flex-1 m-0 overflow-hidden">
+                  <ScrollArea className="h-full">
+                    <div className="p-2">
+                      {currentPath && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full justify-start mb-1 text-xs"
+                          onClick={navigateUp}
+                          data-testid="button-navigate-up"
+                        >
+                          <ArrowLeft className="h-3 w-3 mr-2" />
+                          ..
+                        </Button>
+                      )}
+                      {currentPath && (
+                        <div className="text-xs text-muted-foreground px-2 py-1 mb-2 bg-muted rounded">
+                          {currentPath}
+                        </div>
+                      )}
+                      {directoryLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {directoryContents
+                            .sort((a, b) => {
+                              if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+                              return a.name.localeCompare(b.name);
+                            })
+                            .map(file => (
+                              <Button
+                                key={file.path}
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start text-xs h-8"
+                                onClick={() => handleFileClick(file)}
+                                data-testid={`file-${file.name}`}
+                              >
+                                {getFileIcon(file)}
+                                <span className="ml-2 truncate">{file.name}</span>
+                              </Button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+                
+                <TabsContent value="file" className="flex-1 m-0 overflow-hidden flex flex-col">
+                  {selectedFile && (
+                    <>
+                      <div className="p-2 border-b flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground truncate">{selectedFile}</span>
+                        <Button 
+                          size="sm" 
+                          variant="default"
+                          onClick={handleSendFileToAI}
+                          className="shrink-0"
+                          data-testid="button-send-file-to-ai"
+                        >
+                          <Send className="h-3 w-3 mr-1" />
+                          Ask AI About This
+                        </Button>
+                      </div>
+                      <ScrollArea className="flex-1">
+                        {fetchFileMutation.isPending ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin" />
+                          </div>
+                        ) : (
+                          <pre className="p-2 text-xs font-mono whitespace-pre-wrap break-words">
+                            {fileContent}
+                          </pre>
+                        )}
+                      </ScrollArea>
+                    </>
+                  )}
+                </TabsContent>
+              </Tabs>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Middle Panel - Chat */}
         <Card className="flex flex-col" data-testid="card-chat">
           <CardHeader className="pb-3 border-b">
             <CardTitle className="text-lg flex items-center gap-2" data-testid="text-chat-title">
@@ -297,7 +574,7 @@ export default function AIBridge() {
                   <Bot className="h-16 w-16 mb-4 opacity-50" />
                   <p className="text-lg font-medium">Welcome to AI Assistant</p>
                   <p className="text-sm mt-1 text-center max-w-xs">
-                    Ask me anything about coding, or request me to generate code for you. I remember our conversation!
+                    Browse your GitHub repo on the left, ask me to edit files, and I'll commit directly!
                   </p>
                 </div>
               ) : (
@@ -352,7 +629,7 @@ export default function AIBridge() {
             <div className="p-4 border-t">
               <div className="flex gap-2">
                 <Textarea
-                  placeholder="Ask me anything about coding, or describe what code you need..."
+                  placeholder="Ask me to edit a file from your repo, or describe what code you need..."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={handleKeyDown}
@@ -376,46 +653,40 @@ export default function AIBridge() {
           </CardContent>
         </Card>
 
+        {/* Right Panel - Code Window */}
         <Card className="flex flex-col" data-testid="card-code-window">
-          <CardHeader className="pb-3 border-b flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-lg flex items-center gap-2" data-testid="text-code-title">
-              <Code className="h-5 w-5 text-primary" />
-              Code Window
-            </CardTitle>
-            {currentCode && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => handleOpenSendDialog(currentCode)}
-                  data-testid="button-send-to-agent"
-                >
-                  <Rocket className="h-4 w-4 mr-1" />
-                  Send to Replit Agent
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCopy}
-                  data-testid="button-copy-code"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="h-4 w-4 mr-1" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4 mr-1" />
-                      Copy
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
+          <CardHeader className="pb-3 border-b">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-lg flex items-center gap-2" data-testid="text-code-title">
+                <Code className="h-5 w-5 text-primary" />
+                Code Window
+              </CardTitle>
+              {currentCode && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopy}
+                    data-testid="button-copy-code"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="h-4 w-4 mr-1" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-1" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
-          <CardContent className="flex-1 overflow-hidden p-0">
-            <ScrollArea className="h-full">
+          <CardContent className="flex-1 overflow-hidden p-0 flex flex-col">
+            <ScrollArea className="flex-1">
               {currentCode ? (
                 <pre className="bg-muted/50 p-4 text-sm font-mono whitespace-pre-wrap break-words" data-testid="text-code-content">
                   {currentCode}
@@ -425,24 +696,48 @@ export default function AIBridge() {
                   <Code className="h-16 w-16 mb-4 opacity-50" />
                   <p className="text-lg font-medium">No Code Yet</p>
                   <p className="text-sm mt-1 text-center max-w-xs">
-                    When you ask me to generate code, it will appear here for easy copying.
+                    When you ask me to generate code, it will appear here.
                   </p>
                 </div>
               )}
             </ScrollArea>
+            {currentCode && (
+              <div className="p-3 border-t flex flex-col gap-2">
+                <Button
+                  variant="default"
+                  className="w-full"
+                  onClick={() => handleDirectCommit(currentCode)}
+                  disabled={!githubStatus?.configured}
+                  data-testid="button-commit-to-github"
+                >
+                  <GitCommit className="h-4 w-4 mr-2" />
+                  Commit Directly to GitHub
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleOpenSendDialog(currentCode)}
+                  data-testid="button-send-to-agent"
+                >
+                  <Rocket className="h-4 w-4 mr-2" />
+                  Send to Agent Inbox
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
+      {/* Send to Agent Dialog */}
       <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Rocket className="h-5 w-5" />
-              Send to Replit Agent
+              Send to Agent Inbox
             </DialogTitle>
             <DialogDescription>
-              Add this code to the Agent's Inbox for review and implementation.
+              Queue this code for review and implementation by Replit Agent.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -504,6 +799,79 @@ export default function AIBridge() {
                 <Rocket className="h-4 w-4 mr-1" />
               )}
               Send to Agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Direct Commit Dialog */}
+      <Dialog open={showCommitDialog} onOpenChange={setShowCommitDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitCommit className="h-5 w-5" />
+              Commit to GitHub
+            </DialogTitle>
+            <DialogDescription>
+              Commit this code directly to your repository.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="commit-branch">Branch</Label>
+              <Select value={commitBranch} onValueChange={setCommitBranch}>
+                <SelectTrigger data-testid="select-commit-branch">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map(b => (
+                    <SelectItem key={b.name} value={b.name}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="commit-path">File Path</Label>
+              <Input
+                id="commit-path"
+                placeholder="e.g., client/src/components/Button.tsx"
+                value={commitPath}
+                onChange={(e) => setCommitPath(e.target.value)}
+                data-testid="input-commit-path"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="commit-message">Commit Message</Label>
+              <Textarea
+                id="commit-message"
+                placeholder="Describe your changes..."
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                className="min-h-[60px]"
+                data-testid="input-commit-message"
+              />
+            </div>
+            <div className="bg-muted rounded-md p-3 max-h-[100px] overflow-auto">
+              <pre className="text-xs font-mono whitespace-pre-wrap">
+                {codeToSend?.substring(0, 300)}{codeToSend && codeToSend.length > 300 ? '...' : ''}
+              </pre>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              onClick={handleConfirmCommit}
+              disabled={directCommitMutation.isPending || !commitPath || !commitMessage}
+              data-testid="button-confirm-commit"
+            >
+              {directCommitMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <GitCommit className="h-4 w-4 mr-1" />
+              )}
+              Commit
             </Button>
           </DialogFooter>
         </DialogContent>
