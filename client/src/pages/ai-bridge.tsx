@@ -418,6 +418,7 @@ export default function AIBridge() {
       setCurrentPath(file.path);
     } else {
       fetchFileMutation.mutate(file.path);
+      setActiveTab("file"); // Switch to file tab to show content
     }
   };
 
