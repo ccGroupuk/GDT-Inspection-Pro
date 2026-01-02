@@ -27,6 +27,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Job, Contact, TradePartner, Task, JobScheduleProposal } from "@shared/schema";
 import { ProjectCountdownWidget } from "@/components/ProjectCountdownWidget";
+import WeatherWidget from "@/components/WeatherWidget";
+import DailyQuote from "@/components/DailyQuote";
 
 interface DashboardData {
   jobs: Job[];
@@ -126,8 +128,10 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="flex justify-center">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <ProjectCountdownWidget />
+        <WeatherWidget />
+        <DailyQuote />
       </div>
 
       {unacknowledgedPartnerAcceptances.length > 0 && (
