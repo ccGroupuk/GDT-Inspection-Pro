@@ -117,3 +117,35 @@ The owner is exploring commercializing this CRM for other carpentry/construction
 5. Create initial admin employee account
 
 **Status:** Planning to start implementation next week (January 2025).
+
+## AI Bridge & Knowledge System (January 2025)
+
+The AI Bridge feature provides an integrated AI coding assistant with deep codebase understanding:
+
+### Knowledge Indexing System (`server/github-knowledge.ts`)
+- **Comprehensive File Scanning**: Scans ALL .ts/.tsx files in pages, components, hooks, lib, server, and shared directories
+- **Smart Summaries**: Generates intelligent summaries for each file including:
+  - Exports and imports
+  - UI components used (JSX elements)
+  - API calls (queries and mutations)
+  - Feature-specific descriptions
+- **Import Relationship Mapping**: Builds a component map showing which files import which other files
+- **Dynamic Feature Discovery**: Automatically groups files by feature area (dashboard, pipeline, finance, etc.)
+- **Version History**: Creates snapshots before each refresh for restore capability
+
+### How It Works
+1. User clicks "Refresh Knowledge" in AI Bridge
+2. System scans GitHub repo via API
+3. Generates manifest (file tree), summaries, and relationships
+4. AI receives full context in system prompt (~20k tokens)
+5. AI can now accurately identify which files to modify for any request
+
+### Key Files
+- `server/github-knowledge.ts` - Knowledge generation and management
+- `server/github.ts` - GitHub API integration
+- `client/src/pages/ai-bridge.tsx` - AI Bridge UI with chat, file browser, commits
+
+### Token Budget
+- Max context: 20,000 tokens
+- Includes: manifest, component relationships, file summaries, feature chunks
+- Prioritizes: pages > components > server > shared
