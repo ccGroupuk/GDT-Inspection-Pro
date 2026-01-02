@@ -3134,3 +3134,30 @@ export const aiConversations = pgTable("ai_conversations", {
 export const insertAiConversationSchema = createInsertSchema(aiConversations).omit({ id: true, createdAt: true });
 export type InsertAiConversation = z.infer<typeof insertAiConversationSchema>;
 export type AiConversation = typeof aiConversations.$inferSelect;
+
+// Build Requests - code snippets sent to Replit Agent for review
+export const buildRequests = pgTable("build_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull(),
+  filename: text("filename"),
+  description: text("description"),
+  language: text("language"),
+  status: text("status").default("pending"), // pending, approved, rejected, implemented
+  conversationId: varchar("conversation_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: varchar("reviewed_by").references(() => employees.id),
+  notes: text("notes"),
+});
+
+export const insertBuildRequestSchema = createInsertSchema(buildRequests).omit({ id: true, createdAt: true });
+export type InsertBuildRequest = z.infer<typeof insertBuildRequestSchema>;
+export type BuildRequest = typeof buildRequests.$inferSelect;
+
+// Build request status constants
+export const BUILD_REQUEST_STATUSES = [
+  { value: "pending", label: "Pending Review" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+  { value: "implemented", label: "Implemented" },
+] as const;
