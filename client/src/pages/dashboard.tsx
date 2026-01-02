@@ -27,8 +27,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Job, Contact, TradePartner, Task, JobScheduleProposal } from "@shared/schema";
 import { ProjectCountdownWidget } from "@/components/ProjectCountdownWidget";
-import WeatherWidget from "@/components/WeatherWidget";
-import DailyQuote from "@/components/DailyQuote";
+import DailyQuote from "@/components/DailyQuote"; // DailyQuote is kept as it was not requested for removal.
 
 interface DashboardData {
   jobs: Job[];
@@ -130,7 +129,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <ProjectCountdownWidget />
-        <WeatherWidget />
+        {/* WeatherWidget has been removed */}
         <DailyQuote />
       </div>
 
