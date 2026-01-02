@@ -57,7 +57,7 @@ export default function AIBridge() {
   const [commitPath, setCommitPath] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
   const [commitBranch, setCommitBranch] = useState("main");
-  const [activeTab, setActiveTab] = useState<string>("chat");
+  const [activeTab, setActiveTab] = useState<string>("browse");
 
   // GitHub queries
   const { data: githubStatus, isLoading: statusLoading } = useQuery<GitHubStatus>({
