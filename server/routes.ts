@@ -235,14 +235,27 @@ User request: ${prompt}
 Respond with ONLY the code, no additional explanation unless specifically requested.`;
 
       try {
-        // Initialize Gemini SDK
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // Use v1 API endpoint directly (not v1beta) with gemini-pro model
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: systemPrompt }] }],
+              generationConfig: { temperature: 0.7, maxOutputTokens: 8000 }
+            })
+          }
+        );
         
-        // Generate content
-        const result = await model.generateContent(systemPrompt);
-        const response = await result.response;
-        let code = response.text();
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log('Gemini Error:', errorText);
+          return res.status(500).json({ message: `Gemini API error: ${response.status}` });
+        }
+        
+        const data = await response.json();
+        let code = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
         
         if (!code) {
           console.log('Gemini Error: No code generated - empty response');
@@ -253,7 +266,6 @@ Respond with ONLY the code, no additional explanation unless specifically reques
         code = code.trim();
         if (code.startsWith('```')) {
           const lines = code.split('\n');
-          // Remove first line (```language) and last line (```)
           if (lines[lines.length - 1].trim() === '```') {
             lines.pop();
           }
