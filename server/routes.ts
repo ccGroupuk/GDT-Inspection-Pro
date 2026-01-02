@@ -235,27 +235,14 @@ User request: ${prompt}
 Respond with ONLY the code, no additional explanation unless specifically requested.`;
 
       try {
-        // Use v1 API endpoint directly (not v1beta) with gemini-pro model
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: systemPrompt }] }],
-              generationConfig: { temperature: 0.7, maxOutputTokens: 8000 }
-            })
-          }
-        );
+        // Initialize Gemini SDK
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.log('Gemini Error:', errorText);
-          return res.status(500).json({ message: `Gemini API error: ${response.status}` });
-        }
-        
-        const data = await response.json();
-        let code = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        // Generate content
+        const result = await model.generateContent(systemPrompt);
+        const response = await result.response;
+        let code = response.text();
         
         if (!code) {
           console.log('Gemini Error: No code generated - empty response');
@@ -276,8 +263,12 @@ Respond with ONLY the code, no additional explanation unless specifically reques
         console.log(`[ai-bridge] Generated code for prompt: "${prompt.substring(0, 50)}..."`);
         res.json({ code });
         
-      } catch (error) {
-        console.log('Gemini Error:', error);
+      } catch (error: any) {
+        console.log('Gemini Error - Full error object:', error);
+        console.log('Gemini Error - Message:', error?.message);
+        console.log('Gemini Error - Status:', error?.status);
+        console.log('Gemini Error - StatusText:', error?.statusText);
+        console.log('Gemini Error - Error Details:', error?.errorDetails);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         res.status(500).json({ message: `Failed to generate code: ${errorMessage}` });
       }
