@@ -71,6 +71,16 @@ export default function AIBridge() {
 
   const { data: directoryContents = [], isLoading: directoryLoading, refetch: refetchDirectory } = useQuery<GitHubFile[]>({
     queryKey: ["/api/github/directory", currentPath, selectedBranch],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (currentPath) params.set("path", currentPath);
+      params.set("branch", selectedBranch);
+      const response = await fetch(`/api/github/directory?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch directory");
+      return response.json();
+    },
     enabled: githubStatus?.configured,
   });
 
@@ -813,7 +823,7 @@ export default function AIBridge() {
               Commit to GitHub
             </DialogTitle>
             <DialogDescription>
-              Commit this code directly to your repository.
+              Commit this code directly to your repository. Please verify the file path carefully.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -829,32 +839,59 @@ export default function AIBridge() {
                   ))}
                 </SelectContent>
               </Select>
+              {commitBranch === "main" && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  Committing directly to main branch
+                </p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="commit-path">File Path</Label>
+              <Label htmlFor="commit-path">
+                File Path <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="commit-path"
                 placeholder="e.g., client/src/components/Button.tsx"
                 value={commitPath}
                 onChange={(e) => setCommitPath(e.target.value)}
+                className={!commitPath.trim() ? "border-destructive" : ""}
                 data-testid="input-commit-path"
               />
+              {!commitPath.trim() && (
+                <p className="text-xs text-destructive">File path is required</p>
+              )}
+              {commitPath.trim() && !commitPath.includes("/") && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Path should include folder structure (e.g., client/src/...)
+                </p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="commit-message">Commit Message</Label>
+              <Label htmlFor="commit-message">
+                Commit Message <span className="text-destructive">*</span>
+              </Label>
               <Textarea
                 id="commit-message"
                 placeholder="Describe your changes..."
                 value={commitMessage}
                 onChange={(e) => setCommitMessage(e.target.value)}
-                className="min-h-[60px]"
+                className={`min-h-[60px] ${!commitMessage.trim() ? "border-destructive" : ""}`}
                 data-testid="input-commit-message"
               />
+              {!commitMessage.trim() && (
+                <p className="text-xs text-destructive">Commit message is required</p>
+              )}
             </div>
-            <div className="bg-muted rounded-md p-3 max-h-[100px] overflow-auto">
-              <pre className="text-xs font-mono whitespace-pre-wrap">
-                {codeToSend?.substring(0, 300)}{codeToSend && codeToSend.length > 300 ? '...' : ''}
-              </pre>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Code Preview</Label>
+              <div className="bg-muted rounded-md p-3 max-h-[100px] overflow-auto">
+                <pre className="text-xs font-mono whitespace-pre-wrap">
+                  {codeToSend?.substring(0, 300)}{codeToSend && codeToSend.length > 300 ? '...' : ''}
+                </pre>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {codeToSend ? `${codeToSend.length} characters` : "No code"}
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -863,7 +900,7 @@ export default function AIBridge() {
             </DialogClose>
             <Button
               onClick={handleConfirmCommit}
-              disabled={directCommitMutation.isPending || !commitPath || !commitMessage}
+              disabled={directCommitMutation.isPending || !commitPath.trim() || !commitMessage.trim()}
               data-testid="button-confirm-commit"
             >
               {directCommitMutation.isPending ? (
@@ -871,7 +908,7 @@ export default function AIBridge() {
               ) : (
                 <GitCommit className="h-4 w-4 mr-1" />
               )}
-              Commit
+              Commit to {commitBranch}
             </Button>
           </DialogFooter>
         </DialogContent>
