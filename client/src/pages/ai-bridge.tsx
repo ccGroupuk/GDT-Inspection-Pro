@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Sparkles, Code, Copy, Check, Loader2, Send, Trash2, User, Bot, MessageCircle, Rocket } from "lucide-react";
+import { Sparkles, Code, Copy, Check, Loader2, Send, Trash2, User, Bot, MessageCircle, Rocket, TrendingUp } from "lucide-react";
 import type { AiConversation } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -470,6 +470,22 @@ export default function AIBridge() {
                 {codeToSend?.substring(0, 500)}{codeToSend && codeToSend.length > 500 ? '...' : ''}
               </pre>
             </div>
+            {codeToSend && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground bg-green-500/10 border border-green-500/30 rounded-md px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <span>Token Efficiency:</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-muted-foreground">
+                    ~{Math.ceil(codeToSend.length / 4)} tokens vs 5,000 full context
+                  </span>
+                  <Badge variant="outline" className="border-green-500 text-green-600 dark:text-green-400 font-semibold">
+                    +{Math.max(0, Math.round((1 - (codeToSend.length / 4) / 5000) * 100))}% Savings
+                  </Badge>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <DialogClose asChild>
