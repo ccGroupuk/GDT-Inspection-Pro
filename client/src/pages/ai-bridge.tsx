@@ -107,41 +107,58 @@ export default function AIBridge() {
     return 'text';
   };
 
-  const extractFilenameFromMessage = (content: string): string => {
-    // Look for patterns like: `client/src/components/Widget.tsx` or "components/Widget.tsx"
-    const backtickMatch = content.match(/`((?:client\/|server\/|shared\/)?[\w\/\-]+\.(?:tsx?|jsx?|py|sql|css|html))`/i);
-    if (backtickMatch) return backtickMatch[1];
+  const extractFilenameFromMessage = (messageContent: string, codeContent: string): string => {
+    // Regex to find all file paths ending in .tsx, .ts, .js, .jsx
+    const filePathRegex = /(?:^|[\s`"'(])(((?:client|server|shared)\/)?(?:src\/)?[\w\-\/]+\.(?:tsx?|jsx?))/gm;
     
-    // Look for "at path/file.tsx" or "file path/file.tsx"
-    const pathMatch = content.match(/(?:at|path|file|create|named?)\s+[`"]?((?:client\/|server\/|shared\/)?[\w\/\-]+\.(?:tsx?|jsx?|py|sql|css|html))[`"]?/i);
-    if (pathMatch) return pathMatch[1];
+    // Find all file path matches in the message
+    const allMatches: { path: string; index: number }[] = [];
+    let match;
+    while ((match = filePathRegex.exec(messageContent)) !== null) {
+      allMatches.push({ path: match[1], index: match.index });
+    }
     
-    // Look for exported component names and guess the filename
-    const exportMatch = content.match(/export\s+(?:default\s+)?function\s+(\w+)/);
+    if (allMatches.length > 0) {
+      // Find the code block position to pick the closest path
+      const codeBlockIndex = messageContent.indexOf('```');
+      
+      if (codeBlockIndex !== -1 && allMatches.length > 1) {
+        // Sort by distance to code block and pick the closest
+        allMatches.sort((a, b) => 
+          Math.abs(a.index - codeBlockIndex) - Math.abs(b.index - codeBlockIndex)
+        );
+      }
+      
+      // Return the best match (closest to code block, or first found)
+      return allMatches[0].path;
+    }
+    
+    // Fallback: Extract component name from code and generate filename
+    const exportMatch = codeContent.match(/export\s+(?:default\s+)?function\s+(\w+)/);
     if (exportMatch) {
       const componentName = exportMatch[1];
-      const lang = detectLanguage(content);
-      return `client/src/components/${componentName}.${lang === 'tsx' ? 'tsx' : 'ts'}`;
+      return `client/src/components/${componentName}.tsx`;
+    }
+    
+    // Try named export
+    const namedExportMatch = codeContent.match(/export\s+(?:const|class)\s+(\w+)/);
+    if (namedExportMatch) {
+      const name = namedExportMatch[1];
+      return `client/src/components/${name}.tsx`;
     }
     
     return "";
   };
 
   const extractDescriptionFromMessage = (content: string): string => {
-    // Look for first sentence or line that describes the code
-    const lines = content.split('\n').filter(l => l.trim() && !l.startsWith('```'));
+    // Remove code blocks first to get clean text
+    const textOnly = content.replace(/```[\s\S]*?```/g, '').trim();
     
-    // Find lines that start with "Here" or describe what the code does
-    for (const line of lines) {
-      if (line.match(/^(Here|This|I've|I have|Created?|The following|Below)/i)) {
-        // Return first ~150 chars
-        return line.substring(0, 150).trim();
-      }
-    }
-    
-    // Otherwise return first non-empty line
-    if (lines.length > 0) {
-      return lines[0].substring(0, 150).trim();
+    // Get first 100 characters of the response as description
+    if (textOnly.length > 0) {
+      // Clean up whitespace and get first 100 chars
+      const cleaned = textOnly.replace(/\s+/g, ' ').trim();
+      return cleaned.substring(0, 100) + (cleaned.length > 100 ? '...' : '');
     }
     
     return "";
@@ -153,12 +170,15 @@ export default function AIBridge() {
     // Try to auto-fill from the last assistant message
     const lastAssistantMessage = [...conversations].reverse().find(c => c.role === 'assistant');
     if (lastAssistantMessage) {
-      const autoFilename = extractFilenameFromMessage(lastAssistantMessage.content + '\n' + code);
+      // Pass both message content and code content for smart extraction
+      const autoFilename = extractFilenameFromMessage(lastAssistantMessage.content, code);
       const autoDescription = extractDescriptionFromMessage(lastAssistantMessage.content);
       setSendFilename(autoFilename);
       setSendDescription(autoDescription);
     } else {
-      setSendFilename("");
+      // Fallback: try to extract from code alone
+      const fallbackFilename = extractFilenameFromMessage("", code);
+      setSendFilename(fallbackFilename);
       setSendDescription("");
     }
     
