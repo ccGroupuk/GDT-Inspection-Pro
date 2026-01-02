@@ -81,6 +81,7 @@ import {
   partnerInvoices, type PartnerInvoice, type InsertPartnerInvoice,
   partnerInvoicePayments, type PartnerInvoicePayment, type InsertPartnerInvoicePayment,
   aiConversations, type AiConversation, type InsertAiConversation,
+  buildRequests, type BuildRequest, type InsertBuildRequest,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -649,6 +650,15 @@ export interface IStorage {
   getAiConversations(): Promise<AiConversation[]>;
   createAiConversation(message: InsertAiConversation): Promise<AiConversation>;
   clearAiConversations(): Promise<boolean>;
+
+  // Build Requests
+  getBuildRequests(): Promise<BuildRequest[]>;
+  getBuildRequest(id: string): Promise<BuildRequest | undefined>;
+  getBuildRequestsByStatus(status: string): Promise<BuildRequest[]>;
+  createBuildRequest(request: InsertBuildRequest): Promise<BuildRequest>;
+  updateBuildRequest(id: string, request: Partial<InsertBuildRequest>): Promise<BuildRequest | undefined>;
+  deleteBuildRequest(id: string): Promise<boolean>;
+  getPendingBuildRequestsCount(): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3236,6 +3246,45 @@ export class DatabaseStorage implements IStorage {
   async clearAiConversations(): Promise<boolean> {
     await db.delete(aiConversations);
     return true;
+  }
+
+  // Build Requests
+  async getBuildRequests(): Promise<BuildRequest[]> {
+    return db.select().from(buildRequests).orderBy(desc(buildRequests.createdAt));
+  }
+
+  async getBuildRequest(id: string): Promise<BuildRequest | undefined> {
+    const [request] = await db.select().from(buildRequests).where(eq(buildRequests.id, id));
+    return request || undefined;
+  }
+
+  async getBuildRequestsByStatus(status: string): Promise<BuildRequest[]> {
+    return db.select().from(buildRequests)
+      .where(eq(buildRequests.status, status))
+      .orderBy(desc(buildRequests.createdAt));
+  }
+
+  async createBuildRequest(request: InsertBuildRequest): Promise<BuildRequest> {
+    const [created] = await db.insert(buildRequests).values(request).returning();
+    return created;
+  }
+
+  async updateBuildRequest(id: string, request: Partial<InsertBuildRequest>): Promise<BuildRequest | undefined> {
+    const [updated] = await db.update(buildRequests)
+      .set(request)
+      .where(eq(buildRequests.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteBuildRequest(id: string): Promise<boolean> {
+    await db.delete(buildRequests).where(eq(buildRequests.id, id));
+    return true;
+  }
+
+  async getPendingBuildRequestsCount(): Promise<number> {
+    const result = await db.select().from(buildRequests).where(eq(buildRequests.status, "pending"));
+    return result.length;
   }
 }
 

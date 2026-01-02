@@ -401,6 +401,103 @@ Provide:
     }
   });
 
+  // Build Requests - Co-Developer Bridge
+  app.get("/api/build-requests", isAdminAuthenticated, async (req, res) => {
+    try {
+      const requests = await storage.getBuildRequests();
+      res.json(requests);
+    } catch (error) {
+      console.log('Get build requests error:', error);
+      res.status(500).json({ message: "Failed to get build requests" });
+    }
+  });
+
+  app.get("/api/build-requests/pending/count", isAdminAuthenticated, async (req, res) => {
+    try {
+      const count = await storage.getPendingBuildRequestsCount();
+      res.json({ count });
+    } catch (error) {
+      console.log('Get pending count error:', error);
+      res.status(500).json({ message: "Failed to get pending count" });
+    }
+  });
+
+  app.get("/api/build-requests/:id", isAdminAuthenticated, async (req, res) => {
+    try {
+      const request = await storage.getBuildRequest(req.params.id);
+      if (!request) {
+        return res.status(404).json({ message: "Build request not found" });
+      }
+      res.json(request);
+    } catch (error) {
+      console.log('Get build request error:', error);
+      res.status(500).json({ message: "Failed to get build request" });
+    }
+  });
+
+  app.post("/api/build-requests", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { code, filename, description, language, conversationId } = req.body;
+      
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ message: "Code is required" });
+      }
+
+      const request = await storage.createBuildRequest({
+        code,
+        filename: filename || null,
+        description: description || null,
+        language: language || null,
+        conversationId: conversationId || null,
+        status: "pending",
+      });
+
+      console.log(`[build-request] Created new request: ${request.id}`);
+      res.json(request);
+    } catch (error) {
+      console.log('Create build request error:', error);
+      res.status(500).json({ message: "Failed to create build request" });
+    }
+  });
+
+  app.patch("/api/build-requests/:id", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { status, notes } = req.body;
+      const employee = await getEmployeeFromCookie(req);
+      
+      const updateData: any = {};
+      if (status) updateData.status = status;
+      if (notes !== undefined) updateData.notes = notes;
+      if (status && status !== "pending") {
+        updateData.reviewedAt = new Date();
+        if (employee) {
+          updateData.reviewedBy = employee.id;
+        }
+      }
+
+      const updated = await storage.updateBuildRequest(req.params.id, updateData);
+      if (!updated) {
+        return res.status(404).json({ message: "Build request not found" });
+      }
+      
+      console.log(`[build-request] Updated request ${req.params.id} to status: ${status}`);
+      res.json(updated);
+    } catch (error) {
+      console.log('Update build request error:', error);
+      res.status(500).json({ message: "Failed to update build request" });
+    }
+  });
+
+  app.delete("/api/build-requests/:id", isAdminAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteBuildRequest(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.log('Delete build request error:', error);
+      res.status(500).json({ message: "Failed to delete build request" });
+    }
+  });
+
   // Register checklist, wellbeing, messages, and product routes AFTER auth middleware
   registerChecklistRoutes(app);
   
