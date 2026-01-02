@@ -60,6 +60,7 @@ import Checklists from "@/pages/checklists";
 import ChecklistAnalytics from "@/pages/checklist-analytics";
 import Wellbeing from "@/pages/wellbeing";
 import Communications from "@/pages/communications";
+import CommunicationsInbox from "@/pages/communications-inbox";
 import ProductFinder from "@/pages/product-finder";
 import SupplierLookup from "@/pages/supplier-lookup";
 import DailyActivities from "@/pages/daily-activities";
@@ -93,6 +94,7 @@ function AdminRouter() {
       <Route path="/checklists" component={Checklists} />
       <Route path="/checklist-analytics" component={ChecklistAnalytics} />
       <Route path="/communications" component={Communications} />
+      <Route path="/communications-inbox" component={CommunicationsInbox} />
       <Route path="/daily-activities" component={DailyActivities} />
       <Route path="/seo" component={SEOPowerHouse} />
       <Route path="/wellbeing" component={Wellbeing} />

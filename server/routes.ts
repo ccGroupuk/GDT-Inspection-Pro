@@ -221,7 +221,7 @@ export async function registerRoutes(
         return res.status(500).json({ message: "Gemini API key not configured. Please add GEMINI_API_KEY to your Secrets." });
       }
       
-      const systemPrompt = `You are an expert code assistant. Generate clean, well-structured code based on the user's request. 
+      const systemPrompt = `You are an expert code assistant and programming tutor. Generate clean, well-structured code based on the user's request, and then explain it in simple terms.
 
 Guidelines:
 - Provide complete, working code
@@ -232,12 +232,16 @@ Guidelines:
 
 User request: ${prompt}
 
-Respond with ONLY the code, no additional explanation unless specifically requested.`;
+IMPORTANT: Your response must have TWO sections:
+
+1. First, provide the complete code.
+
+2. Then add a section titled "=== EXPLANATION FOR BEGINNERS ===" and explain how the code works in simple, everyday language that a non-programmer could understand. Use analogies and avoid technical jargon where possible. Explain what each main part does and why.`;
 
       try {
         // Initialize Gemini SDK
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
         
         // Generate content
         const result = await model.generateContent(systemPrompt);

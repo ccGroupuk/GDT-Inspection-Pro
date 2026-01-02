@@ -23,6 +23,7 @@ import {
   ClipboardCheck,
   Heart,
   MessageSquare,
+  Mail,
   Search,
   Phone,
   BarChart3,
@@ -74,6 +75,11 @@ const menuItems = [
     title: "Team Hub",
     url: "/communications",
     icon: MessageSquare,
+  },
+  {
+    title: "Messages Inbox",
+    url: "/communications-inbox",
+    icon: Mail,
   },
   {
     title: "Daily Activities",
