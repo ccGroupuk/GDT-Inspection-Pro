@@ -162,7 +162,7 @@ const menuItems = [
     icon: Heart,
   },
   {
-    title: "AI Bridge",
+    title: "AI Assistant",
     url: "/ai-bridge",
     icon: Sparkles,
   },

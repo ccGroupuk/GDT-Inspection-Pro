@@ -80,6 +80,7 @@ import {
   partnerFeeAccruals, type PartnerFeeAccrual, type InsertPartnerFeeAccrual,
   partnerInvoices, type PartnerInvoice, type InsertPartnerInvoice,
   partnerInvoicePayments, type PartnerInvoicePayment, type InsertPartnerInvoicePayment,
+  aiConversations, type AiConversation, type InsertAiConversation,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -643,6 +644,11 @@ export interface IStorage {
   createPartnerInvoicePayment(payment: InsertPartnerInvoicePayment): Promise<PartnerInvoicePayment>;
   updatePartnerInvoicePayment(id: string, payment: Partial<InsertPartnerInvoicePayment>): Promise<PartnerInvoicePayment | undefined>;
   deletePartnerInvoicePayment(id: string): Promise<boolean>;
+
+  // AI Conversations
+  getAiConversations(): Promise<AiConversation[]>;
+  createAiConversation(message: InsertAiConversation): Promise<AiConversation>;
+  clearAiConversations(): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3214,6 +3220,21 @@ export class DatabaseStorage implements IStorage {
 
   async deletePartnerInvoicePayment(id: string): Promise<boolean> {
     await db.delete(partnerInvoicePayments).where(eq(partnerInvoicePayments.id, id));
+    return true;
+  }
+
+  // AI Conversations
+  async getAiConversations(): Promise<AiConversation[]> {
+    return db.select().from(aiConversations).orderBy(asc(aiConversations.createdAt));
+  }
+
+  async createAiConversation(message: InsertAiConversation): Promise<AiConversation> {
+    const [created] = await db.insert(aiConversations).values(message).returning();
+    return created;
+  }
+
+  async clearAiConversations(): Promise<boolean> {
+    await db.delete(aiConversations);
     return true;
   }
 }

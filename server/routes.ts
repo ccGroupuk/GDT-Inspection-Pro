@@ -203,9 +203,154 @@ export async function registerRoutes(
     res.status(401).json({ message: "Unauthorized" });
   });
 
-  // ==================== AI BRIDGE ====================
+  // ==================== AI ASSISTANT ====================
   
-  // Generate code using Gemini SDK
+  // Get conversation history
+  app.get("/api/ai-assistant/conversations", isAdminAuthenticated, async (req, res) => {
+    try {
+      const conversations = await storage.getAiConversations();
+      res.json(conversations);
+    } catch (error) {
+      console.log('AI Assistant Error:', error);
+      res.status(500).json({ message: "Failed to fetch conversations" });
+    }
+  });
+
+  // Clear conversation history
+  app.delete("/api/ai-assistant/conversations", isAdminAuthenticated, async (req, res) => {
+    try {
+      await storage.clearAiConversations();
+      res.json({ success: true });
+    } catch (error) {
+      console.log('AI Assistant Error:', error);
+      res.status(500).json({ message: "Failed to clear conversations" });
+    }
+  });
+
+  // Chat with AI Assistant
+  app.post("/api/ai-assistant/chat", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { message } = req.body;
+      
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ message: "Message is required" });
+      }
+      
+      const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+      
+      if (!GEMINI_API_KEY) {
+        console.log('Gemini Error: GEMINI_API_KEY is not set in environment');
+        return res.status(500).json({ message: "Gemini API key not configured. Please add GEMINI_API_KEY to your Secrets." });
+      }
+
+      // Save user message to conversation history
+      await storage.createAiConversation({
+        role: 'user',
+        content: message,
+        codeSnippet: null,
+      });
+
+      // Get recent conversation history for context
+      const history = await storage.getAiConversations();
+      const recentHistory = history.slice(-10); // Last 10 messages for context
+      
+      const conversationContext = recentHistory.map(msg => 
+        `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
+      ).join('\n\n');
+      
+      const systemPrompt = `You are a patient, friendly AI coding tutor and assistant named "AI Assistant". You can answer questions about programming, explain concepts, and generate code when requested.
+
+PERSONALITY:
+- Be warm, encouraging, and patient
+- Explain things as if teaching a beginner, even if they're advanced
+- Use everyday analogies to explain technical concepts
+- Never be condescending
+- Remember context from the conversation
+
+CAPABILITIES:
+- Answer general questions about programming, technology, or software development
+- Generate clean, well-structured code when requested
+- Explain existing code or concepts
+- Help debug problems
+- Provide guidance on best practices
+
+WHEN GENERATING CODE:
+- Provide complete, working code with helpful comments
+- Use modern best practices
+- For React: use TypeScript and functional components with hooks
+- Format code properly with consistent indentation
+- ALWAYS wrap code blocks in triple backticks with the language name (e.g. \`\`\`typescript)
+
+RESPONSE FORMAT:
+1. If the user asks a question (not requesting code), answer conversationally and helpfully.
+
+2. If the user requests code, provide:
+   - The complete code first (wrapped in code blocks)
+   - Then a section titled "**Explanation for Beginners:**" that explains how it works in everyday language using analogies where helpful
+
+3. Always be ready to clarify or expand on any topic.
+
+CONVERSATION HISTORY:
+${conversationContext}
+
+USER'S LATEST MESSAGE: ${message}`;
+
+      try {
+        // Initialize Gemini SDK
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        
+        // Generate content
+        const result = await model.generateContent(systemPrompt);
+        const response = await result.response;
+        let responseText = response.text();
+        
+        if (!responseText) {
+          console.log('Gemini Error: No response generated - empty response');
+          return res.status(500).json({ message: "No response generated" });
+        }
+
+        // Extract code snippets if any
+        const codeBlockRegex = /```[\w]*\n([\s\S]*?)```/g;
+        const codeBlocks: RegExpExecArray[] = [];
+        let match;
+        while ((match = codeBlockRegex.exec(responseText)) !== null) {
+          codeBlocks.push(match);
+        }
+        const extractedCode = codeBlocks.length > 0 
+          ? codeBlocks.map(m => m[1]).join('\n\n---\n\n')
+          : null;
+
+        // Save assistant response to conversation history
+        await storage.createAiConversation({
+          role: 'assistant',
+          content: responseText,
+          codeSnippet: extractedCode,
+        });
+        
+        console.log(`[ai-assistant] Responded to: "${message.substring(0, 50)}..."`);
+        res.json({ 
+          response: responseText,
+          codeSnippet: extractedCode 
+        });
+        
+      } catch (error: any) {
+        console.log('Gemini Error - Full error object:', error);
+        console.log('Gemini Error - Message:', error?.message);
+        console.log('Gemini Error - Status:', error?.status);
+        console.log('Gemini Error - StatusText:', error?.statusText);
+        console.log('Gemini Error - Error Details:', error?.errorDetails);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        res.status(500).json({ message: `Failed to generate response: ${errorMessage}` });
+      }
+      
+    } catch (error) {
+      console.log('AI Assistant Error:', error);
+      res.status(500).json({ message: "Failed to process message" });
+    }
+  });
+
+  // Legacy endpoint for backwards compatibility
   app.post("/api/ai-bridge/generate", isAdminAuthenticated, async (req, res) => {
     try {
       const { prompt } = req.body;
@@ -221,58 +366,31 @@ export async function registerRoutes(
         return res.status(500).json({ message: "Gemini API key not configured. Please add GEMINI_API_KEY to your Secrets." });
       }
       
-      const systemPrompt = `You are an expert code assistant and programming tutor. Generate clean, well-structured code based on the user's request, and then explain it in simple terms.
+      const systemPrompt = `You are a patient, friendly AI coding tutor. Generate clean code and explain it simply.
 
-Guidelines:
-- Provide complete, working code
-- Include helpful comments where appropriate
-- Use modern best practices
-- If creating React components, use TypeScript and functional components with hooks
-- Format code properly with consistent indentation
+USER REQUEST: ${prompt}
 
-User request: ${prompt}
-
-IMPORTANT: Your response must have TWO sections:
-
-1. First, provide the complete code.
-
-2. Then add a section titled "=== EXPLANATION FOR BEGINNERS ===" and explain how the code works in simple, everyday language that a non-programmer could understand. Use analogies and avoid technical jargon where possible. Explain what each main part does and why.`;
+Provide:
+1. Complete, working code with helpful comments
+2. A section titled "=== EXPLANATION FOR BEGINNERS ===" explaining how it works in everyday terms`;
 
       try {
-        // Initialize Gemini SDK
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
         
-        // Generate content
         const result = await model.generateContent(systemPrompt);
         const response = await result.response;
         let code = response.text();
         
         if (!code) {
-          console.log('Gemini Error: No code generated - empty response');
           return res.status(500).json({ message: "No code generated" });
-        }
-        
-        // Strip markdown code fences if present
-        code = code.trim();
-        if (code.startsWith('```')) {
-          const lines = code.split('\n');
-          if (lines[lines.length - 1].trim() === '```') {
-            lines.pop();
-          }
-          lines.shift();
-          code = lines.join('\n');
         }
         
         console.log(`[ai-bridge] Generated code for prompt: "${prompt.substring(0, 50)}..."`);
         res.json({ code });
         
       } catch (error: any) {
-        console.log('Gemini Error - Full error object:', error);
-        console.log('Gemini Error - Message:', error?.message);
-        console.log('Gemini Error - Status:', error?.status);
-        console.log('Gemini Error - StatusText:', error?.statusText);
-        console.log('Gemini Error - Error Details:', error?.errorDetails);
+        console.log('Gemini Error:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         res.status(500).json({ message: `Failed to generate code: ${errorMessage}` });
       }

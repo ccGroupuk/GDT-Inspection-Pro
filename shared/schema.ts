@@ -3121,3 +3121,16 @@ export const PARTNER_INVOICE_STATUSES = [
   { value: "overdue", label: "Overdue" },
   { value: "cancelled", label: "Cancelled" },
 ] as const;
+
+// AI Conversations - stores chat history with AI Assistant
+export const aiConversations = pgTable("ai_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  role: text("role").notNull(), // 'user' or 'assistant'
+  content: text("content").notNull(),
+  codeSnippet: text("code_snippet"), // extracted code if any
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAiConversationSchema = createInsertSchema(aiConversations).omit({ id: true, createdAt: true });
+export type InsertAiConversation = z.infer<typeof insertAiConversationSchema>;
+export type AiConversation = typeof aiConversations.$inferSelect;
