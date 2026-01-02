@@ -7,6 +7,7 @@ import { insertContactSchema, insertTradePartnerSchema, insertJobSchema, insertT
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Simple in-memory rate limiter for login endpoints
 const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
@@ -204,7 +205,7 @@ export async function registerRoutes(
 
   // ==================== AI BRIDGE ====================
   
-  // Generate code using Gemini
+  // Generate code using Gemini SDK
   app.post("/api/ai-bridge/generate", isAdminAuthenticated, async (req, res) => {
     try {
       const { prompt } = req.body;
@@ -216,7 +217,8 @@ export async function registerRoutes(
       const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
       
       if (!GEMINI_API_KEY) {
-        return res.status(500).json({ message: "Gemini API key not configured" });
+        console.log('Gemini Error: GEMINI_API_KEY is not set in environment');
+        return res.status(500).json({ message: "Gemini API key not configured. Please add GEMINI_API_KEY to your Secrets." });
       }
       
       const systemPrompt = `You are an expert code assistant. Generate clean, well-structured code based on the user's request. 
@@ -232,56 +234,44 @@ User request: ${prompt}
 
 Respond with ONLY the code, no additional explanation unless specifically requested.`;
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [{ text: systemPrompt }]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 8000,
-            }
-          })
+      try {
+        // Initialize Gemini SDK
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        
+        // Generate content
+        const result = await model.generateContent(systemPrompt);
+        const response = await result.response;
+        let code = response.text();
+        
+        if (!code) {
+          console.log('Gemini Error: No code generated - empty response');
+          return res.status(500).json({ message: "No code generated" });
         }
-      );
-      
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('[ai-bridge] Gemini API error:', error);
-        return res.status(500).json({ message: "Failed to generate code" });
-      }
-      
-      const data = await response.json();
-      let code = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      
-      if (!code) {
-        return res.status(500).json({ message: "No code generated" });
-      }
-      
-      // Strip markdown code fences if present
-      code = code.trim();
-      if (code.startsWith('```')) {
-        const lines = code.split('\n');
-        // Remove first line (```language) and last line (```)
-        if (lines[lines.length - 1].trim() === '```') {
-          lines.pop();
+        
+        // Strip markdown code fences if present
+        code = code.trim();
+        if (code.startsWith('```')) {
+          const lines = code.split('\n');
+          // Remove first line (```language) and last line (```)
+          if (lines[lines.length - 1].trim() === '```') {
+            lines.pop();
+          }
+          lines.shift();
+          code = lines.join('\n');
         }
-        lines.shift();
-        code = lines.join('\n');
+        
+        console.log(`[ai-bridge] Generated code for prompt: "${prompt.substring(0, 50)}..."`);
+        res.json({ code });
+        
+      } catch (error) {
+        console.log('Gemini Error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        res.status(500).json({ message: `Failed to generate code: ${errorMessage}` });
       }
       
-      console.log(`[ai-bridge] Generated code for prompt: "${prompt.substring(0, 50)}..."`);
-      res.json({ code });
     } catch (error) {
-      console.error("AI Bridge generate error:", error);
+      console.log('Gemini Error:', error);
       res.status(500).json({ message: "Failed to generate code" });
     }
   });
