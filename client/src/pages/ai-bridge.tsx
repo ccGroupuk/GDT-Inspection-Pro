@@ -10,7 +10,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
   Sparkles, Code, Copy, Check, Loader2, Send, Trash2, User, Bot, MessageCircle, 
   Rocket, TrendingUp, GitBranch, FolderOpen, FileCode, ChevronRight, ChevronDown, 
-  RefreshCw, Eye, GitCommit, Github, File, Folder, ArrowLeft
+  RefreshCw, Eye, GitCommit, Github, File, Folder, ArrowLeft, Brain, History, 
+  Database, RotateCcw
 } from "lucide-react";
 import type { AiConversation } from "@shared/schema";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,27 @@ interface GitHubStatus {
   error?: string;
 }
 
+interface KnowledgeStats {
+  hasKnowledge: boolean;
+  manifestUpdated?: string;
+  fileSummaryCount: number;
+  featureChunkCount: number;
+  totalTokens: number;
+  versionCount: number;
+  latestVersion: number;
+}
+
+interface KnowledgeVersion {
+  id: string;
+  versionNumber: number;
+  commitSha?: string;
+  commitMessage?: string;
+  branch?: string;
+  filesChanged?: string;
+  description?: string;
+  createdAt: string;
+}
+
 export default function AIBridge() {
   const { toast } = useToast();
   const [message, setMessage] = useState("");
@@ -58,6 +80,7 @@ export default function AIBridge() {
   const [commitMessage, setCommitMessage] = useState("");
   const [commitBranch, setCommitBranch] = useState("main");
   const [activeTab, setActiveTab] = useState<string>("browse");
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
 
   // GitHub queries
   const { data: githubStatus, isLoading: statusLoading } = useQuery<GitHubStatus>({
@@ -86,6 +109,17 @@ export default function AIBridge() {
 
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<AiConversation[]>({
     queryKey: ["/api/ai-assistant/conversations"],
+  });
+
+  // Knowledge queries
+  const { data: knowledgeStats, refetch: refetchKnowledgeStats } = useQuery<KnowledgeStats>({
+    queryKey: ["/api/github/knowledge/stats", selectedBranch],
+    enabled: githubStatus?.configured,
+  });
+
+  const { data: knowledgeVersions = [] } = useQuery<KnowledgeVersion[]>({
+    queryKey: ["/api/github/knowledge/versions", selectedBranch],
+    enabled: githubStatus?.configured && showVersionHistory,
   });
 
   // Fetch file content mutation
@@ -132,6 +166,51 @@ export default function AIBridge() {
       toast({
         title: "Commit Failed",
         description: error.message || "Failed to commit file",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Knowledge mutations
+  const refreshKnowledgeMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/github/knowledge/refresh", { branch: selectedBranch });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/github/knowledge/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/github/knowledge/versions"] });
+      toast({
+        title: "Knowledge Refreshed",
+        description: "AI now has updated understanding of your codebase",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Refresh Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const restoreVersionMutation = useMutation({
+    mutationFn: async (versionId: string) => {
+      const response = await apiRequest("POST", `/api/github/knowledge/restore/${versionId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/github/knowledge/stats"] });
+      setShowVersionHistory(false);
+      toast({
+        title: "Version Restored",
+        description: "AI knowledge restored to previous version",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Restore Failed",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -407,10 +486,46 @@ export default function AIBridge() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {githubStatus?.configured && (
-            <Badge variant="outline" className="gap-1" data-testid="badge-github">
-              <Github className="h-3 w-3" />
-              {githubStatus.repo}
-            </Badge>
+            <>
+              <Badge variant="outline" className="gap-1" data-testid="badge-github">
+                <Github className="h-3 w-3" />
+                {githubStatus.repo}
+              </Badge>
+              <Badge 
+                variant={knowledgeStats?.hasKnowledge ? "default" : "secondary"} 
+                className="gap-1" 
+                data-testid="badge-knowledge"
+              >
+                <Brain className="h-3 w-3" />
+                {knowledgeStats?.hasKnowledge 
+                  ? `${knowledgeStats.totalTokens.toLocaleString()} tokens indexed` 
+                  : "Not indexed"}
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refreshKnowledgeMutation.mutate()}
+                disabled={refreshKnowledgeMutation.isPending}
+                data-testid="button-refresh-knowledge"
+              >
+                {refreshKnowledgeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                )}
+                {knowledgeStats?.hasKnowledge ? "Refresh" : "Index"} Knowledge
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowVersionHistory(true)}
+                disabled={!knowledgeStats?.hasKnowledge}
+                data-testid="button-version-history"
+              >
+                <History className="h-4 w-4 mr-1" />
+                History ({knowledgeStats?.versionCount || 0})
+              </Button>
+            </>
           )}
           <Button
             variant="outline"
@@ -909,6 +1024,81 @@ export default function AIBridge() {
                 <GitCommit className="h-4 w-4 mr-1" />
               )}
               Commit to {commitBranch}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Version History Dialog */}
+      <Dialog open={showVersionHistory} onOpenChange={setShowVersionHistory}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Knowledge Version History
+            </DialogTitle>
+            <DialogDescription>
+              Restore AI knowledge to a previous state. Each version captures the codebase understanding at that point.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[400px]">
+            <div className="space-y-2">
+              {knowledgeVersions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No version history yet</p>
+                  <p className="text-sm">Versions are created when knowledge is refreshed or when you commit to GitHub</p>
+                </div>
+              ) : (
+                knowledgeVersions.map((version) => (
+                  <div 
+                    key={version.id}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                    data-testid={`version-${version.versionNumber}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="shrink-0">
+                          v{version.versionNumber}
+                        </Badge>
+                        <span className="text-sm font-medium truncate">
+                          {version.description || `Version ${version.versionNumber}`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                        {version.commitSha && (
+                          <span className="flex items-center gap-1">
+                            <GitCommit className="h-3 w-3" />
+                            {version.commitSha.substring(0, 7)}
+                          </span>
+                        )}
+                        <span>
+                          {new Date(version.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => restoreVersionMutation.mutate(version.id)}
+                      disabled={restoreVersionMutation.isPending}
+                      data-testid={`button-restore-${version.versionNumber}`}
+                    >
+                      {restoreVersionMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-4 w-4 mr-1" />
+                      )}
+                      Restore
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVersionHistory(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
