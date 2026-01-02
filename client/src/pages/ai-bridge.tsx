@@ -44,10 +44,12 @@ export default function AIBridge() {
       }
     },
     onError: (error: Error) => {
+      const isRateLimit = error.message.includes('rate limit') || error.message.includes('20 requests');
       toast({
-        title: "Error",
+        title: isRateLimit ? "Rate Limit Reached" : "Error",
         description: error.message || "Failed to send message. Please try again.",
         variant: "destructive",
+        duration: isRateLimit ? 10000 : 5000,
       });
     },
   });

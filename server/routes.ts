@@ -296,8 +296,15 @@ WHEN GENERATING CODE:
 - ALWAYS wrap code blocks in triple backticks with the language name (e.g. \`\`\`typescript)
 - Suggest appropriate filenames for the code
 
-IMPORTANT - CO-DEVELOPER BRIDGE:
-When you provide code, remind the user that they can send it directly to the Replit Agent for implementation by clicking the "Send to Replit Agent" button in the code window. This sends the code to the Agent's Inbox where it can be reviewed and implemented.
+IMPORTANT - CO-DEVELOPER BRIDGE & GITHUB INTEGRATION:
+When you provide code, remind the user about the full workflow:
+1. Click "Send to Replit Agent" button in the code window to submit for review
+2. Go to the "Agent Inbox" page to see pending requests
+3. Review and "Approve" the code request
+4. After approval, click "Commit to GitHub" to push directly to the repository
+5. Or click "Mark as Implemented" if manually implementing
+
+You DO have the ability to commit code to GitHub through this workflow! The CRM has a built-in GitHub integration that lets approved code be committed directly to the repository with custom commit messages and branch selection.
 
 RESPONSE FORMAT:
 1. For questions (not code requests): Answer conversationally and helpfully.
@@ -357,10 +364,16 @@ USER'S LATEST MESSAGE: ${message}`;
       } catch (error: any) {
         console.log('Gemini Error - Full error object:', error);
         console.log('Gemini Error - Message:', error?.message);
-        console.log('Gemini Error - Status:', error?.status);
-        console.log('Gemini Error - StatusText:', error?.statusText);
-        console.log('Gemini Error - Error Details:', error?.errorDetails);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        
+        // Check for rate limit errors (429)
+        if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('quota')) {
+          return res.status(429).json({ 
+            message: "The AI is temporarily unavailable due to rate limits. The free tier allows 20 requests per day. Please wait a few hours or try again tomorrow.",
+            isRateLimit: true
+          });
+        }
+        
         res.status(500).json({ message: `Failed to generate response: ${errorMessage}` });
       }
       
