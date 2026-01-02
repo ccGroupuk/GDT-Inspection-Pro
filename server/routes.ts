@@ -8,6 +8,7 @@ import { z } from "zod";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import * as github from "./github";
 
 // Simple in-memory rate limiter for login endpoints
 const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
@@ -516,6 +517,138 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     } catch (error) {
       console.log('Delete build request error:', error);
       res.status(500).json({ message: "Failed to delete build request" });
+    }
+  });
+
+  // ========== GitHub Integration Routes ==========
+  
+  // Check GitHub configuration status
+  app.get("/api/github/status", isAdminAuthenticated, async (req, res) => {
+    try {
+      const configured = github.isConfigured();
+      if (!configured) {
+        return res.json({ configured: false, message: "GitHub not configured" });
+      }
+      
+      const repoInfo = await github.getRepoInfo();
+      res.json({
+        configured: true,
+        repo: repoInfo.full_name,
+        defaultBranch: repoInfo.default_branch,
+        isPrivate: repoInfo.private,
+      });
+    } catch (error: any) {
+      res.json({ configured: false, error: error.message });
+    }
+  });
+
+  // List branches
+  app.get("/api/github/branches", isAdminAuthenticated, async (req, res) => {
+    try {
+      const branches = await github.listBranches();
+      res.json(branches);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get file content
+  app.get("/api/github/file", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { path, branch } = req.query;
+      if (!path || typeof path !== "string") {
+        return res.status(400).json({ message: "Path is required" });
+      }
+      
+      const result = await github.getFileContent(path, (branch as string) || "main");
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // List directory contents
+  app.get("/api/github/directory", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { path, branch } = req.query;
+      const result = await github.listDirectory((path as string) || "", (branch as string) || "main");
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Commit file to GitHub
+  app.post("/api/github/commit", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { path, content, message, branch } = req.body;
+      
+      if (!path || !content || !message) {
+        return res.status(400).json({ message: "Path, content, and message are required" });
+      }
+      
+      const result = await github.commitFile(
+        path,
+        content,
+        message,
+        branch || "main"
+      );
+      
+      console.log(`[github] Committed file: ${path} to ${branch || "main"}`);
+      res.json({
+        success: true,
+        path: result.content.path,
+        sha: result.content.sha,
+        commitSha: result.commit.sha,
+        commitUrl: result.commit.html_url,
+      });
+    } catch (error: any) {
+      console.error("[github] Commit error:", error.message);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Commit build request code to GitHub
+  app.post("/api/build-requests/:id/commit", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { path, message, branch } = req.body;
+      
+      const buildRequest = await storage.getBuildRequest(id);
+      if (!buildRequest) {
+        return res.status(404).json({ message: "Build request not found" });
+      }
+      
+      if (!path) {
+        return res.status(400).json({ message: "File path is required" });
+      }
+      
+      const commitMessage = message || `[AI Bridge] ${buildRequest.description || 'Update ' + (buildRequest.filename || path)}`;
+      
+      const result = await github.commitFile(
+        path,
+        buildRequest.code,
+        commitMessage,
+        branch || "main"
+      );
+      
+      // Update build request status to implemented
+      await storage.updateBuildRequest(id, {
+        status: "implemented",
+        notes: `Committed to GitHub: ${result.commit.html_url}`,
+        reviewedAt: new Date(),
+      });
+      
+      console.log(`[github] Build request ${id} committed to ${path}`);
+      res.json({
+        success: true,
+        path: result.content.path,
+        commitSha: result.commit.sha,
+        commitUrl: result.commit.html_url,
+      });
+    } catch (error: any) {
+      console.error("[github] Build request commit error:", error.message);
+      res.status(500).json({ message: error.message });
     }
   });
 

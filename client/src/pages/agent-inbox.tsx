@@ -7,6 +7,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
@@ -22,8 +24,11 @@ import {
   Loader2,
   Trash2,
   Bell,
-  Zap
+  Zap,
+  GitBranch,
+  ExternalLink
 } from "lucide-react";
+import { SiGithub } from "react-icons/si";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { formatDistanceToNow } from "date-fns";
 import type { BuildRequest } from "@shared/schema";
@@ -44,10 +49,23 @@ export default function AgentInbox() {
 
   const prevPendingCountRef = useRef<number>(0);
   const [newTaskAlert, setNewTaskAlert] = useState(false);
+  const [showCommitDialog, setShowCommitDialog] = useState(false);
+  const [commitPath, setCommitPath] = useState("");
+  const [commitMessage, setCommitMessage] = useState("");
+  const [commitBranch, setCommitBranch] = useState("main");
 
   const { data: requests = [], isLoading } = useQuery<BuildRequest[]>({
     queryKey: ["/api/build-requests"],
     refetchInterval: 10000, // Poll every 10 seconds for new tasks
+  });
+
+  const { data: githubStatus } = useQuery<{ configured: boolean; repo?: string; defaultBranch?: string; error?: string }>({
+    queryKey: ["/api/github/status"],
+  });
+
+  const { data: branches = [] } = useQuery<{ name: string; protected: boolean }[]>({
+    queryKey: ["/api/github/branches"],
+    enabled: githubStatus?.configured === true,
   });
 
   // Watch for new pending tasks and show alert
@@ -111,6 +129,61 @@ export default function AgentInbox() {
       });
     },
   });
+
+  const commitMutation = useMutation({
+    mutationFn: async ({ id, path, message, branch }: { id: string; path: string; message: string; branch: string }) => {
+      const response = await apiRequest("POST", `/api/build-requests/${id}/commit`, { path, message, branch });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/build-requests"] });
+      setShowCommitDialog(false);
+      setSelectedRequest(null);
+      setCommitPath("");
+      setCommitMessage("");
+      toast({
+        title: "Committed to GitHub!",
+        description: (
+          <div className="flex items-center gap-2">
+            <span>Successfully committed to {commitBranch}</span>
+            <a 
+              href={data.commitUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-primary underline flex items-center gap-1"
+            >
+              View <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+        ),
+        duration: 10000,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Commit Failed",
+        description: error.message || "Failed to commit to GitHub.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleOpenCommitDialog = (request: BuildRequest) => {
+    setCommitPath(request.filename || "");
+    setCommitMessage(`[AI Bridge] ${request.description || 'Update ' + (request.filename || 'file')}`);
+    setCommitBranch(githubStatus?.defaultBranch || "main");
+    setShowCommitDialog(true);
+  };
+
+  const handleCommit = () => {
+    if (!selectedRequest || !commitPath) return;
+    commitMutation.mutate({
+      id: selectedRequest.id,
+      path: commitPath,
+      message: commitMessage,
+      branch: commitBranch,
+    });
+  };
 
   const handleCopy = async (code: string) => {
     await navigator.clipboard.writeText(code);
@@ -366,15 +439,28 @@ export default function AgentInbox() {
               </>
             )}
             {selectedRequest?.status === "approved" && (
-              <Button
-                variant="default"
-                onClick={() => selectedRequest && handleStatusChange(selectedRequest.id, "implemented")}
-                disabled={updateMutation.isPending}
-                data-testid="button-mark-implemented"
-              >
-                <Rocket className="h-4 w-4 mr-1" />
-                Mark as Implemented
-              </Button>
+              <>
+                {githubStatus?.configured && (
+                  <Button
+                    variant="default"
+                    onClick={() => selectedRequest && handleOpenCommitDialog(selectedRequest)}
+                    disabled={commitMutation.isPending}
+                    data-testid="button-commit-github"
+                  >
+                    <SiGithub className="h-4 w-4 mr-1" />
+                    Commit to GitHub
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => selectedRequest && handleStatusChange(selectedRequest.id, "implemented")}
+                  disabled={updateMutation.isPending}
+                  data-testid="button-mark-implemented"
+                >
+                  <Rocket className="h-4 w-4 mr-1" />
+                  Mark as Implemented
+                </Button>
+              </>
             )}
             <Button
               variant="ghost"
@@ -388,6 +474,95 @@ export default function AgentInbox() {
             <DialogClose asChild>
               <Button variant="outline">Close</Button>
             </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCommitDialog} onOpenChange={setShowCommitDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <SiGithub className="h-5 w-5" />
+              Commit to GitHub
+            </DialogTitle>
+            <DialogDescription>
+              Commit this code directly to your GitHub repository.
+              {githubStatus?.repo && (
+                <span className="block mt-1 text-xs">
+                  Repository: <span className="font-mono">{githubStatus.repo}</span>
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="commit-path">File Path *</Label>
+              <Input
+                id="commit-path"
+                placeholder="e.g., client/src/components/Button.tsx"
+                value={commitPath}
+                onChange={(e) => setCommitPath(e.target.value)}
+                data-testid="input-commit-path"
+              />
+              <p className="text-xs text-muted-foreground">
+                The path where the file will be created or updated in your repository.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="commit-branch">Branch</Label>
+              <Select value={commitBranch} onValueChange={setCommitBranch}>
+                <SelectTrigger data-testid="select-commit-branch">
+                  <SelectValue placeholder="Select branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.length > 0 ? (
+                    branches.map((branch) => (
+                      <SelectItem key={branch.name} value={branch.name}>
+                        <span className="flex items-center gap-2">
+                          <GitBranch className="h-3 w-3" />
+                          {branch.name}
+                          {branch.protected && <Badge variant="secondary" className="text-xs ml-1">protected</Badge>}
+                        </span>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="main">main</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="commit-message">Commit Message</Label>
+              <Textarea
+                id="commit-message"
+                placeholder="Describe your changes..."
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                className="min-h-[80px]"
+                data-testid="input-commit-message"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              onClick={handleCommit}
+              disabled={commitMutation.isPending || !commitPath}
+              data-testid="button-confirm-commit"
+            >
+              {commitMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <SiGithub className="h-4 w-4 mr-1" />
+              )}
+              Commit
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
