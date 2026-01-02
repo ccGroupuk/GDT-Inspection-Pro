@@ -237,7 +237,7 @@ Respond with ONLY the code, no additional explanation unless specifically reques
       try {
         // Initialize Gemini SDK
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
         
         // Generate content
         const result = await model.generateContent(systemPrompt);
