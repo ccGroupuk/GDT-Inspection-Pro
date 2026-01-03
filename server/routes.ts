@@ -5768,7 +5768,14 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
   app.post("/api/calendar-events", async (req, res) => {
     try {
-      const data = insertCalendarEventSchema.parse(req.body);
+      // Convert date strings to Date objects before validation
+      const body = {
+        ...req.body,
+        startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
+        endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
+      };
+      
+      const data = insertCalendarEventSchema.parse(body);
       
       // Validate partnerId is required for partner/hybrid events
       if ((data.teamType === "partner" || data.teamType === "hybrid") && !data.partnerId) {
@@ -5790,7 +5797,14 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
   app.patch("/api/calendar-events/:id", async (req, res) => {
     try {
-      const data = insertCalendarEventSchema.partial().parse(req.body);
+      // Convert date strings to Date objects before validation
+      const body = {
+        ...req.body,
+        ...(req.body.startDate && { startDate: new Date(req.body.startDate) }),
+        ...(req.body.endDate && { endDate: new Date(req.body.endDate) }),
+      };
+      
+      const data = insertCalendarEventSchema.partial().parse(body);
       const event = await storage.updateCalendarEvent(req.params.id, data);
       if (!event) {
         return res.status(404).json({ message: "Calendar event not found" });
