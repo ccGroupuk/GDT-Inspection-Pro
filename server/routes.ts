@@ -6190,20 +6190,75 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         return res.status(400).json({ message: "startDate and endDate required" });
       }
       
-      const events = await storage.getCalendarEventsForPartnerPortal(
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+      
+      // Get calendar events for this partner
+      const calEvents = await storage.getCalendarEventsForPartnerPortal(
         partnerAccess.partnerId,
-        new Date(startDate as string),
-        new Date(endDate as string)
+        start,
+        end
       );
       
-      // Enrich with job data
+      // Get all jobs and surveys for this partner
       const jobs = await storage.getJobs();
-      const enrichedEvents = events.map(event => ({
+      const partnerJobs = jobs.filter(j => j.partnerId === partnerAccess.partnerId);
+      
+      // Enrich calendar events with job data
+      const enrichedEvents = calEvents.map(event => ({
         ...event,
-        job: event.jobId ? jobs.find(j => j.id === event.jobId) : null
+        job: event.jobId ? jobs.find(j => j.id === event.jobId) : null,
+        eventType: "calendar" as const
       }));
       
-      res.json(enrichedEvents);
+      // Get confirmed/accepted survey appointments for this partner's jobs
+      const surveyPromises = partnerJobs.map(job => storage.getJobSurveysByJob(job.id));
+      const allSurveysArrays = await Promise.all(surveyPromises);
+      const allSurveys = allSurveysArrays.flat();
+      
+      // Filter surveys that have dates and are confirmed/accepted
+      const scheduledSurveys = allSurveys.filter(s => 
+        s.partnerId === partnerAccess.partnerId &&
+        s.status === "accepted" && 
+        (s.bookingStatus === "confirmed" || s.bookingStatus === "client_accepted") &&
+        (s.scheduledDate || s.proposedDate)
+      );
+      
+      // Convert surveys to calendar event format
+      const surveyEvents = scheduledSurveys.map(survey => {
+        const job = partnerJobs.find(j => j.id === survey.jobId);
+        const surveyDate = survey.scheduledDate || survey.proposedDate;
+        const surveyTime = survey.scheduledTime || survey.proposedTime || "09:00";
+        
+        // Parse date and time
+        const eventDate = new Date(surveyDate!);
+        const [hours, mins] = surveyTime.split(":").map(Number);
+        eventDate.setHours(hours || 9, mins || 0, 0, 0);
+        
+        // Check if within date range
+        if (eventDate < start || eventDate > end) return null;
+        
+        return {
+          id: `survey-${survey.id}`,
+          title: `Survey: ${job?.jobNumber || 'Job'}`,
+          startDate: eventDate,
+          endDate: new Date(eventDate.getTime() + 2 * 60 * 60 * 1000), // 2 hour duration
+          teamType: "partner",
+          partnerId: survey.partnerId,
+          jobId: survey.jobId,
+          status: survey.bookingStatus === "confirmed" ? "confirmed" : "pending",
+          confirmedByAdmin: survey.bookingStatus === "confirmed",
+          confirmedByPartner: survey.bookingStatus === "confirmed",
+          job,
+          eventType: "survey" as const,
+          surveyDetails: survey.surveyDetails,
+        };
+      }).filter(Boolean);
+      
+      // Combine both sources
+      const allEvents = [...enrichedEvents, ...surveyEvents];
+      
+      res.json(allEvents);
     } catch (error) {
       console.error("Get partner portal calendar events error:", error);
       res.status(500).json({ message: "Failed to load calendar events" });
