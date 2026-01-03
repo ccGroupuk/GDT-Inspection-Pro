@@ -1363,6 +1363,15 @@ export default function JobDetail() {
                   </div>
                 </div>
 
+                {job.depositRequired && job.depositReceived && quoteTotals && (
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                    <span className="text-sm font-medium text-green-700 dark:text-green-300">Balance Due</span>
+                    <span className="font-mono text-lg font-semibold text-green-700 dark:text-green-300">
+                      £{Math.max(quoteTotals.grandTotal - Number(job.depositAmount || 0), 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
                 {isPartnerJob && (
                   <>
                     <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-muted/50">
