@@ -3656,6 +3656,64 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     }
   });
 
+  // Partner portal notification counts
+  app.get("/api/partner-portal/notification-counts", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Get surveys that need partner attention (client responded)
+      const surveys = await storage.getJobSurveysByPartner(access.partnerId);
+      const surveysNeedingAction = surveys.filter(s => 
+        s.status === "requested" || // New survey requests
+        s.bookingStatus === "client_accepted" || // Client accepted, needs confirmation
+        s.bookingStatus === "client_counter" || // Client proposed alternative
+        s.bookingStatus === "client_declined" // Client declined, needs new proposal
+      ).length;
+      
+      // Get jobs pending acceptance
+      const jobs = await storage.getJobsByPartner(access.partnerId);
+      const jobsNeedingAction = jobs.filter(j => 
+        j.partnerStatus === "offered" // Job offered but not yet accepted
+      ).length;
+      
+      // Get unread messages
+      const messages = await storage.getActivePortalMessagesForPartner(access.partnerId);
+      let unreadMessages = 0;
+      for (const msg of messages) {
+        const isRead = await storage.isPortalMessageRead(msg.id);
+        if (!isRead) unreadMessages++;
+      }
+      
+      // Get emergency callouts needing response
+      const responses = await storage.getEmergencyCalloutResponsesByPartner(access.partnerId);
+      let calloutsNeedingAction = 0;
+      for (const response of responses) {
+        if (response.status === "pending" || response.status === "acknowledged") {
+          calloutsNeedingAction++;
+        }
+      }
+      
+      res.json({
+        surveys: surveysNeedingAction,
+        jobs: jobsNeedingAction,
+        messages: unreadMessages,
+        emergency: calloutsNeedingAction,
+        total: surveysNeedingAction + jobsNeedingAction + unreadMessages + calloutsNeedingAction
+      });
+    } catch (error) {
+      console.error("Partner portal notification counts error:", error);
+      res.status(500).json({ message: "Failed to load notification counts" });
+    }
+  });
+
   // ==================== PARTNER PORTAL SURVEYS API ====================
 
   // Get surveys assigned to this partner

@@ -130,6 +130,7 @@ export default function PortalSurveys() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portal/surveys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/notification-counts"] });
       const message = responseType === "accept" 
         ? "You accepted the proposed date" 
         : responseType === "decline"

@@ -14,7 +14,8 @@ import { useTabNotification } from "@/hooks/use-tab-notification";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
-import { Briefcase, MapPin, User, LogOut, Loader2, ChevronRight, Calendar, HelpCircle, Settings, ClipboardCheck, FileText, Siren, Phone, Clock, AlertTriangle, CheckCircle, X } from "lucide-react";
+import { Briefcase, MapPin, User, Loader2, ChevronRight, Siren, Phone, Clock, AlertTriangle, CheckCircle, X } from "lucide-react";
+import { PartnerPortalNav } from "@/components/partner-portal-nav";
 import type { Job, Contact, EmergencyCallout, EmergencyCalloutResponse } from "@shared/schema";
 import { EMERGENCY_INCIDENT_TYPES, EMERGENCY_PRIORITIES } from "@shared/schema";
 
@@ -186,107 +187,7 @@ export default function PartnerPortalJobs() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
-              <Briefcase className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold">Partner Portal</h1>
-              {profile && (
-                <p className="text-sm text-muted-foreground">{profile.businessName}</p>
-              )}
-            </div>
-          </div>
-          <Button variant="ghost" size="sm" onClick={logout} data-testid="button-partner-logout">
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
-        </div>
-      </header>
-
-      <nav className="border-b border-border bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center gap-1 overflow-x-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-none border-b-2 border-primary text-foreground"
-              data-testid="nav-jobs"
-            >
-              <Briefcase className="w-4 h-4 mr-2" />
-              Jobs
-            </Button>
-            <Link href="/partner-portal/surveys">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-surveys"
-              >
-                <ClipboardCheck className="w-4 h-4 mr-2" />
-                Surveys
-              </Button>
-            </Link>
-            <Link href="/partner-portal/quotes">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-quotes"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Quotes
-              </Button>
-            </Link>
-            <Link href="/partner-portal/calendar">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-calendar"
-              >
-                <Calendar className="w-4 h-4 mr-2" />
-                Calendar
-              </Button>
-            </Link>
-            <Link href="/partner-portal/emergency-callouts">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-emergency"
-              >
-                <Siren className="w-4 h-4 mr-2" />
-                Emergency
-              </Button>
-            </Link>
-            <Link href="/partner-portal/help">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-help"
-              >
-                <HelpCircle className="w-4 h-4 mr-2" />
-                Help
-              </Button>
-            </Link>
-            <Link href="/partner-portal/profile">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-profile"
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <PartnerPortalNav activeTab="jobs" />
 
       <main className="container mx-auto px-4 py-6">
         {pendingEmergencies.length > 0 && (

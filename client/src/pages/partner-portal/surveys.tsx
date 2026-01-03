@@ -12,9 +12,9 @@ import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { 
-  Briefcase, LogOut, Loader2, Calendar, HelpCircle, Settings, 
-  ClipboardCheck, MapPin, User, Check, X, Clock, FileText, Plus, Siren
+  Loader2, MapPin, User, Check, X, Clock, ClipboardCheck, Calendar, FileText, Plus
 } from "lucide-react";
+import { PartnerPortalNav } from "@/components/partner-portal-nav";
 import type { JobSurvey, Job, Contact } from "@shared/schema";
 
 type SurveyWithDetails = JobSurvey & { 
@@ -115,18 +115,6 @@ export default function PartnerPortalSurveys() {
     },
   });
 
-  const { data: profile } = useQuery({
-    queryKey: ["/api/partner-portal/profile"],
-    enabled: isAuthenticated,
-    queryFn: async () => {
-      const res = await fetch("/api/partner-portal/profile", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to load profile");
-      return res.json();
-    },
-  });
-
   const acceptMutation = useMutation({
     mutationFn: async (data: { surveyId: string; notes?: string }) => {
       const res = await fetch(`/api/partner-portal/surveys/${data.surveyId}/accept`, {
@@ -142,6 +130,7 @@ export default function PartnerPortalSurveys() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/surveys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/notification-counts"] });
       toast({ title: "Survey accepted" });
       setAcceptDialogOpen(false);
       setSelectedSurvey(null);
@@ -167,6 +156,7 @@ export default function PartnerPortalSurveys() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/surveys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/notification-counts"] });
       toast({ title: "Survey declined" });
       setDeclineDialogOpen(false);
       setSelectedSurvey(null);
@@ -196,6 +186,7 @@ export default function PartnerPortalSurveys() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/surveys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/notification-counts"] });
       toast({ title: "Survey scheduled" });
       setScheduleDialogOpen(false);
       setSelectedSurvey(null);
@@ -227,6 +218,7 @@ export default function PartnerPortalSurveys() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/surveys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/notification-counts"] });
       toast({ title: "Date proposal sent to client" });
       setProposeDialogOpen(false);
       setSelectedSurvey(null);
@@ -253,6 +245,7 @@ export default function PartnerPortalSurveys() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/surveys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/notification-counts"] });
       toast({ title: "Survey appointment confirmed" });
     },
     onError: () => {
@@ -278,6 +271,7 @@ export default function PartnerPortalSurveys() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/surveys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/notification-counts"] });
       toast({ title: "Survey completed" });
       setCompleteDialogOpen(false);
       setSelectedSurvey(null);
@@ -334,107 +328,7 @@ export default function PartnerPortalSurveys() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
-              <Briefcase className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold">Partner Portal</h1>
-              {profile && (
-                <p className="text-sm text-muted-foreground">{profile.businessName}</p>
-              )}
-            </div>
-          </div>
-          <Button variant="ghost" size="sm" onClick={logout} data-testid="button-partner-logout">
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
-        </div>
-      </header>
-
-      <nav className="border-b border-border bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center gap-1 overflow-x-auto">
-            <Link href="/partner-portal">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-jobs"
-              >
-                <Briefcase className="w-4 h-4 mr-2" />
-                Jobs
-              </Button>
-            </Link>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-none border-b-2 border-primary text-foreground"
-              data-testid="nav-surveys"
-            >
-              <ClipboardCheck className="w-4 h-4 mr-2" />
-              Surveys
-            </Button>
-            <Link href="/partner-portal/quotes">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-quotes"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Quotes
-              </Button>
-            </Link>
-            <Link href="/partner-portal/calendar">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-calendar"
-              >
-                <Calendar className="w-4 h-4 mr-2" />
-                Calendar
-              </Button>
-            </Link>
-            <Link href="/partner-portal/emergency-callouts">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-emergency"
-              >
-                <Siren className="w-4 h-4 mr-2" />
-                Emergency
-              </Button>
-            </Link>
-            <Link href="/partner-portal/help">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-help"
-              >
-                <HelpCircle className="w-4 h-4 mr-2" />
-                Help
-              </Button>
-            </Link>
-            <Link href="/partner-portal/profile">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none border-b-2 border-transparent text-muted-foreground"
-                data-testid="nav-profile"
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <PartnerPortalNav activeTab="surveys" />
 
       <main className="container mx-auto px-4 py-6">
         <div className="mb-6">
