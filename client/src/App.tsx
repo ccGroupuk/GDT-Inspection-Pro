@@ -136,6 +136,14 @@ function PortalRouter() {
   );
 }
 
+function PartnerPortalRedirect() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation("/partner-portal/jobs");
+  }, [setLocation]);
+  return null;
+}
+
 function PartnerPortalRouter() {
   return (
     <Switch>
@@ -151,6 +159,7 @@ function PartnerPortalRouter() {
       <Route path="/partner-portal/help" component={PartnerPortalHelp} />
       <Route path="/partner-portal/profile" component={PartnerPortalProfile} />
       <Route path="/partner-portal/billing" component={PartnerPortalBilling} />
+      <Route path="/partner-portal" component={PartnerPortalRedirect} />
       <Route component={NotFound} />
     </Switch>
   );
