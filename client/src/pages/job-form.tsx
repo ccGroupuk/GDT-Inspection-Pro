@@ -704,82 +704,115 @@ export default function JobForm() {
                         Assign multiple trade partners with individual charge settings
                       </p>
                     </div>
-                    <Dialog>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const dialog = document.getElementById("add-partner-dialog");
-                          if (dialog) (dialog as HTMLDialogElement).showModal();
-                        }}
-                        data-testid="button-add-partner"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Partner
-                      </Button>
-                    </Dialog>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAddPartnerDialog(true)}
+                      data-testid="button-add-partner"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Partner
+                    </Button>
                   </div>
 
-                  {/* Add partner dialog as a simple inline form */}
-                  <dialog id="add-partner-dialog" className="p-6 rounded-lg border bg-background shadow-lg backdrop:bg-black/50 max-w-md w-full">
-                    <form method="dialog" onSubmit={(e) => {
-                      e.preventDefault();
-                      const formData = new FormData(e.currentTarget);
-                      const partnerId = formData.get("partnerId") as string;
-                      const chargeType = formData.get("chargeType") as string;
-                      const chargeAmount = formData.get("chargeAmount") as string;
-                      const notes = formData.get("notes") as string;
-                      if (partnerId) {
-                        addJobPartnerMutation.mutate({ partnerId, chargeType, chargeAmount, notes });
-                        (e.currentTarget.closest("dialog") as HTMLDialogElement)?.close();
-                        e.currentTarget.reset();
-                      }
-                    }}>
-                      <h3 className="text-lg font-semibold mb-4">Add Partner to Job</h3>
-                      <div className="space-y-4">
+                  {/* Add partner dialog using shadcn Dialog */}
+                  <Dialog open={showAddPartnerDialog} onOpenChange={setShowAddPartnerDialog}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add Partner to Job</DialogTitle>
+                        <DialogDescription>
+                          Select a partner and configure their charge settings for this job.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-4">
                         <div className="space-y-2">
                           <Label>Partner</Label>
-                          <select name="partnerId" required className="w-full border rounded-md p-2 bg-background">
-                            <option value="">Select a partner</option>
-                            {activePartners
-                              .filter(p => !jobPartnersData.some(jp => jp.partnerId === p.id) && p.id !== form.watch("partnerId"))
-                              .map(partner => (
-                                <option key={partner.id} value={partner.id}>
-                                  {partner.businessName} ({partner.tradeCategory})
-                                </option>
-                              ))
-                            }
-                          </select>
+                          <Select
+                            value={newPartnerFormData.partnerId}
+                            onValueChange={(value) => setNewPartnerFormData(prev => ({ ...prev, partnerId: value }))}
+                          >
+                            <SelectTrigger data-testid="select-new-partner">
+                              <SelectValue placeholder="Select a partner" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {activePartners
+                                .filter(p => !jobPartnersData.some(jp => jp.partnerId === p.id) && p.id !== form.watch("partnerId"))
+                                .map(partner => (
+                                  <SelectItem key={partner.id} value={partner.id}>
+                                    {partner.businessName} ({partner.tradeCategory})
+                                  </SelectItem>
+                                ))
+                              }
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Charge Type</Label>
-                            <select name="chargeType" className="w-full border rounded-md p-2 bg-background">
-                              <option value="fixed">Fixed Amount</option>
-                              <option value="percentage">Percentage</option>
-                            </select>
+                            <Select
+                              value={newPartnerFormData.chargeType}
+                              onValueChange={(value) => setNewPartnerFormData(prev => ({ ...prev, chargeType: value }))}
+                            >
+                              <SelectTrigger data-testid="select-charge-type">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="fixed">Fixed Amount</SelectItem>
+                                <SelectItem value="percentage">Percentage</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div className="space-y-2">
-                            <Label>Amount</Label>
-                            <Input type="number" name="chargeAmount" step="0.01" placeholder="0.00" />
+                            <Label>{newPartnerFormData.chargeType === "percentage" ? "Percentage" : "Amount (£)"}</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={newPartnerFormData.chargeAmount}
+                              onChange={(e) => setNewPartnerFormData(prev => ({ ...prev, chargeAmount: e.target.value }))}
+                              data-testid="input-charge-amount"
+                            />
                           </div>
                         </div>
                         <div className="space-y-2">
                           <Label>Notes (what this partner handles)</Label>
-                          <Textarea name="notes" placeholder="e.g. Electrical work, plumbing..." rows={2} />
+                          <Textarea
+                            placeholder="e.g. Electrical work, plumbing..."
+                            rows={2}
+                            value={newPartnerFormData.notes}
+                            onChange={(e) => setNewPartnerFormData(prev => ({ ...prev, notes: e.target.value }))}
+                            data-testid="input-partner-notes"
+                          />
                         </div>
                       </div>
                       <div className="flex justify-end gap-3 mt-6">
-                        <Button type="button" variant="outline" onClick={(e) => (e.currentTarget.closest("dialog") as HTMLDialogElement)?.close()}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowAddPartnerDialog(false)}
+                          data-testid="button-cancel-add-partner"
+                        >
                           Cancel
                         </Button>
-                        <Button type="submit" disabled={addJobPartnerMutation.isPending}>
+                        <Button
+                          type="button"
+                          disabled={!newPartnerFormData.partnerId || addJobPartnerMutation.isPending}
+                          onClick={() => {
+                            addJobPartnerMutation.mutate(newPartnerFormData, {
+                              onSuccess: () => {
+                                setShowAddPartnerDialog(false);
+                                setNewPartnerFormData({ partnerId: "", chargeType: "fixed", chargeAmount: "", notes: "" });
+                              },
+                            });
+                          }}
+                          data-testid="button-confirm-add-partner"
+                        >
                           {addJobPartnerMutation.isPending ? "Adding..." : "Add Partner"}
                         </Button>
                       </div>
-                    </form>
-                  </dialog>
+                    </DialogContent>
+                  </Dialog>
 
                   {/* List of assigned partners */}
                   {jobPartnersLoading ? (
@@ -794,18 +827,20 @@ export default function JobForm() {
                       {jobPartnersData.map((jp) => (
                         <div key={jp.id} className="flex items-start justify-between gap-4 p-3 border rounded-md" data-testid={`job-partner-${jp.id}`}>
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium">{jp.partner?.businessName || "Unknown Partner"}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {jp.partner?.tradeCategory && <Badge variant="secondary" className="mr-2">{jp.partner.tradeCategory}</Badge>}
-                              {jp.chargeType === "percentage" ? (
-                                <span>{jp.chargeAmount}% of job value</span>
-                              ) : jp.chargeAmount ? (
-                                <span>£{parseFloat(jp.chargeAmount).toFixed(2)} fixed</span>
-                              ) : (
-                                <span className="text-muted-foreground">No charge set</span>
-                              )}
+                            <div className="font-medium" data-testid={`text-partner-name-${jp.id}`}>{jp.partner?.businessName || "Unknown Partner"}</div>
+                            <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+                              {jp.partner?.tradeCategory && <Badge variant="secondary">{jp.partner.tradeCategory}</Badge>}
+                              <span data-testid={`text-partner-charge-${jp.id}`}>
+                                {jp.chargeType === "percentage" ? (
+                                  <>{jp.chargeAmount}% of job value</>
+                                ) : jp.chargeAmount ? (
+                                  <>£{parseFloat(jp.chargeAmount).toFixed(2)} fixed</>
+                                ) : (
+                                  <span className="text-muted-foreground">No charge set</span>
+                                )}
+                              </span>
                             </div>
-                            {jp.notes && <div className="text-sm text-muted-foreground mt-1">{jp.notes}</div>}
+                            {jp.notes && <div className="text-sm text-muted-foreground mt-1" data-testid={`text-partner-notes-${jp.id}`}>{jp.notes}</div>}
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge variant={jp.status === "completed" ? "default" : jp.status === "in_progress" ? "secondary" : "outline"}>
