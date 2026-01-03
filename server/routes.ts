@@ -3098,7 +3098,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         return {
           ...survey,
           job,
-          partner: partner ? { businessName: partner.businessName, tradeCategory: partner.tradeCategory } : null,
+          partner: partner ? { companyName: partner.businessName, tradeCategory: partner.tradeCategory } : null,
         };
       }));
       

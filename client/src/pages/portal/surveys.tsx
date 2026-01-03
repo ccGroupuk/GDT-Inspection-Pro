@@ -247,39 +247,45 @@ export default function PortalSurveys() {
                           )}
                         </div>
 
-                        {survey.proposedDate && (
-                          <div className="bg-primary/10 border-2 border-primary p-4 rounded-md mb-4">
-                            <div className="flex items-start gap-4">
-                              <div className="flex-shrink-0 w-12 h-12 bg-primary rounded-md flex items-center justify-center">
-                                <Calendar className="w-6 h-6 text-primary-foreground" />
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-xs font-medium text-primary uppercase tracking-wide mb-1">
-                                  Proposed Survey Date
-                                </p>
-                                <p className="text-xl font-bold text-foreground">
-                                  {new Date(survey.proposedDate).toLocaleDateString("en-GB", {
-                                    weekday: "long",
-                                    day: "numeric",
-                                    month: "long",
-                                    year: "numeric",
-                                  })}
-                                </p>
-                                {survey.proposedTime && (
-                                  <p className="text-lg font-semibold text-primary flex items-center gap-1 mt-1">
-                                    <Clock className="w-4 h-4" />
-                                    {survey.proposedTime}
+                        <div className="bg-primary/10 border-2 border-primary p-4 rounded-md mb-4">
+                          <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 w-12 h-12 bg-primary rounded-md flex items-center justify-center">
+                              <Calendar className="w-6 h-6 text-primary-foreground" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-primary uppercase tracking-wide mb-1">
+                                Proposed Survey Date
+                              </p>
+                              {survey.proposedDate ? (
+                                <>
+                                  <p className="text-xl font-bold text-foreground" data-testid={`text-proposed-date-${survey.id}`}>
+                                    {new Date(survey.proposedDate).toLocaleDateString("en-GB", {
+                                      weekday: "long",
+                                      day: "numeric",
+                                      month: "long",
+                                      year: "numeric",
+                                    })}
                                   </p>
-                                )}
-                                {survey.partnerNotes && (
-                                  <p className="text-sm text-muted-foreground mt-2 italic">
-                                    "{survey.partnerNotes}"
-                                  </p>
-                                )}
-                              </div>
+                                  {survey.proposedTime && (
+                                    <p className="text-lg font-semibold text-primary flex items-center gap-1 mt-1" data-testid={`text-proposed-time-${survey.id}`}>
+                                      <Clock className="w-4 h-4" />
+                                      {survey.proposedTime}
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="text-lg text-muted-foreground" data-testid={`text-no-date-${survey.id}`}>
+                                  Date not yet confirmed - please contact us for details
+                                </p>
+                              )}
+                              {survey.partnerNotes && (
+                                <p className="text-sm text-muted-foreground mt-2 italic">
+                                  "{survey.partnerNotes}"
+                                </p>
+                              )}
                             </div>
                           </div>
-                        )}
+                        </div>
 
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
