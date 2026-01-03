@@ -63,6 +63,8 @@ export const jobs = pgTable("jobs", {
   // Job Details
   serviceType: text("service_type").notNull(),
   description: text("description"),
+  clientTimeframe: text("client_timeframe"), // asap, getting_quotes, flexible, no_rush
+  clientBudget: text("client_budget"), // Client's budget expectation if known
   jobAddress: text("job_address").notNull(),
   jobPostcode: text("job_postcode").notNull(),
   leadSource: text("lead_source"),

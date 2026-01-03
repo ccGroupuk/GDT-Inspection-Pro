@@ -220,6 +220,8 @@ export default function JobForm() {
       contactId: "",
       serviceType: "",
       description: "",
+      clientTimeframe: "",
+      clientBudget: "",
       jobAddress: "",
       jobPostcode: "",
       leadSource: "",
@@ -244,6 +246,8 @@ export default function JobForm() {
       contactId: data.job.contactId,
       serviceType: data.job.serviceType,
       description: data.job.description || "",
+      clientTimeframe: data.job.clientTimeframe || "",
+      clientBudget: data.job.clientBudget || "",
       jobAddress: data.job.jobAddress,
       jobPostcode: data.job.jobPostcode,
       leadSource: data.job.leadSource || "",
@@ -621,6 +625,36 @@ export default function JobForm() {
                 className="min-h-[100px]"
                 data-testid="textarea-description"
               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="clientTimeframe">Client Timeframe</Label>
+                <Select
+                  value={form.watch("clientTimeframe") || ""}
+                  onValueChange={(value) => form.setValue("clientTimeframe", value || null)}
+                >
+                  <SelectTrigger data-testid="select-client-timeframe">
+                    <SelectValue placeholder="When does the client need this?" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asap">ASAP - Urgent</SelectItem>
+                    <SelectItem value="getting_quotes">Just Getting Quotes</SelectItem>
+                    <SelectItem value="flexible">Flexible - Within a few weeks</SelectItem>
+                    <SelectItem value="no_rush">No Rush - Whenever available</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="clientBudget">Client Budget</Label>
+                <Input
+                  {...form.register("clientBudget")}
+                  placeholder="e.g. Around £2,000 or £1,500-£2,500"
+                  data-testid="input-client-budget"
+                />
+                <p className="text-xs text-muted-foreground">Optional - what the client has in mind</p>
+              </div>
             </div>
           </CardContent>
         </Card>

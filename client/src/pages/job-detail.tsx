@@ -46,6 +46,7 @@ import {
   Copy,
   ExternalLink,
   Boxes,
+  PoundSterling,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse, ConnectionLink, ChangeOrder, ChangeOrderItem, CatalogItem } from "@shared/schema";
@@ -1017,6 +1018,34 @@ export default function JobDetail() {
                 <div className="pt-4 border-t border-border">
                   <p className="text-sm font-medium mb-2">Description</p>
                   <p className="text-sm text-muted-foreground">{job.description}</p>
+                </div>
+              )}
+
+              {(job.clientTimeframe || job.clientBudget) && (
+                <div className="pt-4 border-t border-border grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {job.clientTimeframe && (
+                    <div className="flex items-start gap-3">
+                      <Clock className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Client Timeframe</p>
+                        <p className="text-sm text-muted-foreground">
+                          {job.clientTimeframe === "asap" && "ASAP - Urgent"}
+                          {job.clientTimeframe === "getting_quotes" && "Just Getting Quotes"}
+                          {job.clientTimeframe === "flexible" && "Flexible - Within a few weeks"}
+                          {job.clientTimeframe === "no_rush" && "No Rush - Whenever available"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {job.clientBudget && (
+                    <div className="flex items-start gap-3">
+                      <PoundSterling className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Client Budget</p>
+                        <p className="text-sm text-muted-foreground">{job.clientBudget}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
