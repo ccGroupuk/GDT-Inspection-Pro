@@ -4476,10 +4476,60 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         return res.status(400).json({ message: "Quote must have at least one line item" });
       }
       
+      // Mark partner quote as submitted
       const updated = await storage.updatePartnerQuote(req.params.id, {
         status: "submitted",
         submittedAt: new Date(),
       });
+      
+      // Sync partner quote to main quote system so client portal can see it
+      // First, clear any existing quote items for this job
+      await storage.deleteQuoteItemsByJob(quote.jobId);
+      
+      // Copy partner quote items to main quote items table
+      let grandTotal = 0;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        await storage.createQuoteItem({
+          jobId: quote.jobId,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+          sortOrder: item.sortOrder || i,
+        });
+        grandTotal += parseFloat(item.lineTotal);
+      }
+      
+      // Update job with quoted value and set status to quote_sent
+      await storage.updateJob(quote.jobId, {
+        quotedValue: grandTotal.toFixed(2),
+        status: "quote_sent",
+      });
+      
+      // Send email notification to client if they have portal access
+      try {
+        const job = await storage.getJob(quote.jobId);
+        if (job && job.contactId) {
+          const contact = await storage.getContact(job.contactId);
+          const portalAccess = await storage.getClientPortalAccess(job.contactId);
+          if (contact && contact.email && portalAccess && portalAccess.isActive && portalAccess.accessToken) {
+            const { sendQuoteNotification } = await import('./email');
+            const portalUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://client-compass--ccCarpentry.replit.app'}/client-portal`;
+            await sendQuoteNotification(
+              contact.email, 
+              contact.name, 
+              job.jobNumber || 'Job', 
+              `£${grandTotal.toFixed(2)}`,
+              portalUrl,
+              portalAccess.accessToken
+            );
+          }
+        }
+      } catch (emailError) {
+        console.error("Failed to send quote notification email:", emailError);
+        // Continue - email is non-blocking
+      }
       
       res.json({ ...updated, items });
     } catch (error) {
