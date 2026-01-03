@@ -1,907 +1,1363 @@
-// client/src/pages/job-form.tsx
-import React, { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { toast } from 'sonner';
-import { z } from 'zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  Building2,
-  CalendarDays,
-  Check,
-  CheckCircle,
-  Clock,
-  DollarSign,
-  FileText,
-  Hammer,
-  Loader2,
-  MapPin,
-  MessageSquare,
-  Plus,
-  SquareDashedBottomCode,
-  Tag,
-  Tags,
-  Truck,
-  User,
-  X,
-} from 'lucide-react';
+import { useState, useEffect, useMemo } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocation, useParams } from "wouter";
+import { z } from "zod";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { FormSkeleton } from "@/components/loading-skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ArrowLeft, Save, CheckCircle, Handshake, RefreshCw, Plus, Trash2, Package, FileStack, Search, X, ChevronRight, Eye, EyeOff, Percent } from "lucide-react";
+import { Link } from "wouter";
+import type { Job, Contact, TradePartner, InsertJob, QuoteItem, CatalogItem, ProductCategory, QuoteTemplate, QuoteTemplateItem } from "@shared/schema";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  insertJobSchema, 
+  SERVICE_TYPES, 
+  LEAD_SOURCES, 
+  DELIVERY_TYPES,
+  TRADE_CATEGORIES,
+  PIPELINE_STAGES,
+} from "@shared/schema";
 
-// Shadcn UI components
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
-import { Textarea } from '../components/ui/textarea';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '../components/ui/form';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Separator } from '../components/ui/separator';
-import { Badge } from '../components/ui/badge';
-import { ScrollArea } from '../components/ui/scroll-area';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
-import { Calendar } from '../components/ui/calendar';
-import { ToggleGroup, ToggleGroupItem } from '../components/ui/toggle-group';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../components/ui/alert-dialog';
-import { Switch } from '../components/ui/switch';
+interface QuoteLineItem {
+  id?: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  lineTotal: string;
+}
 
-// Local components and utils
-import { JobDetailData, JobStatus, JobType, PortalAccessWithToken, QuoteItem, QuoteItemType, ScheduleProposal, insertJobSchema } from '../../../shared/schema';
-import { cn, formatCurrency, getDaysBetweenDates } from '../lib/utils';
-import { Contact } from '../../../shared/schema';
-import { CatalogItem, ProductCategory, QuoteTemplate, TradePartner } from '../../../shared/schema';
-import { EmptyState } from '../components/empty-state';
-import { PortalLayout } from '../components/portal-layout'; // Assuming this is needed, as it's present in similar pages
-
-// Extend the base job schema for form-specific validations
-const JobFormSchema = insertJobSchema.extend({
-  // Define custom fields for the form that might not be directly in the DB schema
-  // E.g., if you have transient fields for UI logic.
-  // For now, we'll just refine existing fields.
-})
-.superRefine((data, ctx) => {
-  // Conditional validation for partnerId
-  if (data.jobType === JobType.CccPlusPartner && !data.partnerId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Partner is required for 'CCC + Partner' jobs.",
-      path: ["partnerId"],
-    });
-  }
-  // Other existing validations could go here
+const formSchema = insertJobSchema.extend({
+  contactId: z.string().min(1, "Please select a contact"),
+  serviceType: z.string().min(1, "Please select a service type"),
+  jobAddress: z.string().min(1, "Job address is required"),
+  jobPostcode: z.string().min(1, "Job postcode is required"),
 });
 
-type JobFormData = z.infer<typeof JobFormSchema>;
+type FormData = z.infer<typeof formSchema>;
 
-export function JobForm() {
-  const { jobId } = useParams<{ jobId?: string }>();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+interface JobFormData {
+  job?: Job;
+  contacts: Contact[];
+  partners: TradePartner[];
+  quoteItems?: QuoteItem[];
+}
 
-  const isEditing = !!jobId;
+export default function JobForm() {
+  const { id } = useParams<{ id: string }>();
+  const isEdit = Boolean(id) && id !== "new";
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
 
-  // --- API Calls ---
-
-  // Fetch job details for editing
-  const { data: jobData, isLoading: isLoadingJob } = useQuery<JobDetailData>({
-    queryKey: ['job', jobId],
-    queryFn: () => fetch(`/api/jobs/${jobId}`).then(res => res.json()),
-    enabled: isEditing,
+  // Quote items state
+  const [quoteItems, setQuoteItems] = useState<QuoteLineItem[]>([]);
+  const [taxEnabled, setTaxEnabled] = useState(false);
+  const [taxRate, setTaxRate] = useState("20");
+  const [discountType, setDiscountType] = useState<string | null>(null);
+  const [discountValue, setDiscountValue] = useState("");
+  
+  // Client visibility settings
+  const [useDefaultMarkup, setUseDefaultMarkup] = useState(true);
+  const [customMarkupPercent, setCustomMarkupPercent] = useState("");
+  const [hideClientCostBreakdown, setHideClientCostBreakdown] = useState(true);
+  const [showClientPreview, setShowClientPreview] = useState(false);
+  
+  // Default markup from system settings
+  const { data: defaultMarkupSetting } = useQuery<{ settingValue: string } | null>({
+    queryKey: ["/api/company-settings/default_material_markup_percent"],
+  });
+  const defaultMarkupPercent = defaultMarkupSetting?.settingValue || "15";
+  
+  // Catalog & Template picker states
+  const [showCatalogPicker, setShowCatalogPicker] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogTypeFilter, setCatalogTypeFilter] = useState<string>("all");
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string>("all");
+  const [templateSearch, setTemplateSearch] = useState("");
+  
+  // Fetch catalog items
+  const { data: catalogItems = [] } = useQuery<CatalogItem[]>({
+    queryKey: ["/api/catalog-items"],
+  });
+  
+  // Fetch product categories
+  const { data: productCategories = [] } = useQuery<ProductCategory[]>({
+    queryKey: ["/api/product-categories"],
+  });
+  
+  // Fetch quote templates with their items
+  const { data: templates = [] } = useQuery<QuoteTemplate[]>({
+    queryKey: ["/api/quote-templates"],
   });
 
-  // Fetch all contacts
-  const { data: contacts, isLoading: isLoadingContacts } = useQuery<Contact[]>({
-    queryKey: ['contacts'],
-    queryFn: () => fetch('/api/contacts').then(res => res.json()),
+  const { data: editData, isLoading: editLoading } = useQuery<JobFormData>({
+    queryKey: ["/api/jobs", id],
+    enabled: isEdit,
   });
 
-  // Fetch all product categories
-  const { data: productCategories, isLoading: isLoadingProductCategories } = useQuery<ProductCategory[]>({
-    queryKey: ['productCategories'],
-    queryFn: () => fetch('/api/product-categories').then(res => res.json()),
-  });
-
-  // Fetch all catalog items
-  const { data: catalogItems, isLoading: isLoadingCatalogItems } = useQuery<CatalogItem[]>({
-    queryKey: ['catalogItems'],
-    queryFn: () => fetch('/api/catalog-items').then(res => res.json()),
-  });
-
-  // Fetch all quote templates
-  const { data: quoteTemplates, isLoading: isLoadingQuoteTemplates } = useQuery<QuoteTemplate[]>({
-    queryKey: ['quoteTemplates'],
-    queryFn: () => fetch('/api/quote-templates').then(res => res.json()),
-  });
-
-  // Fetch default material markup
-  const { data: defaultMaterialMarkup, isLoading: isLoadingDefaultMaterialMarkup } = useQuery<number>({
-    queryKey: ['companySettings', 'defaultMaterialMarkup'],
-    queryFn: () => fetch('/api/company-settings/default_material_markup_percent').then(res => res.json()),
-  });
-
-  // NEW: Fetch all trade partners
-  const { data: partners, isLoading: isLoadingPartners } = useQuery<TradePartner[]>({
-    queryKey: ['partners'],
-    queryFn: () => fetch('/api/partners').then(res => res.json()),
-  });
-
-
-  const form = useForm<JobFormData>({
-    resolver: zodResolver(JobFormSchema),
-    defaultValues: {
-      jobType: JobType.CccOnly, // Default to CCC Only
-      status: JobStatus.Lead,
-      startDate: new Date(),
-      endDate: new Date(),
-      quoteItems: [],
-      notes: '',
-      contactId: undefined,
-      partnerId: undefined, // Initialize partnerId as undefined
-      isEmergency: false,
-      priority: 'medium',
-      expectedRevenue: 0,
-      jobName: '',
-      address: '',
-      city: '',
-      postcode: '',
-      description: '',
+  // Fetch quote items for edit mode
+  const { data: existingQuoteItems } = useQuery<QuoteItem[]>({
+    queryKey: ["/api/jobs", id, "quote-items"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/quote-items`);
+      if (!response.ok) throw new Error("Failed to fetch quote items");
+      return response.json();
     },
+    enabled: isEdit && !!id,
   });
 
-  const { reset, handleSubmit, watch, control, formState: { isSubmitting, errors }, setValue } = form;
-
-  const currentJobType = watch('jobType'); // Watch jobType for conditional rendering
-
-  // Effect to reset form with job data for editing
+  // Load existing quote items and job settings when editing
   useEffect(() => {
-    if (isEditing && jobData) {
-      reset({
-        ...jobData,
-        startDate: jobData.startDate ? new Date(jobData.startDate) : new Date(),
-        endDate: jobData.endDate ? new Date(jobData.endDate) : new Date(),
-        expectedRevenue: jobData.expectedRevenue ? parseFloat(jobData.expectedRevenue.toString()) : 0,
-        // Ensure partnerId is correctly set for editing
-        partnerId: jobData.partnerId || undefined,
-      });
-    }
-  }, [isEditing, jobData, reset]);
-
-  // --- Quote Item Logic ---
-  const quoteItems = watch('quoteItems');
-
-  const addQuoteItem = (type: QuoteItemType, item?: CatalogItem) => {
-    const newItem: QuoteItem = {
-      id: crypto.randomUUID(), // Client-side generated ID for new items
-      type: type,
-      description: item?.name || '',
-      quantity: 1,
-      unitPrice: item?.price || 0,
-      markup: defaultMaterialMarkup || 0,
-      catalogItemId: item?.id || null,
-    };
-    setValue('quoteItems', [...quoteItems, newItem]);
-  };
-
-  const removeQuoteItem = (id: string) => {
-    setValue('quoteItems', quoteItems.filter(item => item.id !== id));
-  };
-
-  const updateQuoteItem = (id: string, field: keyof QuoteItem, value: any) => {
-    setValue('quoteItems', quoteItems.map(item =>
-      item.id === id ? { ...item, [field]: value } : item
-    ));
-  };
-
-  const calculateItemTotal = (item: QuoteItem) => {
-    if (item.type === QuoteItemType.Material) {
-      const priceWithMarkup = item.unitPrice * (1 + item.markup / 100);
-      return priceWithMarkup * item.quantity;
-    }
-    return item.unitPrice * item.quantity;
-  };
-
-  const totalQuoteValue = quoteItems.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-  useEffect(() => {
-    setValue('expectedRevenue', totalQuoteValue);
-  }, [totalQuoteValue, setValue]);
-
-  // Apply quote template
-  const applyQuoteTemplate = (templateId: string) => {
-    const template = quoteTemplates?.find(t => t.id === templateId);
-    if (template) {
-      const templateQuoteItems: QuoteItem[] = template.items.map(item => ({
-        id: crypto.randomUUID(),
+    if (existingQuoteItems && existingQuoteItems.length > 0) {
+      setQuoteItems(existingQuoteItems.map(item => ({
+        id: item.id,
         description: item.description,
-        type: item.type,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        markup: item.markup,
-        catalogItemId: item.catalogItemId,
-      }));
-      setValue('quoteItems', [...quoteItems, ...templateQuoteItems]);
-      toast.success(`Template "${template.name}" applied!`);
+        lineTotal: item.lineTotal,
+      })));
     }
+  }, [existingQuoteItems]);
+
+  useEffect(() => {
+    if (editData?.job) {
+      setTaxEnabled(editData.job.taxEnabled || false);
+      setTaxRate(editData.job.taxRate || "20");
+      setDiscountType(editData.job.discountType || null);
+      setDiscountValue(editData.job.discountValue || "");
+      // Client visibility settings
+      setUseDefaultMarkup(editData.job.useDefaultMarkup ?? true);
+      setCustomMarkupPercent(editData.job.customMarkupPercent || "");
+      setHideClientCostBreakdown(editData.job.hideClientCostBreakdown ?? true);
+    }
+  }, [editData?.job]);
+
+  const { data: formData, isLoading: formDataLoading } = useQuery<{ contacts: Contact[]; partners: TradePartner[] }>({
+    queryKey: ["/api/jobs"],
+    enabled: !isEdit,
+  });
+
+  const data = isEdit ? editData : { job: undefined, contacts: formData?.contacts || [], partners: formData?.partners || [] };
+  const isLoading = isEdit ? editLoading : formDataLoading;
+
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      contactId: "",
+      serviceType: "",
+      description: "",
+      jobAddress: "",
+      jobPostcode: "",
+      leadSource: "",
+      deliveryType: "in_house",
+      tradeCategory: "",
+      partnerId: null,
+      status: "new_enquiry",
+      quoteType: "fixed",
+      quotedValue: null,
+      depositRequired: false,
+      depositType: "fixed",
+      depositAmount: null,
+      depositReceived: false,
+      partnerChargeType: "fixed",
+      partnerCharge: null,
+      cccMargin: null,
+      partnerInvoiceReceived: false,
+      partnerPaid: false,
+      partnerStatus: null,
+    },
+    values: data?.job ? {
+      contactId: data.job.contactId,
+      serviceType: data.job.serviceType,
+      description: data.job.description || "",
+      jobAddress: data.job.jobAddress,
+      jobPostcode: data.job.jobPostcode,
+      leadSource: data.job.leadSource || "",
+      deliveryType: data.job.deliveryType,
+      tradeCategory: data.job.tradeCategory || "",
+      partnerId: data.job.partnerId,
+      status: data.job.status,
+      quoteType: data.job.quoteType || "fixed",
+      quotedValue: data.job.quotedValue,
+      depositRequired: data.job.depositRequired || false,
+      depositType: data.job.depositType || "fixed",
+      depositAmount: data.job.depositAmount,
+      depositReceived: data.job.depositReceived || false,
+      partnerChargeType: data.job.partnerChargeType || "fixed",
+      partnerCharge: data.job.partnerCharge,
+      cccMargin: data.job.cccMargin,
+      partnerInvoiceReceived: data.job.partnerInvoiceReceived || false,
+      partnerPaid: data.job.partnerPaid || false,
+      partnerStatus: data.job.partnerStatus,
+    } : undefined,
+  });
+
+  const deliveryType = form.watch("deliveryType");
+  const isPartnerJob = deliveryType === "partner" || deliveryType === "hybrid";
+
+  // Quote item helpers
+  const addQuoteItem = () => {
+    setQuoteItems([...quoteItems, { description: "", quantity: "1", unitPrice: "", lineTotal: "0" }]);
   };
 
-  // --- Mutations ---
-  const createJobMutation = useMutation({
-    mutationFn: (newJob: JobFormData) =>
-      fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newJob),
-      }).then(res => {
-        if (!res.ok) throw new Error('Failed to create job');
-        return res.json();
-      }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['jobs'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      toast.success('Job created successfully!');
-      navigate(`/jobs/${data.id}`);
+  const removeQuoteItem = (index: number) => {
+    setQuoteItems(quoteItems.filter((_, i) => i !== index));
+  };
+
+  const updateQuoteItem = (index: number, field: keyof QuoteLineItem, value: string) => {
+    const updated = [...quoteItems];
+    updated[index] = { ...updated[index], [field]: value };
+    
+    // Recalculate line total when quantity or unit price changes
+    if (field === "quantity" || field === "unitPrice") {
+      const qty = parseFloat(updated[index].quantity) || 0;
+      const price = parseFloat(updated[index].unitPrice) || 0;
+      updated[index].lineTotal = (qty * price).toFixed(2);
+    }
+    
+    setQuoteItems(updated);
+  };
+  
+  // Add catalog item to quote
+  const addCatalogItemToQuote = (item: CatalogItem, quantityOverride?: number) => {
+    const qty = quantityOverride || parseFloat(item.defaultQuantity || "1");
+    const price = parseFloat(item.unitPrice);
+    const lineTotal = (qty * price).toFixed(2);
+    
+    setQuoteItems([...quoteItems, {
+      description: item.name,
+      quantity: qty.toString(),
+      unitPrice: item.unitPrice,
+      lineTotal,
+    }]);
+    
+    toast({
+      title: "Item added",
+      description: `${item.name} added to quote`,
+    });
+  };
+  
+  // Apply template - adds all template items to the quote
+  const applyTemplate = async (template: QuoteTemplate) => {
+    try {
+      // Fetch template items
+      const response = await fetch(`/api/quote-templates/${template.id}/items`);
+      if (!response.ok) throw new Error("Failed to fetch template items");
+      const templateItems: QuoteTemplateItem[] = await response.json();
+      
+      // Add all template items to quote
+      const newItems = templateItems.map(item => {
+        const qty = parseFloat(item.quantity);
+        const price = parseFloat(item.unitPrice);
+        return {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: (qty * price).toFixed(2),
+        };
+      });
+      
+      setQuoteItems([...quoteItems, ...newItems]);
+      setShowTemplatePicker(false);
+      
+      toast({
+        title: "Template applied",
+        description: `${newItems.length} items from "${template.name}" added to quote`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to apply template",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Filtered catalog items
+  const filteredCatalogItems = useMemo(() => {
+    return catalogItems.filter(item => {
+      if (!item.isActive) return false;
+      if (catalogTypeFilter !== "all" && item.type !== catalogTypeFilter) return false;
+      if (catalogCategoryFilter !== "all" && item.categoryId !== catalogCategoryFilter) return false;
+      if (catalogSearch) {
+        const search = catalogSearch.toLowerCase();
+        return item.name.toLowerCase().includes(search) || 
+               (item.description?.toLowerCase().includes(search) || false);
+      }
+      return true;
+    });
+  }, [catalogItems, catalogTypeFilter, catalogCategoryFilter, catalogSearch]);
+  
+  // Filtered templates
+  const filteredTemplates = useMemo(() => {
+    return templates.filter(t => {
+      if (!t.isActive) return false;
+      if (templateSearch) {
+        const search = templateSearch.toLowerCase();
+        return t.name.toLowerCase().includes(search) || 
+               (t.description?.toLowerCase().includes(search) || false);
+      }
+      return true;
+    });
+  }, [templates, templateSearch]);
+  
+  // Group catalog items by category
+  const catalogByCategory = useMemo(() => {
+    const groups: Record<string, CatalogItem[]> = {};
+    filteredCatalogItems.forEach(item => {
+      const cat = productCategories.find(c => c.id === item.categoryId);
+      const catName = cat?.name || "Uncategorized";
+      if (!groups[catName]) groups[catName] = [];
+      groups[catName].push(item);
+    });
+    return groups;
+  }, [filteredCatalogItems, productCategories]);
+
+  // Calculate quote totals
+  const quoteTotals = useMemo(() => {
+    const subtotal = quoteItems.reduce((sum, item) => sum + (parseFloat(item.lineTotal) || 0), 0);
+    
+    let discountAmount = 0;
+    if (discountType && discountValue) {
+      if (discountType === "percentage") {
+        discountAmount = subtotal * (parseFloat(discountValue) / 100);
+      } else if (discountType === "fixed") {
+        discountAmount = parseFloat(discountValue) || 0;
+      }
+    }
+    
+    const afterDiscount = subtotal - discountAmount;
+    
+    let taxAmount = 0;
+    if (taxEnabled && taxRate) {
+      taxAmount = afterDiscount * (parseFloat(taxRate) / 100);
+    }
+    
+    const grandTotal = afterDiscount + taxAmount;
+    
+    return { subtotal, discountAmount, taxAmount, grandTotal };
+  }, [quoteItems, discountType, discountValue, taxEnabled, taxRate]);
+
+  const mutation = useMutation({
+    mutationFn: async (values: FormData) => {
+      // Include quote settings and client visibility in the job data
+      const jobData = {
+        ...values,
+        taxEnabled,
+        taxRate,
+        discountType: discountType || null,
+        discountValue: discountValue || null,
+        quotedValue: quoteTotals.grandTotal.toFixed(2),
+        // Client visibility settings
+        useDefaultMarkup,
+        customMarkupPercent: customMarkupPercent || null,
+        hideClientCostBreakdown,
+      };
+
+      let jobResponse;
+      if (isEdit) {
+        jobResponse = await apiRequest("PATCH", `/api/jobs/${id}`, jobData);
+      } else {
+        jobResponse = await apiRequest("POST", "/api/jobs", jobData);
+      }
+
+      // Save quote items
+      const jobId = isEdit ? id : (await jobResponse.json()).id;
+      if (quoteItems.length > 0) {
+        const itemsToSave = quoteItems.map(item => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+        }));
+        await apiRequest("PUT", `/api/jobs/${jobId}/quote-items`, { items: itemsToSave });
+      }
+
+      return jobResponse;
     },
-    onError: (error) => {
-      toast.error(`Error creating job: ${error.message}`);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      toast({
+        title: isEdit ? "Job updated" : "Job created",
+        description: isEdit ? "The job has been updated successfully." : "The new job has been created.",
+      });
+      navigate("/jobs");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Something went wrong",
+        variant: "destructive",
+      });
     },
   });
 
-  const updateJobMutation = useMutation({
-    mutationFn: (updatedJob: JobFormData) =>
-      fetch(`/api/jobs/${jobId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedJob),
-      }).then(res => {
-        if (!res.ok) throw new Error('Failed to update job');
-        return res.json();
-      }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['job', jobId] });
-      queryClient.invalidateQueries({ queryKey: ['jobs'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      toast.success('Job updated successfully!');
-      navigate(`/jobs/${data.id}`);
-    },
-    onError: (error) => {
-      toast.error(`Error updating job: ${error.message}`);
-    },
-  });
-
-  const onSubmit = (data: JobFormData) => {
-    const jobPayload = {
-      ...data,
-      // Format dates to ISO strings for the backend
-      startDate: data.startDate?.toISOString(),
-      endDate: data.endDate?.toISOString(),
-      expectedRevenue: parseFloat(data.expectedRevenue.toFixed(2)), // Ensure currency format
-      // Ensure partnerId is included if it exists, otherwise it will be undefined
-      partnerId: data.partnerId || null,
-    };
-    console.log("Submitting job payload:", jobPayload);
-    if (isEditing) {
-      updateJobMutation.mutate(jobPayload);
-    } else {
-      createJobMutation.mutate(jobPayload);
-    }
+  const onSubmit = (values: FormData) => {
+    mutation.mutate(values);
   };
 
-  if (isLoadingJob || isLoadingContacts || isLoadingProductCategories || isLoadingCatalogItems || isLoadingQuoteTemplates || isLoadingDefaultMaterialMarkup || isLoadingPartners) {
+  if (isLoading) {
     return (
-      <PortalLayout>
-        <div className="flex items-center justify-center min-h-[calc(100vh-100px)]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <Link href="/jobs">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          </Link>
+          <h1 className="text-2xl font-semibold">{isEdit ? "Edit Job" : "New Job"}</h1>
         </div>
-      </PortalLayout>
+        <FormSkeleton />
+      </div>
     );
   }
 
-  // Filter catalog items by selected product category for easier selection
-  const [selectedProductCategory, setSelectedProductCategory] = useState<string | null>(null);
-  const filteredCatalogItems = selectedProductCategory
-    ? catalogItems?.filter(item => item.productCategoryId === selectedProductCategory)
-    : catalogItems;
+  const contacts = data?.contacts || [];
+  const partners = data?.partners || [];
+  const activePartners = partners.filter(p => p.isActive);
 
   return (
-    <PortalLayout>
-      <div className="flex items-center justify-between mb-6">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back
-        </Button>
-        <h1 className="text-2xl font-bold">
-          {isEditing ? `Edit Job: ${jobData?.jobName}` : 'Create New Job'}
-        </h1>
-        <div></div>
+    <div className="p-6">
+      <div className="flex items-center gap-3 mb-6">
+        <Link href="/jobs">
+          <Button variant="ghost" size="icon" data-testid="button-back">
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+        </Link>
+        <h1 className="text-2xl font-semibold">{isEdit ? "Edit Job" : "New Job"}</h1>
       </div>
 
-      <Form {...form}>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" /> Job Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={control}
-                name="jobName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Job Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Kitchen Renovation - John Doe" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-4xl">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Client & Job Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="contactId">Client *</Label>
+                <Select
+                  value={form.watch("contactId")}
+                  onValueChange={(value) => form.setValue("contactId", value)}
+                >
+                  <SelectTrigger data-testid="select-contact">
+                    <SelectValue placeholder="Select a client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contacts.map(contact => (
+                      <SelectItem key={contact.id} value={contact.id}>
+                        {contact.name} - {contact.phone}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.formState.errors.contactId && (
+                  <p className="text-xs text-destructive">{form.formState.errors.contactId.message}</p>
                 )}
-              />
+              </div>
 
-              <FormField
-                control={control}
-                name="contactId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Client Contact</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ''}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a client" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {contacts?.map(contact => (
-                          <SelectItem key={contact.id} value={contact.id}>
-                            {contact.firstName} {contact.lastName} ({contact.email})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      The primary client associated with this job.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
+              <div className="space-y-2">
+                <Label htmlFor="serviceType">Service Type *</Label>
+                <Select
+                  value={form.watch("serviceType")}
+                  onValueChange={(value) => form.setValue("serviceType", value)}
+                >
+                  <SelectTrigger data-testid="select-service-type">
+                    <SelectValue placeholder="Select service type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SERVICE_TYPES.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.formState.errors.serviceType && (
+                  <p className="text-xs text-destructive">{form.formState.errors.serviceType.message}</p>
                 )}
-              />
+              </div>
 
-              <FormField
-                control={control}
-                name="jobType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Job Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select job type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.values(JobType).map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Specify if this is a CCC-only, Partner-only, or a hybrid job.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* NEW: Partner selection field, conditionally rendered */}
-              {currentJobType === JobType.CccPlusPartner && (
-                <FormField
-                  control={control}
-                  name="partnerId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Select Partner</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ''}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a trade partner" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {partners?.map(partner => (
-                            <SelectItem key={partner.id} value={partner.id}>
-                              {partner.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        Select the primary trade partner for this hybrid job.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+              <div className="space-y-2">
+                <Label htmlFor="jobAddress">Job Address *</Label>
+                <Input
+                  {...form.register("jobAddress")}
+                  placeholder="Enter job address"
+                  data-testid="input-job-address"
                 />
-              )}
-              {/* END NEW */}
+                {form.formState.errors.jobAddress && (
+                  <p className="text-xs text-destructive">{form.formState.errors.jobAddress.message}</p>
+                )}
+              </div>
 
-              <FormField
-                control={control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Job Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select job status" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.values(JobStatus).map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
+              <div className="space-y-2">
+                <Label htmlFor="jobPostcode">Job Postcode *</Label>
+                <Input
+                  {...form.register("jobPostcode")}
+                  placeholder="e.g. CF10 1AA"
+                  data-testid="input-job-postcode"
+                />
+                {form.formState.errors.jobPostcode && (
+                  <p className="text-xs text-destructive">{form.formState.errors.jobPostcode.message}</p>
                 )}
-              />
+              </div>
 
-              <FormField
-                control={control}
-                name="priority"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Job Priority</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select priority" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="urgent">Urgent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="space-y-2">
+                <Label htmlFor="leadSource">Lead Source</Label>
+                <Select
+                  value={form.watch("leadSource") || ""}
+                  onValueChange={(value) => form.setValue("leadSource", value)}
+                >
+                  <SelectTrigger data-testid="select-lead-source">
+                    <SelectValue placeholder="Select lead source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LEAD_SOURCES.map(source => (
+                      <SelectItem key={source} value={source}>{source}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <FormField
-                control={control}
-                name="isEmergency"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm col-span-1 md:col-span-2">
-                    <div className="space-y-0.5">
-                      <FormLabel>Emergency Job</FormLabel>
-                      <FormDescription>
-                        Mark this job as an emergency call-out.
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="h-5 w-5" /> Schedule
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={control}
-                name="startDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Start Date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              field.value.toLocaleDateString()
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarDays className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={control}
-                name="endDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>End Date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              field.value.toLocaleDateString()
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarDays className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" /> Location
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={control}
-                name="address"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Address</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., 123 Main St" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={control}
-                name="city"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>City</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Cardiff" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={control}
-                name="postcode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Postcode</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., CF10 1AB" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" /> Description & Notes
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <FormField
-                control={control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Job Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Detailed description of the job requirements..."
-                        className="min-h-[100px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={control}
-                name="notes"
-                render={({ field }) => (
-                  <FormItem className="mt-4">
-                    <FormLabel>Internal Notes</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Any internal notes for the team..."
-                        className="min-h-[80px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      These notes are visible only to internal staff.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" /> Quote & Revenue
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Quote Items</h3>
-                <div className="flex space-x-2">
-                  <Select onValueChange={applyQuoteTemplate}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Apply Template" />
+              {isEdit && (
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={form.watch("status")}
+                    onValueChange={(value) => form.setValue("status", value)}
+                  >
+                    <SelectTrigger data-testid="select-status">
+                      <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
-                      {quoteTemplates?.map(template => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
+                      {PIPELINE_STAGES.map(stage => (
+                        <SelectItem key={stage.value} value={stage.value}>{stage.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Job Description</Label>
+              <Textarea
+                {...form.register("description")}
+                placeholder="Describe the job requirements..."
+                className="min-h-[100px]"
+                data-testid="textarea-description"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Delivery Type</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {DELIVERY_TYPES.map(type => {
+                const Icon = type.value === "in_house" ? CheckCircle : type.value === "partner" ? Handshake : RefreshCw;
+                const isSelected = form.watch("deliveryType") === type.value;
+                return (
+                  <button
+                    key={type.value}
+                    type="button"
+                    onClick={() => form.setValue("deliveryType", type.value)}
+                    className={`flex items-center gap-3 p-4 rounded-lg border transition-colors ${
+                      isSelected 
+                        ? "border-primary bg-primary/5" 
+                        : "border-border hover-elevate"
+                    }`}
+                    data-testid={`button-delivery-${type.value}`}
+                  >
+                    <Icon className={`w-5 h-5 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
+                    <span className={`text-sm font-medium ${isSelected ? "text-primary" : "text-foreground"}`}>
+                      {type.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {isPartnerJob && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border">
+                <div className="space-y-2">
+                  <Label htmlFor="tradeCategory">Trade Category</Label>
+                  <Select
+                    value={form.watch("tradeCategory") || ""}
+                    onValueChange={(value) => form.setValue("tradeCategory", value)}
+                  >
+                    <SelectTrigger data-testid="select-trade-category">
+                      <SelectValue placeholder="Select trade category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRADE_CATEGORIES.map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="partnerId">Assign Partner</Label>
+                  <Select
+                    value={form.watch("partnerId") || ""}
+                    onValueChange={(value) => form.setValue("partnerId", value || null)}
+                  >
+                    <SelectTrigger data-testid="select-partner">
+                      <SelectValue placeholder="Select a partner" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activePartners.map(partner => (
+                        <SelectItem key={partner.id} value={partner.id}>
+                          {partner.businessName} ({partner.tradeCategory})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Plus className="h-4 w-4 mr-2" /> Add Item
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Add Quote Item</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Choose to add a custom item or select from your catalog.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <div className="grid gap-4">
-                        <Button onClick={() => { addQuoteItem(QuoteItemType.Labor); form.trigger('quoteItems'); }} className="justify-start">
-                          <Hammer className="mr-2 h-4 w-4" /> Add Custom Labor
-                        </Button>
-                        <Button onClick={() => { addQuoteItem(QuoteItemType.Material); form.trigger('quoteItems'); }} className="justify-start">
-                          <Truck className="mr-2 h-4 w-4" /> Add Custom Material
-                        </Button>
-                        <Separator />
-                        <h4 className="font-medium">From Catalog</h4>
-                        <div className="flex space-x-2">
-                          <Select
-                            onValueChange={(value) => setSelectedProductCategory(value === 'all' ? null : value)}
-                            value={selectedProductCategory || 'all'}
-                          >
-                            <SelectTrigger className="w-[180px]">
-                              <SelectValue placeholder="Filter by Category" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Categories</SelectItem>
-                              {productCategories?.map(category => (
-                                <SelectItem key={category.id} value={category.id}>
-                                  {category.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <ScrollArea className="h-[200px] w-full rounded-md border p-4">
-                          {filteredCatalogItems && filteredCatalogItems.length > 0 ? (
-                            filteredCatalogItems.map(item => (
-                              <div key={item.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
-                                <span>{item.name} ({item.sku})</span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => { addQuoteItem(QuoteItemType.Material, item); form.trigger('quoteItems'); }}
-                                >
-                                  Add
-                                </Button>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No catalog items found.</p>
-                          )}
-                        </ScrollArea>
-                      </div>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Close</AlertDialogCancel>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
                 </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
 
-              {quoteItems.length === 0 ? (
-                <EmptyState
-                  icon={SquareDashedBottomCode}
-                  title="No Quote Items"
-                  description="Add items to build your quote."
-                />
-              ) : (
-                <div className="space-y-4">
-                  {quoteItems.map((item, index) => (
-                    <Card key={item.id} className="p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
-                        <div className="col-span-1 md:col-span-2">
-                          <Label htmlFor={`description-${item.id}`}>Description</Label>
-                          <Input
-                            id={`description-${item.id}`}
-                            value={item.description}
-                            onChange={(e) => updateQuoteItem(item.id, 'description', e.target.value)}
-                            placeholder="Item description"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor={`quantity-${item.id}`}>Qty</Label>
-                          <Input
-                            id={`quantity-${item.id}`}
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateQuoteItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                            min="0"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor={`unitPrice-${item.id}`}>Unit Price</Label>
-                          <Input
-                            id={`unitPrice-${item.id}`}
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={(e) => updateQuoteItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                            min="0"
-                          />
-                        </div>
-                        {item.type === QuoteItemType.Material && (
-                          <div>
-                            <Label htmlFor={`markup-${item.id}`}>Markup (%)</Label>
-                            <Input
-                              id={`markup-${item.id}`}
-                              type="number"
-                              value={item.markup}
-                              onChange={(e) => updateQuoteItem(item.id, 'markup', parseFloat(e.target.value) || 0)}
-                              min="0"
-                              max="1000"
-                            />
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 md:justify-end col-span-1 md:col-span-1">
-                          <Badge variant="secondary" className="mr-2">
-                            {formatCurrency(calculateItemTotal(item))}
-                          </Badge>
-                          <Button variant="destructive" size="icon" onClick={() => removeQuoteItem(item.id)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                  <div className="flex justify-end items-center gap-4 pt-4 border-t">
-                    <span className="text-xl font-bold">Total Quote:</span>
-                    <Badge className="text-xl px-4 py-2 bg-primary text-primary-foreground">
-                      {formatCurrency(totalQuoteValue)}
-                    </Badge>
-                  </div>
-                </div>
-              )}
-
-              <FormField
-                control={control}
-                name="expectedRevenue"
-                render={({ field }) => (
-                  <FormItem className="mt-6">
-                    <FormLabel>Expected Revenue</FormLabel>
-                    <FormControl>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle className="text-base">Quote Builder</CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTemplatePicker(true)}
+                  data-testid="button-apply-template"
+                >
+                  <FileStack className="w-4 h-4 mr-2" />
+                  Apply Template
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCatalogPicker(true)}
+                  data-testid="button-add-from-catalog"
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  From Catalog
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addQuoteItem}
+                  data-testid="button-add-quote-item"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Manual Item
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {quoteItems.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p className="mb-2">No items added yet.</p>
+                <p className="text-sm">Use the buttons above to add items from your catalog, apply a template, or add manually.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {quoteItems.map((item, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-3 items-start" data-testid={`quote-item-${index}`}>
+                    <div className="col-span-12 md:col-span-5 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground">Description</Label>}
+                      <Input
+                        value={item.description}
+                        onChange={(e) => updateQuoteItem(index, "description", e.target.value)}
+                        placeholder="Item description"
+                        data-testid={`input-item-description-${index}`}
+                      />
+                    </div>
+                    <div className="col-span-4 md:col-span-2 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground">Qty</Label>}
                       <Input
                         type="number"
-                        placeholder="0.00"
-                        {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
-                        value={field.value !== undefined ? field.value : ''} // Handle undefined
+                        step="0.01"
+                        value={item.quantity}
+                        onChange={(e) => updateQuoteItem(index, "quantity", e.target.value)}
+                        placeholder="1"
+                        data-testid={`input-item-quantity-${index}`}
                       />
-                    </FormControl>
-                    <FormDescription>
-                      The total estimated revenue for this job. This is automatically calculated from quote items but can be manually adjusted.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
-
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={isSubmitting || createJobMutation.isPending || updateJobMutation.isPending}
-            data-testid="submit-job-button"
-          >
-            {(createJobMutation.isPending || updateJobMutation.isPending) && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    </div>
+                    <div className="col-span-4 md:col-span-2 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground">Unit Price</Label>}
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={item.unitPrice}
+                        onChange={(e) => updateQuoteItem(index, "unitPrice", e.target.value)}
+                        placeholder="0.00"
+                        data-testid={`input-item-price-${index}`}
+                      />
+                    </div>
+                    <div className="col-span-3 md:col-span-2 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground">Total</Label>}
+                      <div className="h-9 flex items-center font-mono text-sm">
+                        £{parseFloat(item.lineTotal || "0").toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="col-span-1 space-y-1">
+                      {index === 0 && <Label className="text-xs text-muted-foreground invisible">Del</Label>}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeQuoteItem(index)}
+                        data-testid={`button-remove-item-${index}`}
+                      >
+                        <Trash2 className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-            {isEditing ? 'Update Job' : 'Create Job'}
-          </Button>
-          {Object.keys(errors).length > 0 && (
-            <div className="text-destructive text-sm mt-2">
-              Please correct the errors above.
-              {Object.entries(errors).map(([key, error]) => (
-                <p key={key}>- {key}: {error?.message}</p>
-              ))}
+
+            {quoteItems.length > 0 && (
+              <>
+                <div className="border-t border-border pt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={taxEnabled}
+                          onCheckedChange={setTaxEnabled}
+                          data-testid="switch-tax-enabled"
+                        />
+                        <Label>Include Tax (VAT)</Label>
+                        {taxEnabled && (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={taxRate}
+                              onChange={(e) => setTaxRate(e.target.value)}
+                              className="w-20"
+                              data-testid="input-tax-rate"
+                            />
+                            <span className="text-sm text-muted-foreground">%</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Discount</Label>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={discountType || "none"}
+                            onValueChange={(value) => setDiscountType(value === "none" ? null : value)}
+                          >
+                            <SelectTrigger className="w-36" data-testid="select-discount-type">
+                              <SelectValue placeholder="No discount" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No discount</SelectItem>
+                              <SelectItem value="percentage">Percentage</SelectItem>
+                              <SelectItem value="fixed">Fixed amount</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {discountType && (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={discountValue}
+                                onChange={(e) => setDiscountValue(e.target.value)}
+                                className="w-24"
+                                placeholder="0"
+                                data-testid="input-discount-value"
+                              />
+                              <span className="text-sm text-muted-foreground">
+                                {discountType === "percentage" ? "%" : "£"}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 bg-muted/50 rounded-lg p-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Subtotal</span>
+                        <span className="font-mono">£{quoteTotals.subtotal.toFixed(2)}</span>
+                      </div>
+                      {discountType && quoteTotals.discountAmount > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Discount {discountType === "percentage" ? `(${discountValue}%)` : ""}
+                          </span>
+                          <span className="font-mono text-green-600 dark:text-green-400">
+                            -£{quoteTotals.discountAmount.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                      {taxEnabled && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">VAT ({taxRate}%)</span>
+                          <span className="font-mono">£{quoteTotals.taxAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between pt-2 border-t border-border">
+                        <span className="font-semibold">Grand Total</span>
+                        <span className="font-mono font-semibold text-lg">
+                          £{quoteTotals.grandTotal.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Client Visibility Settings */}
+                <div className="border-t border-border pt-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <EyeOff className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">Client Visibility Settings</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={hideClientCostBreakdown}
+                          onCheckedChange={setHideClientCostBreakdown}
+                          data-testid="switch-hide-cost-breakdown"
+                        />
+                        <div>
+                          <Label>Hide Cost Breakdown</Label>
+                          <p className="text-xs text-muted-foreground">Client sees final prices only</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={useDefaultMarkup}
+                          onCheckedChange={(checked) => {
+                            setUseDefaultMarkup(checked);
+                            if (checked) setCustomMarkupPercent("");
+                          }}
+                          data-testid="switch-use-default-markup"
+                        />
+                        <div>
+                          <Label>Apply Material Markup ({defaultMarkupPercent}%)</Label>
+                          <p className="text-xs text-muted-foreground">Adds hidden markup to material items</p>
+                        </div>
+                      </div>
+
+                      {!useDefaultMarkup && (
+                        <div className="flex items-center gap-2 pl-8">
+                          <Label className="text-sm text-muted-foreground">Custom markup:</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={customMarkupPercent}
+                            onChange={(e) => setCustomMarkupPercent(e.target.value)}
+                            className="w-20"
+                            placeholder="0"
+                            data-testid="input-custom-markup"
+                          />
+                          <span className="text-sm text-muted-foreground">%</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col justify-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowClientPreview(true)}
+                        data-testid="button-preview-client-quote"
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        Preview Client Quote
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
+                        See exactly what the client will see
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Deposit & Payment</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="quoteType">Quote Type</Label>
+                <Select
+                  value={form.watch("quoteType") || "fixed"}
+                  onValueChange={(value) => form.setValue("quoteType", value)}
+                >
+                  <SelectTrigger data-testid="select-quote-type">
+                    <SelectValue placeholder="Select quote type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">Fixed Quote</SelectItem>
+                    <SelectItem value="estimate">Estimate</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={form.watch("depositRequired") || false}
+                  onCheckedChange={(checked) => form.setValue("depositRequired", checked)}
+                  data-testid="switch-deposit-required"
+                />
+                <Label>Deposit Required</Label>
+              </div>
+
+              {form.watch("depositRequired") && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Deposit Type</Label>
+                    <Select
+                      value={form.watch("depositType") || "fixed"}
+                      onValueChange={(value) => form.setValue("depositType", value)}
+                    >
+                      <SelectTrigger data-testid="select-deposit-type">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fixed">Fixed Amount (£)</SelectItem>
+                        <SelectItem value="percentage">Percentage (%)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="depositAmount">
+                      {form.watch("depositType") === "percentage" ? "Deposit (%)" : "Deposit Amount (£)"}
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      {...form.register("depositAmount")}
+                      placeholder={form.watch("depositType") === "percentage" ? "e.g. 25" : "0.00"}
+                      data-testid="input-deposit-amount"
+                    />
+                  </div>
+                </>
+              )}
             </div>
-          )}
-        </form>
-      </Form>
-    </PortalLayout>
+
+            {isPartnerJob && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-border">
+                <div className="space-y-2">
+                  <Label>Partner Charge Type</Label>
+                  <Select
+                    value={form.watch("partnerChargeType") || "fixed"}
+                    onValueChange={(value) => form.setValue("partnerChargeType", value)}
+                  >
+                    <SelectTrigger data-testid="select-partner-charge-type">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">Fixed Amount (£)</SelectItem>
+                      <SelectItem value="percentage">Percentage (%)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="partnerCharge">
+                    {form.watch("partnerChargeType") === "percentage" ? "Partner Charge (%)" : "Partner Charge (£)"}
+                  </Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    {...form.register("partnerCharge")}
+                    placeholder={form.watch("partnerChargeType") === "percentage" ? "e.g. 15" : "0.00"}
+                    data-testid="input-partner-charge"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="cccMargin">CCC Margin (£)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    {...form.register("cccMargin")}
+                    placeholder="0.00"
+                    data-testid="input-ccc-margin"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="flex items-center gap-3">
+          <Button type="submit" className="gap-2" disabled={mutation.isPending} data-testid="button-submit">
+            <Save className="w-4 h-4" />
+            {mutation.isPending ? "Saving..." : isEdit ? "Update Job" : "Create Job"}
+          </Button>
+          <Link href="/jobs">
+            <Button variant="outline" type="button">Cancel</Button>
+          </Link>
+        </div>
+      </form>
+      
+      {/* Catalog Picker Dialog */}
+      <Dialog open={showCatalogPicker} onOpenChange={setShowCatalogPicker}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Add from Catalog
+            </DialogTitle>
+            <DialogDescription>
+              Select items from your catalog to add to the quote
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search catalog..."
+                value={catalogSearch}
+                onChange={(e) => setCatalogSearch(e.target.value)}
+                className="pl-9"
+                data-testid="input-catalog-search"
+              />
+              {catalogSearch && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2"
+                  onClick={() => setCatalogSearch("")}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+            <Select value={catalogTypeFilter} onValueChange={setCatalogTypeFilter}>
+              <SelectTrigger className="w-36" data-testid="select-catalog-type-filter">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="product">Products</SelectItem>
+                <SelectItem value="labour">Labour</SelectItem>
+                <SelectItem value="material">Materials</SelectItem>
+                <SelectItem value="consumable">Consumables</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={catalogCategoryFilter} onValueChange={setCatalogCategoryFilter}>
+              <SelectTrigger className="w-40" data-testid="select-catalog-category-filter">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {productCategories.map(cat => (
+                  <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <ScrollArea className="flex-1 -mx-6 px-6">
+            {filteredCatalogItems.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p>No items found</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(catalogByCategory).map(([categoryName, items]) => (
+                  <div key={categoryName}>
+                    <h4 className="font-medium text-sm text-muted-foreground mb-2">{categoryName}</h4>
+                    <div className="space-y-2">
+                      {items.map(item => (
+                        <div 
+                          key={item.id} 
+                          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border hover-elevate"
+                          data-testid={`catalog-item-${item.id}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium truncate">{item.name}</span>
+                              <Badge variant="outline" className="capitalize text-xs">{item.type}</Badge>
+                            </div>
+                            {item.description && (
+                              <p className="text-sm text-muted-foreground truncate">{item.description}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-sm whitespace-nowrap">
+                              £{parseFloat(item.unitPrice).toFixed(2)}/{item.unitOfMeasure || "each"}
+                            </span>
+                            <Button 
+                              type="button"
+                              size="sm" 
+                              onClick={() => addCatalogItemToQuote(item)}
+                              data-testid={`button-add-catalog-item-${item.id}`}
+                            >
+                              <Plus className="w-4 h-4 mr-1" />
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+          
+          <div className="flex items-center justify-between pt-4 border-t border-border">
+            <p className="text-sm text-muted-foreground">{filteredCatalogItems.length} items</p>
+            <Button type="button" variant="outline" onClick={() => setShowCatalogPicker(false)}>
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Template Picker Dialog */}
+      <Dialog open={showTemplatePicker} onOpenChange={setShowTemplatePicker}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileStack className="w-5 h-5" />
+              Apply Quote Template
+            </DialogTitle>
+            <DialogDescription>
+              Select a template to add all its items to your quote
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search templates..."
+              value={templateSearch}
+              onChange={(e) => setTemplateSearch(e.target.value)}
+              className="pl-9"
+              data-testid="input-template-search"
+            />
+            {templateSearch && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2"
+                onClick={() => setTemplateSearch("")}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+          
+          <ScrollArea className="flex-1 -mx-6 px-6">
+            {filteredTemplates.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileStack className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p>No templates found</p>
+                <Link href="/templates">
+                  <Button type="button" variant="ghost" className="mt-2">
+                    Create your first template
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredTemplates.map(template => {
+                  const category = productCategories.find(c => c.id === template.categoryId);
+                  return (
+                    <div 
+                      key={template.id} 
+                      className="p-4 rounded-lg border border-border hover-elevate cursor-pointer"
+                      onClick={() => applyTemplate(template)}
+                      data-testid={`template-option-${template.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium">{template.name}</span>
+                            {category && (
+                              <Badge variant="outline" className="text-xs">{category.name}</Badge>
+                            )}
+                          </div>
+                          {template.description && (
+                            <p className="text-sm text-muted-foreground mt-1">{template.description}</p>
+                          )}
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+          
+          <div className="flex items-center justify-between pt-4 border-t border-border">
+            <p className="text-sm text-muted-foreground">{filteredTemplates.length} templates</p>
+            <Button type="button" variant="outline" onClick={() => setShowTemplatePicker(false)}>
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Client Quote Preview Dialog */}
+      <Dialog open={showClientPreview} onOpenChange={setShowClientPreview}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              Client Quote Preview
+            </DialogTitle>
+            <DialogDescription>
+              This is exactly what the client will see. Markup is applied to material items and cost breakdowns are hidden.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {quoteItems.length === 0 ? (
+              <p className="text-center text-muted-foreground py-4">No quote items to preview</p>
+            ) : (
+              <>
+                <div className="border rounded-lg divide-y divide-border">
+                  {quoteItems.map((item, index) => {
+                    const markupPercent = useDefaultMarkup 
+                      ? parseFloat(defaultMarkupPercent) 
+                      : parseFloat(customMarkupPercent) || 0;
+                    const basePrice = parseFloat(item.unitPrice) || 0;
+                    const qty = parseFloat(item.quantity) || 0;
+                    const clientUnitPrice = basePrice * (1 + markupPercent / 100);
+                    const clientLineTotal = qty * clientUnitPrice;
+                    
+                    return (
+                      <div key={index} className="p-3 flex justify-between items-center gap-4">
+                        <div className="flex-1">
+                          <span className="font-medium">{item.description || "Item"}</span>
+                          {!hideClientCostBreakdown && (
+                            <span className="text-sm text-muted-foreground ml-2">x{qty}</span>
+                          )}
+                        </div>
+                        <div className="text-right font-mono">
+                          {hideClientCostBreakdown ? (
+                            <span>£{clientLineTotal.toFixed(2)}</span>
+                          ) : (
+                            <div className="text-sm">
+                              <div>£{clientUnitPrice.toFixed(2)} x {qty}</div>
+                              <div className="font-medium">£{clientLineTotal.toFixed(2)}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  {(() => {
+                    const markupPercent = useDefaultMarkup 
+                      ? parseFloat(defaultMarkupPercent) 
+                      : parseFloat(customMarkupPercent) || 0;
+                    const clientSubtotal = quoteItems.reduce((sum, item) => {
+                      const basePrice = parseFloat(item.unitPrice) || 0;
+                      const qty = parseFloat(item.quantity) || 0;
+                      const clientUnitPrice = basePrice * (1 + markupPercent / 100);
+                      return sum + (qty * clientUnitPrice);
+                    }, 0);
+                    
+                    let clientDiscount = 0;
+                    if (discountType && discountValue) {
+                      if (discountType === "percentage") {
+                        clientDiscount = clientSubtotal * (parseFloat(discountValue) / 100);
+                      } else {
+                        clientDiscount = parseFloat(discountValue) || 0;
+                      }
+                    }
+                    
+                    const afterDiscount = clientSubtotal - clientDiscount;
+                    const clientTax = taxEnabled ? afterDiscount * (parseFloat(taxRate) / 100) : 0;
+                    const clientTotal = afterDiscount + clientTax;
+                    
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span className="font-mono">£{clientSubtotal.toFixed(2)}</span>
+                        </div>
+                        {clientDiscount > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Discount</span>
+                            <span className="font-mono text-green-600">-£{clientDiscount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {taxEnabled && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">VAT ({taxRate}%)</span>
+                            <span className="font-mono">£{clientTax.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-2 border-t border-border">
+                          <span className="font-semibold">Total</span>
+                          <span className="font-mono font-semibold text-lg">£{clientTotal.toFixed(2)}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+                
+                {(() => {
+                  const effectiveMarkup = useDefaultMarkup 
+                    ? parseFloat(defaultMarkupPercent) 
+                    : parseFloat(customMarkupPercent) || 0;
+                  return effectiveMarkup > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 p-2 rounded">
+                      <Percent className="w-3 h-3" />
+                      <span>
+                        {effectiveMarkup}% markup applied to all items (admin view only - hidden from client)
+                      </span>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+          
+          <div className="flex justify-end pt-4 border-t border-border">
+            <Button type="button" variant="outline" onClick={() => setShowClientPreview(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
