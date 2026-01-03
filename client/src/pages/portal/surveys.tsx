@@ -248,24 +248,36 @@ export default function PortalSurveys() {
                         </div>
 
                         {survey.proposedDate && (
-                          <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4 rounded-md mb-4">
-                            <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
-                              Proposed Survey Date:
-                            </p>
-                            <p className="text-lg font-semibold text-blue-900 dark:text-blue-100">
-                              {new Date(survey.proposedDate).toLocaleDateString("en-GB", {
-                                weekday: "long",
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              })}
-                              {survey.proposedTime && ` at ${survey.proposedTime}`}
-                            </p>
-                            {survey.partnerNotes && (
-                              <p className="text-sm text-blue-700 dark:text-blue-300 mt-2">
-                                {survey.partnerNotes}
-                              </p>
-                            )}
+                          <div className="bg-primary/10 border-2 border-primary p-4 rounded-md mb-4">
+                            <div className="flex items-start gap-4">
+                              <div className="flex-shrink-0 w-12 h-12 bg-primary rounded-md flex items-center justify-center">
+                                <Calendar className="w-6 h-6 text-primary-foreground" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-xs font-medium text-primary uppercase tracking-wide mb-1">
+                                  Proposed Survey Date
+                                </p>
+                                <p className="text-xl font-bold text-foreground">
+                                  {new Date(survey.proposedDate).toLocaleDateString("en-GB", {
+                                    weekday: "long",
+                                    day: "numeric",
+                                    month: "long",
+                                    year: "numeric",
+                                  })}
+                                </p>
+                                {survey.proposedTime && (
+                                  <p className="text-lg font-semibold text-primary flex items-center gap-1 mt-1">
+                                    <Clock className="w-4 h-4" />
+                                    {survey.proposedTime}
+                                  </p>
+                                )}
+                                {survey.partnerNotes && (
+                                  <p className="text-sm text-muted-foreground mt-2 italic">
+                                    "{survey.partnerNotes}"
+                                  </p>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )}
 
