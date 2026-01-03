@@ -3200,6 +3200,59 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       }
       
       const updated = await storage.updateJobSurvey(req.params.id, updateData);
+      
+      // Send email notification to partner (non-blocking)
+      (async () => {
+        try {
+          const { sendGenericEmail, isEmailConfigured } = await import("./email");
+          if (!isEmailConfigured() || !survey.partnerId) return;
+          
+          const partner = await storage.getTradePartner(survey.partnerId);
+          if (!partner?.email) return;
+          
+          // Check if partner has portal access
+          const portalAccess = await storage.getPartnerPortalAccess(survey.partnerId);
+          if (!portalAccess?.isActive) return;
+          
+          const contact = await storage.getContact(job.contactId);
+          const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+            ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+            : process.env.REPLIT_DEPLOYMENT_URL || "http://localhost:5000";
+          
+          let subject = "";
+          let message = "";
+          
+          if (response === "accept") {
+            subject = `Survey Date Accepted - ${job.jobNumber}`;
+            message = `Good news! The client${contact ? ` (${contact.name})` : ''} has accepted your proposed survey date for job ${job.jobNumber}.\n\n` +
+              `Date: ${survey.proposedDate ? new Date(survey.proposedDate).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'TBC'}\n` +
+              `${survey.proposedTime ? `Time: ${survey.proposedTime}\n` : ''}\n` +
+              `The survey has been added to your calendar. Please confirm the appointment in your partner portal.\n\n` +
+              `View in portal: ${baseUrl}/partner-portal/surveys`;
+          } else if (response === "counter") {
+            const altDate = counterDate ? new Date(counterDate).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Not specified';
+            subject = `Alternative Date Proposed - ${job.jobNumber}`;
+            message = `The client${contact ? ` (${contact.name})` : ''} has proposed an alternative survey date for job ${job.jobNumber}.\n\n` +
+              `Their preferred date: ${altDate}\n` +
+              `${counterTime ? `Their preferred time: ${counterTime}\n` : ''}\n` +
+              `${notes ? `Client notes: ${notes}\n\n` : '\n'}` +
+              `Please review and respond in your partner portal.\n\n` +
+              `View in portal: ${baseUrl}/partner-portal/surveys`;
+          } else if (response === "decline") {
+            subject = `Survey Date Declined - ${job.jobNumber}`;
+            message = `The client${contact ? ` (${contact.name})` : ''} has declined the proposed survey date for job ${job.jobNumber}.\n\n` +
+              `${notes ? `Reason: ${notes}\n\n` : ''}` +
+              `Please propose a new date in your partner portal.\n\n` +
+              `View in portal: ${baseUrl}/partner-portal/surveys`;
+          }
+          
+          await sendGenericEmail(partner.email, subject, message);
+          console.log(`[Survey] Partner notification sent to ${partner.email} for survey ${survey.id} (${response})`);
+        } catch (emailError) {
+          console.error("[Survey] Failed to send partner notification:", emailError);
+        }
+      })();
+      
       res.json(updated);
     } catch (error) {
       console.error("Client respond to survey error:", error);
