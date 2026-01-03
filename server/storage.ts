@@ -393,6 +393,7 @@ export interface IStorage {
   getPartnerQuote(id: string): Promise<PartnerQuote | undefined>;
   getPartnerQuotesByJob(jobId: string): Promise<PartnerQuote[]>;
   getPartnerQuotesByPartner(partnerId: string): Promise<PartnerQuote[]>;
+  getPendingPartnerQuotes(): Promise<PartnerQuote[]>;
   createPartnerQuote(quote: InsertPartnerQuote): Promise<PartnerQuote>;
   updatePartnerQuote(id: string, quote: Partial<InsertPartnerQuote>): Promise<PartnerQuote | undefined>;
   deletePartnerQuote(id: string): Promise<boolean>;
@@ -2091,6 +2092,10 @@ export class DatabaseStorage implements IStorage {
 
   async getPartnerQuotesByPartner(partnerId: string): Promise<PartnerQuote[]> {
     return db.select().from(partnerQuotes).where(eq(partnerQuotes.partnerId, partnerId)).orderBy(desc(partnerQuotes.createdAt));
+  }
+
+  async getPendingPartnerQuotes(): Promise<PartnerQuote[]> {
+    return db.select().from(partnerQuotes).where(eq(partnerQuotes.status, "submitted")).orderBy(desc(partnerQuotes.createdAt));
   }
 
   async createPartnerQuote(quote: InsertPartnerQuote): Promise<PartnerQuote> {

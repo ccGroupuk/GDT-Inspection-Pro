@@ -21,12 +21,13 @@ import {
   UserCheck,
   Check,
   ClipboardCheck,
+  FileText,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Job, Contact, TradePartner, Task, JobScheduleProposal, JobSurvey } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, JobScheduleProposal, JobSurvey, PartnerQuote } from "@shared/schema";
 import { ProjectCountdownWidget } from "@/components/ProjectCountdownWidget";
 import DailyQuote from "@/components/DailyQuote"; // DailyQuote is kept as it was not requested for removal.
 
@@ -37,6 +38,7 @@ interface DashboardData {
   tasks: Task[];
   scheduleResponses: JobScheduleProposal[];
   pendingSurveyAcceptances: JobSurvey[];
+  pendingPartnerQuotes: PartnerQuote[];
 }
 
 export default function Dashboard() {
@@ -70,6 +72,7 @@ export default function Dashboard() {
   const tasks = data?.tasks || [];
   const scheduleResponses = data?.scheduleResponses || [];
   const pendingSurveyAcceptances = data?.pendingSurveyAcceptances || [];
+  const pendingPartnerQuotes = data?.pendingPartnerQuotes || [];
 
   const activeJobs = jobs.filter(j => !["closed", "lost", "paid"].includes(j.status));
   const newEnquiries = jobs.filter(j => j.status === "new_enquiry");
@@ -299,6 +302,55 @@ export default function Dashboard() {
                       </div>
                       <Badge variant={isAccepted ? "default" : "secondary"} className={isAccepted ? "bg-green-600" : ""}>
                         {isAccepted ? "Accepted" : "Counter Proposal"}
+                      </Badge>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {pendingPartnerQuotes.length > 0 && (
+        <Card className="border-purple-500/30 bg-purple-500/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              <CardTitle className="text-base font-semibold">Partner Quotations</CardTitle>
+              <Badge variant="secondary" className="ml-auto">{pendingPartnerQuotes.length}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingPartnerQuotes.map(quote => {
+                const job = jobs.find(j => j.id === quote.jobId);
+                const partner = partners.find(p => p.id === quote.partnerId);
+                
+                return (
+                  <Link key={quote.id} href={`/jobs/${quote.jobId}`}>
+                    <div 
+                      className="flex items-center justify-between gap-4 p-3 rounded-lg bg-background hover-elevate active-elevate-2 cursor-pointer"
+                      data-testid={`notification-partner-quote-${quote.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                          <FileText className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">
+                            {job?.jobNumber || "Unknown"} - {job?.serviceType || "Job"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {partner?.businessName || "Partner"} submitted quote
+                            {quote.total && (
+                              <> for £{Number(quote.total).toLocaleString()}</>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20">
+                        Awaiting Review
                       </Badge>
                     </div>
                   </Link>
