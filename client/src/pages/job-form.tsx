@@ -492,8 +492,9 @@ export default function JobForm() {
   const activePartners = partners.filter(p => p.isActive);
 
   return (
-    <div className="p-4 sm:p-6 pb-24">
-      <div className="flex items-center gap-2 sm:gap-3 mb-6">
+    <div className="min-h-full">
+      <div className="p-4 sm:p-6 pb-24">
+        <div className="flex items-center gap-2 sm:gap-3 mb-6">
         <Link href="/jobs">
           <Button variant="ghost" size="icon" data-testid="button-back">
             <ArrowLeft className="w-4 h-4" />
@@ -1593,6 +1594,7 @@ export default function JobForm() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
