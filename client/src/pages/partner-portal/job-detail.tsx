@@ -453,29 +453,45 @@ export default function PartnerPortalJobDetail() {
                       <div className="p-4 rounded-lg bg-muted/50">
                         <div className="flex items-center justify-between gap-3 mb-3">
                           <span className="text-sm font-medium">
-                            {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" : "Admin Proposed Date"}
+                            {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" : 
+                             scheduleProposal.proposedByRole === "client" ? "Client Requested Date" : 
+                             "Admin Proposed Date"}
                           </span>
                           <Badge variant={
                             scheduleProposal.status === "scheduled" ? "default" :
                             scheduleProposal.status === "pending_partner" ? "secondary" :
                             scheduleProposal.status === "pending_admin" ? "outline" :
+                            scheduleProposal.status === "pending_client" ? "outline" :
                             scheduleProposal.status === "partner_declined" || scheduleProposal.status === "admin_declined" ? "destructive" :
                             "outline"
                           }>
                             {scheduleProposal.status === "pending_partner" && "Your Response Needed"}
-                            {scheduleProposal.status === "pending_admin" && "Awaiting Admin Response"}
+                            {scheduleProposal.status === "pending_admin" && (scheduleProposal.proposedByRole === "partner" ? "Awaiting Admin Response" : "Being Reviewed by Admin")}
+                            {scheduleProposal.status === "pending_client" && "Awaiting Client Response"}
                             {scheduleProposal.status === "partner_accepted" && "You Accepted"}
                             {scheduleProposal.status === "partner_countered" && "Alternative Sent"}
                             {scheduleProposal.status === "partner_declined" && "You Declined"}
                             {scheduleProposal.status === "admin_declined" && "Declined by Admin"}
+                            {scheduleProposal.status === "client_accepted" && "Client Accepted"}
+                            {scheduleProposal.status === "client_countered" && "Client Countered"}
+                            {scheduleProposal.status === "client_declined" && "Client Declined"}
                             {scheduleProposal.status === "scheduled" && "Confirmed"}
                           </Badge>
                         </div>
                         
+                        {/* Info message when a proposal is pending but not for the partner to respond */}
+                        {(scheduleProposal.status === "pending_admin" && scheduleProposal.proposedByRole !== "partner") && (
+                          <p className="text-sm text-muted-foreground mb-3">
+                            A start date request is being reviewed. You'll be notified once it's confirmed or if your input is needed.
+                          </p>
+                        )}
+                        
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
                             <p className="text-muted-foreground">
-                              {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" : "Proposed Date"}
+                              {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" : 
+                               scheduleProposal.proposedByRole === "client" ? "Client's Requested Date" : 
+                               "Proposed Date"}
                             </p>
                             <p className="font-medium">{new Date(scheduleProposal.proposedStartDate).toLocaleDateString()}</p>
                             {scheduleProposal.proposedEndDate && (
