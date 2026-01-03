@@ -207,7 +207,7 @@ function ProtectedAdminLayout() {
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
         <AppSidebar />
-        <div className="flex flex-col flex-1 overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0">
           <header className="flex items-center justify-between gap-4 px-4 h-14 border-b border-border shrink-0">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <GlobalSearch />
