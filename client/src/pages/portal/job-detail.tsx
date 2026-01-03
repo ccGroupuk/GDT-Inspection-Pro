@@ -122,6 +122,8 @@ interface PortalJobDetail {
   changeOrders: PortalChangeOrder[];
   totalWithChangeOrders: string | null;
   hideClientCostBreakdown?: boolean;
+  depositReceived?: boolean;
+  depositAmount?: string | null;
 }
 
 export default function PortalJobDetail() {
@@ -723,11 +725,20 @@ export default function PortalJobDetail() {
                           </div>
                           {invoice.depositRequired && invoice.depositCalculated && (
                             <div className="flex justify-between pt-2 border-t border-border">
-                              <span className="text-muted-foreground">
-                                Deposit Due {invoice.depositType === "percentage" ? `(${invoice.depositAmount}%)` : ""}
-                              </span>
-                              <span className="font-mono font-semibold text-primary">
+                              <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground">
+                                  Deposit {invoice.depositType === "percentage" ? `(${invoice.depositAmount}%)` : ""}
+                                </span>
+                                {job.depositReceived && (
+                                  <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Paid
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className={`font-mono font-semibold ${job.depositReceived ? 'text-green-600 dark:text-green-400' : 'text-primary'}`}>
                                 £{parseFloat(invoice.depositCalculated).toFixed(2)}
+                                {job.depositReceived ? ' (Received)' : ' (Due)'}
                               </span>
                             </div>
                           )}

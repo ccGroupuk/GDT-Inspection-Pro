@@ -47,6 +47,8 @@ import {
   ExternalLink,
   Boxes,
   PoundSterling,
+  Loader2,
+  Check,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse, ConnectionLink, ChangeOrder, ChangeOrderItem, CatalogItem } from "@shared/schema";
@@ -571,6 +573,34 @@ export default function JobDetail() {
     },
     onError: () => {
       toast({ title: "Failed to create deposit request", variant: "destructive" });
+    },
+  });
+
+  // Mark deposit as paid mutation
+  const markDepositPaidMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PATCH", `/api/jobs/${id}`, {
+        depositReceived: true,
+      });
+      // Also update any pending deposit payment request to paid
+      const depositRequest = paymentRequests?.find(
+        pr => pr.type === "deposit" && pr.status !== "paid" && pr.status !== "cancelled"
+      );
+      if (depositRequest) {
+        await apiRequest("PATCH", `/api/payment-requests/${depositRequest.id}`, {
+          status: "paid",
+          paidAt: new Date().toISOString(),
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "payment-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "invoices"] });
+      toast({ title: "Deposit marked as paid" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update deposit status", variant: "destructive" });
     },
   });
 
@@ -1307,12 +1337,30 @@ export default function JobDetail() {
                         : <AlertCircle className="w-4 h-4 text-yellow-600" />
                     )}
                   </div>
-                  <span className="font-mono text-sm font-semibold">
-                    {job.depositRequired 
-                      ? `£${Number(job.depositAmount || 0).toLocaleString()} ${job.depositReceived ? "(Received)" : "(Pending)"}`
-                      : "Not required"
-                    }
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-semibold">
+                      {job.depositRequired 
+                        ? `£${Number(job.depositAmount || 0).toLocaleString()} ${job.depositReceived ? "(Received)" : "(Pending)"}`
+                        : "Not required"
+                      }
+                    </span>
+                    {job.depositRequired && !job.depositReceived && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => markDepositPaidMutation.mutate()}
+                        disabled={markDepositPaidMutation.isPending}
+                        data-testid="button-mark-deposit-paid"
+                      >
+                        {markDepositPaidMutation.isPending ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Check className="w-3 h-3" />
+                        )}
+                        <span className="ml-1">Mark Paid</span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {isPartnerJob && (
