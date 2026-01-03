@@ -5774,6 +5774,129 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     }
   });
 
+  // Partner portal: Get payment requests for partner jobs
+  app.get("/api/partner-portal/payment-requests", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Get all jobs for this partner
+      const jobs = await storage.getJobsByPartner(access.partnerId);
+      const jobIds = jobs.map(j => j.id);
+      
+      // Get payment requests for partner's jobs where audience is 'partner'
+      const allRequests = await Promise.all(
+        jobIds.map(jobId => storage.getPaymentRequestsByJob(jobId))
+      );
+      
+      const partnerRequests = allRequests
+        .flat()
+        .filter(req => req.audience === 'partner' || req.type === 'partner_payout')
+        .map(req => {
+          const job = jobs.find(j => j.id === req.jobId);
+          return { ...req, job: job ? { id: job.id, jobNumber: job.jobNumber, serviceType: job.serviceType } : null };
+        });
+      
+      res.json(partnerRequests);
+    } catch (error) {
+      console.error("Partner portal payment requests error:", error);
+      res.status(500).json({ message: "Failed to load payment requests" });
+    }
+  });
+
+  // Partner portal: Request payment for completed work
+  app.post("/api/partner-portal/jobs/:jobId/request-payment", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      // Check job is accepted
+      if (job.partnerStatus !== "accepted") {
+        return res.status(400).json({ message: "Job must be accepted before requesting payment" });
+      }
+      
+      // Check if partner already has a pending payment request for this job
+      const existingRequests = await storage.getPaymentRequestsByJob(job.id);
+      const pendingPartnerRequest = existingRequests.find(
+        r => r.audience === 'partner' && r.approvalStatus === 'pending'
+      );
+      
+      if (pendingPartnerRequest) {
+        return res.status(400).json({ message: "A payment request is already pending for this job" });
+      }
+      
+      // Create payment request for partner payout
+      const amount = req.body.amount || job.partnerCharge || "0";
+      const description = req.body.description || `Payment request for completed work on ${job.jobNumber}`;
+      
+      const paymentRequest = await storage.createPaymentRequest({
+        jobId: job.id,
+        type: "partner_payout",
+        amount: amount,
+        description: description,
+        status: "pending",
+        showInPortal: false, // Not shown in client portal
+        audience: "partner",
+        requestedByRole: "partner",
+        requestedById: access.partnerId,
+        approvalStatus: "pending",
+      });
+      
+      res.status(201).json(paymentRequest);
+    } catch (error) {
+      console.error("Partner portal request payment error:", error);
+      res.status(500).json({ message: "Failed to create payment request" });
+    }
+  });
+
+  // Partner portal: Get payment requests for a specific job
+  app.get("/api/partner-portal/jobs/:jobId/payment-requests", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const requests = await storage.getPaymentRequestsByJob(req.params.jobId);
+      // Only return partner-related payment requests
+      const partnerRequests = requests.filter(r => r.audience === 'partner' || r.type === 'partner_payout');
+      
+      res.json(partnerRequests);
+    } catch (error) {
+      console.error("Partner portal job payment requests error:", error);
+      res.status(500).json({ message: "Failed to load payment requests" });
+    }
+  });
+
   // Financial Categories
   app.get("/api/financial-categories", async (req, res) => {
     try {

@@ -14,7 +14,7 @@ import { queryClient } from "@/lib/queryClient";
 import { 
   Briefcase, MapPin, User, Phone, Mail, LogOut, Loader2, 
   ArrowLeft, CheckCircle2, Circle, FileText, MessageSquare, Image,
-  Siren, AlertTriangle, CheckCircle, XCircle, Clock, Calendar
+  Siren, AlertTriangle, CheckCircle, XCircle, Clock, Calendar, Banknote
 } from "lucide-react";
 import type { Job, Contact, Task, QuoteItem, JobNote, JobNoteAttachment, EmergencyCallout, JobScheduleProposal } from "@shared/schema";
 import { NOTE_VISIBILITY } from "@shared/schema";
@@ -86,6 +86,11 @@ export default function PartnerPortalJobDetail() {
   const [proposedStartDate, setProposedStartDate] = useState("");
   const [proposedEndDate, setProposedEndDate] = useState("");
   const [startDateNotes, setStartDateNotes] = useState("");
+
+  // Payment request state
+  const [requestPaymentDialogOpen, setRequestPaymentDialogOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDescription, setPaymentDescription] = useState("");
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -164,6 +169,53 @@ export default function PartnerPortalJobDetail() {
       });
       if (!res.ok) return null;
       return res.json();
+    },
+  });
+
+  // Query payment requests for this job (partner payout requests)
+  interface PaymentRequest {
+    id: string;
+    jobId: string;
+    type: string;
+    amount: string;
+    description: string | null;
+    status: string;
+    approvalStatus: string | null;
+    confirmedAt: string | null;
+    createdAt: string | null;
+  }
+  
+  const { data: paymentRequests } = useQuery<PaymentRequest[]>({
+    queryKey: ["/api/partner-portal/jobs", jobId, "payment-requests"],
+    enabled: isAuthenticated && !!jobId,
+    queryFn: async () => {
+      const res = await fetch(`/api/partner-portal/jobs/${jobId}/payment-requests`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  // Request payment mutation
+  const requestPaymentMutation = useMutation({
+    mutationFn: async (data: { amount: string; description?: string }) => {
+      const res = await partnerApiRequest("POST", `/api/partner-portal/jobs/${jobId}/request-payment`, data, token);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to request payment");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs", jobId, "payment-requests"] });
+      toast({ title: "Payment Request Sent", description: "Your payment request has been submitted to the admin." });
+      setRequestPaymentDialogOpen(false);
+      setPaymentAmount("");
+      setPaymentDescription("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -574,6 +626,76 @@ export default function PartnerPortalJobDetail() {
                     </CardContent>
                   </Card>
                 )}
+
+                {/* Payment Request Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Banknote className="w-4 h-4" />
+                      Payment Requests
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {paymentRequests && paymentRequests.length > 0 ? (
+                      <div className="space-y-3">
+                        {paymentRequests.map((req) => (
+                          <div key={req.id} className="p-3 rounded-lg bg-muted/50">
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                              <span className="font-medium">£{parseFloat(req.amount).toFixed(2)}</span>
+                              <Badge variant={
+                                req.approvalStatus === "confirmed" ? "default" :
+                                req.approvalStatus === "marked_paid" ? "secondary" :
+                                req.approvalStatus === "rejected" ? "destructive" :
+                                "outline"
+                              }>
+                                {req.approvalStatus === "confirmed" && "Paid"}
+                                {req.approvalStatus === "marked_paid" && "Processing"}
+                                {req.approvalStatus === "pending" && "Pending Review"}
+                                {req.approvalStatus === "rejected" && "Rejected"}
+                              </Badge>
+                            </div>
+                            {req.description && (
+                              <p className="text-sm text-muted-foreground">{req.description}</p>
+                            )}
+                            {req.createdAt && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Requested: {new Date(req.createdAt).toLocaleDateString()}
+                              </p>
+                            )}
+                            {req.confirmedAt && (
+                              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                Paid: {new Date(req.confirmedAt).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No payment requests yet.</p>
+                    )}
+                    
+                    {/* Only show request button if no pending request */}
+                    {(!paymentRequests || !paymentRequests.some(r => r.approvalStatus === "pending")) && (
+                      <Button 
+                        className="w-full"
+                        onClick={() => {
+                          setPaymentAmount(job.partnerCharge || "");
+                          setRequestPaymentDialogOpen(true);
+                        }}
+                        data-testid="button-request-payment"
+                      >
+                        <Banknote className="w-4 h-4 mr-2" />
+                        Request Payment
+                      </Button>
+                    )}
+                    
+                    {job.partnerCharge && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        Agreed rate for this job: £{parseFloat(job.partnerCharge).toFixed(2)}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
               </>
             ) : job.partnerStatus === "declined" ? (
               <Card className="border-red-500 border-2">
