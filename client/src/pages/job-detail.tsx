@@ -105,6 +105,27 @@ export default function JobDetail() {
     enabled: Boolean(id),
   });
 
+  // Fetch payment requests for this job
+  interface PaymentRequest {
+    id: string;
+    jobId: string;
+    type: string;
+    amount: string;
+    description?: string | null;
+    dueDate?: Date | null;
+    status: string;
+    showInPortal?: boolean;
+  }
+  const { data: paymentRequests } = useQuery<PaymentRequest[]>({
+    queryKey: ["/api/jobs", id, "payment-requests"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/payment-requests`);
+      if (!response.ok) throw new Error("Failed to fetch payment requests");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
   // Fetch job notes
   const { data: jobNotes } = useQuery<JobNoteWithAttachments[]>({
     queryKey: ["/api/jobs", id, "notes"],
@@ -252,6 +273,13 @@ export default function JobDetail() {
   const [proposedStartDate, setProposedStartDate] = useState("");
   const [proposedEndDate, setProposedEndDate] = useState("");
   const [proposalNotes, setProposalNotes] = useState("");
+
+  // Deposit request dialog state
+  const [depositDialogOpen, setDepositDialogOpen] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositType, setDepositType] = useState<"fixed" | "percentage">("fixed");
+  const [depositDescription, setDepositDescription] = useState("Booking deposit to secure your scheduled work dates");
+  const [depositDueDate, setDepositDueDate] = useState("");
 
   // Note dialog state
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
@@ -486,6 +514,44 @@ export default function JobDetail() {
       toast({ title: "Failed to confirm schedule", variant: "destructive" });
     },
   });
+
+  // Create deposit request mutation
+  const createDepositRequestMutation = useMutation({
+    mutationFn: async (data: { amount: string; description: string; dueDate?: string; depositType: "fixed" | "percentage"; originalAmount: string }) => {
+      // Create the payment request
+      await apiRequest("POST", `/api/jobs/${id}/payment-requests`, {
+        jobId: id,
+        type: "deposit",
+        amount: data.amount,
+        description: data.description,
+        dueDate: data.dueDate ? new Date(data.dueDate).toISOString() : null,
+        status: "sent",
+        showInPortal: true,
+      });
+      // Also update job to mark deposit as required (use calculated amount for consistency)
+      await apiRequest("PATCH", `/api/jobs/${id}`, {
+        depositRequired: true,
+        depositAmount: data.amount, // Always store the calculated currency amount
+        depositType: data.depositType,
+      });
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "payment-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      toast({ title: "Deposit request sent to client portal" });
+      setDepositDialogOpen(false);
+      setDepositAmount("");
+      setDepositDueDate("");
+    },
+    onError: () => {
+      toast({ title: "Failed to create deposit request", variant: "destructive" });
+    },
+  });
+
+  // Check if there's already an active deposit request
+  const hasActiveDepositRequest = paymentRequests?.some(
+    pr => pr.type === "deposit" && pr.status !== "paid" && pr.status !== "cancelled"
+  );
 
   const createInvoiceMutation = useMutation({
     mutationFn: async (type: "quote" | "invoice") => {
@@ -1540,9 +1606,39 @@ export default function JobDetail() {
                       </Button>
                     )}
                     {scheduleProposal.status === "scheduled" && (
-                      <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                        <CheckCircle className="w-4 h-4" />
-                        <span>Job scheduled and added to calendar</span>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Job scheduled and added to calendar</span>
+                        </div>
+                        {/* Deposit Request Section */}
+                        {(() => {
+                          const existingDeposit = paymentRequests?.find(pr => pr.type === "deposit");
+                          if (existingDeposit) {
+                            return (
+                              <div className="flex items-center gap-2 text-sm">
+                                <PoundSterling className="w-4 h-4" />
+                                <span>Deposit requested: £{parseFloat(existingDeposit.amount).toFixed(2)}</span>
+                                <Badge variant={existingDeposit.status === "paid" ? "default" : "secondary"} className="text-xs">
+                                  {existingDeposit.status === "paid" ? "Paid" : existingDeposit.status === "sent" ? "Awaiting Payment" : existingDeposit.status}
+                                </Badge>
+                              </div>
+                            );
+                          }
+                          return (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setDepositDialogOpen(true)}
+                              disabled={hasActiveDepositRequest}
+                              title={hasActiveDepositRequest ? "A deposit request is already pending" : undefined}
+                              data-testid="button-request-deposit"
+                            >
+                              <PoundSterling className="w-3 h-3 mr-1" />
+                              {hasActiveDepositRequest ? "Deposit Requested" : "Request Booking Deposit"}
+                            </Button>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -2438,6 +2534,92 @@ export default function JobDetail() {
             >
               <Send className="w-3 h-3 mr-1" />
               Send to Client
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deposit Request Dialog */}
+      <Dialog open={depositDialogOpen} onOpenChange={setDepositDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Booking Deposit</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Deposit Type</Label>
+              <Select value={depositType} onValueChange={(v) => setDepositType(v as "fixed" | "percentage")}>
+                <SelectTrigger data-testid="select-deposit-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed">Fixed Amount</SelectItem>
+                  <SelectItem value="percentage">Percentage of Quote</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{depositType === "fixed" ? "Amount (£)" : "Percentage (%)"}</Label>
+              <Input
+                type="number"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder={depositType === "fixed" ? "e.g. 500" : "e.g. 25"}
+                data-testid="input-deposit-amount"
+              />
+              {depositType === "percentage" && data?.job?.quotedValue && depositAmount && (
+                <p className="text-sm text-muted-foreground">
+                  = £{((parseFloat(data.job.quotedValue) * parseFloat(depositAmount)) / 100).toFixed(2)}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Due Date (Optional)</Label>
+              <Input
+                type="date"
+                value={depositDueDate}
+                onChange={(e) => setDepositDueDate(e.target.value)}
+                data-testid="input-deposit-due-date"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={depositDescription}
+                onChange={(e) => setDepositDescription(e.target.value)}
+                placeholder="Enter description for the client"
+                className="min-h-[60px]"
+                data-testid="textarea-deposit-description"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDepositDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!depositAmount || parseFloat(depositAmount) <= 0) {
+                  toast({ title: "Please enter a valid amount", variant: "destructive" });
+                  return;
+                }
+                let finalAmount = depositAmount;
+                if (depositType === "percentage" && data?.job?.quotedValue) {
+                  finalAmount = ((parseFloat(data.job.quotedValue) * parseFloat(depositAmount)) / 100).toFixed(2);
+                }
+                createDepositRequestMutation.mutate({
+                  amount: finalAmount,
+                  description: depositDescription,
+                  dueDate: depositDueDate || undefined,
+                  depositType: depositType,
+                  originalAmount: depositAmount,
+                });
+              }}
+              disabled={createDepositRequestMutation.isPending}
+              data-testid="button-send-deposit-request"
+            >
+              <Send className="w-3 h-3 mr-1" />
+              Send to Client Portal
             </Button>
           </DialogFooter>
         </DialogContent>

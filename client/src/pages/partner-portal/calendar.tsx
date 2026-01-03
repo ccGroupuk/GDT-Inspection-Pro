@@ -23,9 +23,12 @@ import {
   Handshake,
 } from "lucide-react";
 import type { CalendarEvent, Job } from "@shared/schema";
+import { ClipboardCheck, Wrench } from "lucide-react";
 
 type EnrichedCalendarEvent = CalendarEvent & {
   job: Job | null;
+  eventType?: string;
+  surveyDetails?: string | null;
 };
 
 function StatusIcon({ status }: { status: string }) {
@@ -60,6 +63,26 @@ function TeamTypeBadge({ type }: { type: string }) {
   }
 }
 
+function EventTypeBadge({ eventType }: { eventType?: string }) {
+  if (eventType === "survey") {
+    return (
+      <Badge variant="secondary" className="text-xs">
+        <ClipboardCheck className="w-3 h-3 mr-1" />
+        Survey
+      </Badge>
+    );
+  }
+  if (eventType === "project_start") {
+    return (
+      <Badge variant="default" className="text-xs bg-green-600 dark:bg-green-700">
+        <Wrench className="w-3 h-3 mr-1" />
+        Work Start
+      </Badge>
+    );
+  }
+  return null;
+}
+
 function EventCard({ 
   event, 
   onConfirm, 
@@ -92,8 +115,14 @@ function EventCard({
               {event.job.jobNumber} - {event.job.serviceType}
             </p>
           )}
+          {event.surveyDetails && (
+            <p className="text-xs text-muted-foreground mt-1">{event.surveyDetails}</p>
+          )}
         </div>
-        <TeamTypeBadge type={event.teamType} />
+        <div className="flex flex-col gap-1 items-end">
+          <EventTypeBadge eventType={event.eventType} />
+          <TeamTypeBadge type={event.teamType} />
+        </div>
       </div>
       
       {event.confirmedByPartner && (
