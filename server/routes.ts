@@ -6395,9 +6395,14 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   // Partner Portal Calendar Events
   app.get("/api/partner-portal/calendar-events", async (req, res) => {
     try {
-      // @ts-ignore
-      const partnerAccess = req.partnerAccess;
-      if (!partnerAccess) {
+      // Manually verify partner token (same pattern as other partner portal routes)
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const partnerAccess = await storage.getPartnerPortalAccessByToken(token);
+      if (!partnerAccess || !partnerAccess.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       
@@ -6484,9 +6489,13 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   // Partner confirms calendar event
   app.patch("/api/partner-portal/calendar-events/:id/confirm", async (req, res) => {
     try {
-      // @ts-ignore
-      const partnerAccess = req.partnerAccess;
-      if (!partnerAccess) {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const partnerAccess = await storage.getPartnerPortalAccessByToken(token);
+      if (!partnerAccess || !partnerAccess.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       
@@ -6525,9 +6534,13 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   // Partner Availability - for partner portal
   app.get("/api/partner-portal/availability", async (req, res) => {
     try {
-      // @ts-ignore
-      const partnerAccess = req.partnerAccess;
-      if (!partnerAccess) {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const partnerAccess = await storage.getPartnerPortalAccessByToken(token);
+      if (!partnerAccess || !partnerAccess.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       
