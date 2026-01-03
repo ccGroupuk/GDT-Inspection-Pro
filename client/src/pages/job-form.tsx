@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Save, CheckCircle, Handshake, RefreshCw, Plus, Trash2, Package, FileStack, Search, X, ChevronRight, Eye, EyeOff, Percent } from "lucide-react";
 import { Link } from "wouter";
-import type { Job, Contact, TradePartner, InsertJob, QuoteItem, CatalogItem, ProductCategory, QuoteTemplate, QuoteTemplateItem } from "@shared/schema";
+import type { Job, Contact, TradePartner, InsertJob, QuoteItem, CatalogItem, ProductCategory, QuoteTemplate, QuoteTemplateItem, JobPartner } from "@shared/schema";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -86,6 +86,15 @@ export default function JobForm() {
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string>("all");
   const [templateSearch, setTemplateSearch] = useState("");
   
+  // Multi-partner dialog state
+  const [showAddPartnerDialog, setShowAddPartnerDialog] = useState(false);
+  const [newPartnerFormData, setNewPartnerFormData] = useState({
+    partnerId: "",
+    chargeType: "fixed",
+    chargeAmount: "",
+    notes: "",
+  });
+  
   // Fetch catalog items
   const { data: catalogItems = [] } = useQuery<CatalogItem[]>({
     queryKey: ["/api/catalog-items"],
@@ -115,6 +124,60 @@ export default function JobForm() {
       return response.json();
     },
     enabled: isEdit && !!id,
+  });
+
+  // Fetch job partners for edit mode (multi-partner support)
+  type JobPartnerWithDetails = JobPartner & { partner?: TradePartner };
+  const { data: jobPartnersData = [], isLoading: jobPartnersLoading } = useQuery<JobPartnerWithDetails[]>({
+    queryKey: ["/api/jobs", id, "partners"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/partners`);
+      if (!response.ok) throw new Error("Failed to fetch job partners");
+      return response.json();
+    },
+    enabled: isEdit && !!id,
+  });
+
+  // Add partner to job mutation
+  const addJobPartnerMutation = useMutation({
+    mutationFn: async (partnerData: { partnerId: string; chargeType?: string; chargeAmount?: string; notes?: string }) => {
+      return apiRequest("POST", `/api/jobs/${id}/partners`, partnerData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "partners"] });
+      toast({ title: "Partner added to job" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to add partner", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Update job partner mutation
+  const updateJobPartnerMutation = useMutation({
+    mutationFn: async ({ partnerId, data }: { partnerId: string; data: Partial<JobPartner> }) => {
+      return apiRequest("PATCH", `/api/job-partners/${partnerId}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "partners"] });
+      toast({ title: "Partner details updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update partner", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Remove partner from job mutation
+  const removeJobPartnerMutation = useMutation({
+    mutationFn: async (jobPartnerId: string) => {
+      return apiRequest("DELETE", `/api/job-partners/${jobPartnerId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "partners"] });
+      toast({ title: "Partner removed from job" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to remove partner", description: error.message, variant: "destructive" });
+    },
   });
 
   // Load existing quote items and job settings when editing
@@ -592,6 +655,7 @@ export default function JobForm() {
             </div>
 
             {isPartnerJob && (
+              <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border">
                 <div className="space-y-2">
                   <Label htmlFor="tradeCategory">Trade Category</Label>
@@ -611,13 +675,13 @@ export default function JobForm() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="partnerId">Assign Partner</Label>
+                  <Label htmlFor="partnerId">Primary Partner</Label>
                   <Select
                     value={form.watch("partnerId") || ""}
                     onValueChange={(value) => form.setValue("partnerId", value || null)}
                   >
                     <SelectTrigger data-testid="select-partner">
-                      <SelectValue placeholder="Select a partner" />
+                      <SelectValue placeholder="Select a partner (optional)" />
                     </SelectTrigger>
                     <SelectContent>
                       {activePartners.map(partner => (
@@ -629,6 +693,142 @@ export default function JobForm() {
                   </Select>
                 </div>
               </div>
+
+              {/* Multi-partner section for hybrid jobs (only in edit mode) */}
+              {isEdit && deliveryType === "hybrid" && (
+                <div className="pt-4 mt-4 border-t border-border space-y-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                      <Label className="text-base font-medium">Additional Partners</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Assign multiple trade partners with individual charge settings
+                      </p>
+                    </div>
+                    <Dialog>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const dialog = document.getElementById("add-partner-dialog");
+                          if (dialog) (dialog as HTMLDialogElement).showModal();
+                        }}
+                        data-testid="button-add-partner"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Partner
+                      </Button>
+                    </Dialog>
+                  </div>
+
+                  {/* Add partner dialog as a simple inline form */}
+                  <dialog id="add-partner-dialog" className="p-6 rounded-lg border bg-background shadow-lg backdrop:bg-black/50 max-w-md w-full">
+                    <form method="dialog" onSubmit={(e) => {
+                      e.preventDefault();
+                      const formData = new FormData(e.currentTarget);
+                      const partnerId = formData.get("partnerId") as string;
+                      const chargeType = formData.get("chargeType") as string;
+                      const chargeAmount = formData.get("chargeAmount") as string;
+                      const notes = formData.get("notes") as string;
+                      if (partnerId) {
+                        addJobPartnerMutation.mutate({ partnerId, chargeType, chargeAmount, notes });
+                        (e.currentTarget.closest("dialog") as HTMLDialogElement)?.close();
+                        e.currentTarget.reset();
+                      }
+                    }}>
+                      <h3 className="text-lg font-semibold mb-4">Add Partner to Job</h3>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Partner</Label>
+                          <select name="partnerId" required className="w-full border rounded-md p-2 bg-background">
+                            <option value="">Select a partner</option>
+                            {activePartners
+                              .filter(p => !jobPartnersData.some(jp => jp.partnerId === p.id) && p.id !== form.watch("partnerId"))
+                              .map(partner => (
+                                <option key={partner.id} value={partner.id}>
+                                  {partner.businessName} ({partner.tradeCategory})
+                                </option>
+                              ))
+                            }
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Charge Type</Label>
+                            <select name="chargeType" className="w-full border rounded-md p-2 bg-background">
+                              <option value="fixed">Fixed Amount</option>
+                              <option value="percentage">Percentage</option>
+                            </select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Amount</Label>
+                            <Input type="number" name="chargeAmount" step="0.01" placeholder="0.00" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Notes (what this partner handles)</Label>
+                          <Textarea name="notes" placeholder="e.g. Electrical work, plumbing..." rows={2} />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-3 mt-6">
+                        <Button type="button" variant="outline" onClick={(e) => (e.currentTarget.closest("dialog") as HTMLDialogElement)?.close()}>
+                          Cancel
+                        </Button>
+                        <Button type="submit" disabled={addJobPartnerMutation.isPending}>
+                          {addJobPartnerMutation.isPending ? "Adding..." : "Add Partner"}
+                        </Button>
+                      </div>
+                    </form>
+                  </dialog>
+
+                  {/* List of assigned partners */}
+                  {jobPartnersLoading ? (
+                    <div className="text-center py-4 text-muted-foreground">Loading partners...</div>
+                  ) : jobPartnersData.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground border rounded-md">
+                      <Handshake className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                      <p className="text-sm">No additional partners assigned yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {jobPartnersData.map((jp) => (
+                        <div key={jp.id} className="flex items-start justify-between gap-4 p-3 border rounded-md" data-testid={`job-partner-${jp.id}`}>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium">{jp.partner?.businessName || "Unknown Partner"}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {jp.partner?.tradeCategory && <Badge variant="secondary" className="mr-2">{jp.partner.tradeCategory}</Badge>}
+                              {jp.chargeType === "percentage" ? (
+                                <span>{jp.chargeAmount}% of job value</span>
+                              ) : jp.chargeAmount ? (
+                                <span>£{parseFloat(jp.chargeAmount).toFixed(2)} fixed</span>
+                              ) : (
+                                <span className="text-muted-foreground">No charge set</span>
+                              )}
+                            </div>
+                            {jp.notes && <div className="text-sm text-muted-foreground mt-1">{jp.notes}</div>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={jp.status === "completed" ? "default" : jp.status === "in_progress" ? "secondary" : "outline"}>
+                              {jp.status || "assigned"}
+                            </Badge>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => removeJobPartnerMutation.mutate(jp.id)}
+                              disabled={removeJobPartnerMutation.isPending}
+                              data-testid={`button-remove-partner-${jp.id}`}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              </>
             )}
           </CardContent>
         </Card>
