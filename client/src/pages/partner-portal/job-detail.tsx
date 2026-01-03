@@ -16,7 +16,7 @@ import {
   ArrowLeft, CheckCircle2, Circle, FileText, MessageSquare, Image,
   Siren, AlertTriangle, CheckCircle, XCircle, Clock, Calendar
 } from "lucide-react";
-import type { Job, Contact, Task, QuoteItem, JobNote, JobNoteAttachment, EmergencyCallout } from "@shared/schema";
+import type { Job, Contact, Task, QuoteItem, JobNote, JobNoteAttachment, EmergencyCallout, JobScheduleProposal } from "@shared/schema";
 import { NOTE_VISIBILITY } from "@shared/schema";
 
 interface JobNoteWithAttachments extends JobNote {
@@ -80,6 +80,12 @@ export default function PartnerPortalJobDetail() {
   const [surveyPreferredDate, setSurveyPreferredDate] = useState("");
   const [surveyPreferredTime, setSurveyPreferredTime] = useState("");
   const [surveyNotes, setSurveyNotes] = useState("");
+  
+  // Start date request state
+  const [requestStartDateDialogOpen, setRequestStartDateDialogOpen] = useState(false);
+  const [proposedStartDate, setProposedStartDate] = useState("");
+  const [proposedEndDate, setProposedEndDate] = useState("");
+  const [startDateNotes, setStartDateNotes] = useState("");
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -145,6 +151,61 @@ export default function PartnerPortalJobDetail() {
       });
       if (!res.ok) return null;
       return res.json();
+    },
+  });
+
+  // Query schedule proposal for this job
+  const { data: scheduleProposal } = useQuery<JobScheduleProposal | null>({
+    queryKey: ["/api/partner-portal/jobs", jobId, "schedule-proposal"],
+    enabled: isAuthenticated && !!jobId,
+    queryFn: async () => {
+      const res = await fetch(`/api/partner-portal/jobs/${jobId}/schedule-proposal`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
+  // Request start date mutation
+  const requestStartDateMutation = useMutation({
+    mutationFn: async (data: { proposedStartDate: string; proposedEndDate?: string; notes?: string }) => {
+      const res = await partnerApiRequest("POST", `/api/partner-portal/jobs/${jobId}/request-start-date`, data, token);
+      if (!res.ok) throw new Error("Failed to request start date");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs", jobId, "schedule-proposal"] });
+      toast({ title: "Start Date Requested", description: "Your preferred start date has been sent to the admin." });
+      setRequestStartDateDialogOpen(false);
+      setProposedStartDate("");
+      setProposedEndDate("");
+      setStartDateNotes("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error requesting start date", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Respond to admin's schedule proposal
+  const respondToProposalMutation = useMutation({
+    mutationFn: async (data: { response: "accepted" | "declined" | "countered"; counterDate?: string; reason?: string }) => {
+      const res = await partnerApiRequest("POST", `/api/partner-portal/jobs/${jobId}/respond-schedule-proposal`, data, token);
+      if (!res.ok) throw new Error("Failed to respond to proposal");
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs", jobId, "schedule-proposal"] });
+      if (variables.response === "accepted") {
+        toast({ title: "Date Accepted", description: "You have confirmed the proposed start date." });
+      } else if (variables.response === "countered") {
+        toast({ title: "Alternative Date Sent", description: "Your preferred date has been sent to the admin." });
+      } else {
+        toast({ title: "Date Declined", description: "You have declined the proposed start date." });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error responding to proposal", description: error.message, variant: "destructive" });
     },
   });
 
@@ -345,7 +406,7 @@ export default function PartnerPortalJobDetail() {
                     <CardTitle className="text-lg">Quick Actions</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       <Link href={`/partner-portal/quotes/new?jobId=${job.id}`}>
                         <Button variant="outline" className="w-full" data-testid="button-create-quote">
                           <FileText className="w-4 h-4 mr-2" />
@@ -361,12 +422,141 @@ export default function PartnerPortalJobDetail() {
                         <Calendar className="w-4 h-4 mr-2" />
                         Book Survey
                       </Button>
+                      {!scheduleProposal && (
+                        <Button 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={() => setRequestStartDateDialogOpen(true)}
+                          data-testid="button-request-start-date"
+                        >
+                          <Clock className="w-4 h-4 mr-2" />
+                          Request Start Date
+                        </Button>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-3 text-center">
-                      Create a quote for this job or request a survey visit with the client.
+                      Create a quote, book a survey, or request your preferred start date.
                     </p>
                   </CardContent>
                 </Card>
+
+                {/* Schedule Proposal Status */}
+                {scheduleProposal && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        Start Date Scheduling
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="p-4 rounded-lg bg-muted/50">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <span className="text-sm font-medium">
+                            {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" : "Admin Proposed Date"}
+                          </span>
+                          <Badge variant={
+                            scheduleProposal.status === "scheduled" ? "default" :
+                            scheduleProposal.status === "pending_partner" ? "secondary" :
+                            scheduleProposal.status === "pending_admin" ? "outline" :
+                            scheduleProposal.status === "partner_declined" || scheduleProposal.status === "admin_declined" ? "destructive" :
+                            "outline"
+                          }>
+                            {scheduleProposal.status === "pending_partner" && "Your Response Needed"}
+                            {scheduleProposal.status === "pending_admin" && "Awaiting Admin Response"}
+                            {scheduleProposal.status === "partner_accepted" && "You Accepted"}
+                            {scheduleProposal.status === "partner_countered" && "Alternative Sent"}
+                            {scheduleProposal.status === "partner_declined" && "You Declined"}
+                            {scheduleProposal.status === "admin_declined" && "Declined by Admin"}
+                            {scheduleProposal.status === "scheduled" && "Confirmed"}
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">
+                              {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" : "Proposed Date"}
+                            </p>
+                            <p className="font-medium">{new Date(scheduleProposal.proposedStartDate).toLocaleDateString()}</p>
+                            {scheduleProposal.proposedEndDate && (
+                              <p className="text-xs text-muted-foreground">
+                                to {new Date(scheduleProposal.proposedEndDate).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                          
+                          {scheduleProposal.counterProposedDate && (
+                            <div>
+                              <p className="text-muted-foreground">Counter Date</p>
+                              <p className="font-medium">{new Date(scheduleProposal.counterProposedDate).toLocaleDateString()}</p>
+                              {scheduleProposal.counterReason && (
+                                <p className="text-xs text-muted-foreground mt-1">{scheduleProposal.counterReason}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {scheduleProposal.adminNotes && (
+                          <div className="mt-3 pt-3 border-t">
+                            <p className="text-xs text-muted-foreground">Admin Notes: {scheduleProposal.adminNotes}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Response buttons when admin proposes */}
+                      {scheduleProposal.status === "pending_partner" && (
+                        <div className="flex gap-2 flex-wrap">
+                          <Button
+                            size="sm"
+                            onClick={() => respondToProposalMutation.mutate({ response: "accepted" })}
+                            disabled={respondToProposalMutation.isPending}
+                            data-testid="button-accept-proposed-date"
+                          >
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Accept Date
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setRequestStartDateDialogOpen(true)}
+                            data-testid="button-counter-proposed-date"
+                          >
+                            Suggest Different Date
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => respondToProposalMutation.mutate({ response: "declined" })}
+                            disabled={respondToProposalMutation.isPending}
+                            data-testid="button-decline-proposed-date"
+                          >
+                            <XCircle className="w-3 h-3 mr-1" />
+                            Decline
+                          </Button>
+                        </div>
+                      )}
+                      
+                      {/* Show request new date button for declined/countered states */}
+                      {(scheduleProposal.status === "partner_declined" || scheduleProposal.status === "admin_declined") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setRequestStartDateDialogOpen(true)}
+                          data-testid="button-request-new-date"
+                        >
+                          Request New Date
+                        </Button>
+                      )}
+                      
+                      {scheduleProposal.status === "scheduled" && (
+                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                          <CheckCircle className="w-4 h-4" />
+                          Start date confirmed - check the calendar for details
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </>
             ) : job.partnerStatus === "declined" ? (
               <Card className="border-red-500 border-2">
@@ -864,6 +1054,106 @@ export default function PartnerPortalJobDetail() {
                 data-testid="button-confirm-survey"
               >
                 {requestSurveyMutation.isPending ? "Requesting..." : "Request Survey"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Request Start Date Dialog */}
+        <Dialog open={requestStartDateDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            setRequestStartDateDialogOpen(false);
+            setProposedStartDate("");
+            setProposedEndDate("");
+            setStartDateNotes("");
+          }
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-primary" />
+                {scheduleProposal?.status === "pending_partner" ? "Suggest Alternative Date" : "Request Start Date"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                {scheduleProposal?.status === "pending_partner" 
+                  ? "Propose an alternative start date that works better for your schedule."
+                  : "Request your preferred start date for this job. The admin will review and confirm."
+                }
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Preferred Start Date *</Label>
+                  <Input
+                    type="date"
+                    value={proposedStartDate}
+                    onChange={(e) => setProposedStartDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    data-testid="input-start-date"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Estimated End Date</Label>
+                  <Input
+                    type="date"
+                    value={proposedEndDate}
+                    onChange={(e) => setProposedEndDate(e.target.value)}
+                    min={proposedStartDate || new Date().toISOString().split('T')[0]}
+                    data-testid="input-end-date"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes (Optional)</Label>
+                <Textarea
+                  placeholder="Any scheduling constraints or preferences..."
+                  value={startDateNotes}
+                  onChange={(e) => setStartDateNotes(e.target.value)}
+                  className="min-h-[80px]"
+                  data-testid="textarea-start-date-notes"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRequestStartDateDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!proposedStartDate) {
+                    toast({ title: "Please select a start date", variant: "destructive" });
+                    return;
+                  }
+                  if (scheduleProposal?.status === "pending_partner") {
+                    // Counter-propose the admin's date
+                    respondToProposalMutation.mutate({
+                      response: "countered",
+                      counterDate: proposedStartDate,
+                      reason: startDateNotes || undefined,
+                    });
+                    setRequestStartDateDialogOpen(false);
+                    setProposedStartDate("");
+                    setProposedEndDate("");
+                    setStartDateNotes("");
+                  } else {
+                    // Create new request
+                    requestStartDateMutation.mutate({
+                      proposedStartDate,
+                      proposedEndDate: proposedEndDate || undefined,
+                      notes: startDateNotes || undefined,
+                    });
+                  }
+                }}
+                disabled={requestStartDateMutation.isPending || respondToProposalMutation.isPending}
+                data-testid="button-confirm-start-date"
+              >
+                {(requestStartDateMutation.isPending || respondToProposalMutation.isPending) 
+                  ? "Sending..." 
+                  : scheduleProposal?.status === "pending_partner" 
+                    ? "Send Alternative Date"
+                    : "Request Start Date"
+                }
               </Button>
             </DialogFooter>
           </DialogContent>

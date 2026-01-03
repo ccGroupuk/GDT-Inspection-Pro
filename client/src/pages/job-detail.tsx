@@ -1554,21 +1554,27 @@ export default function JobDetail() {
                   <div className="p-4 rounded-lg bg-muted/50">
                     <div className="flex items-center justify-between gap-3 mb-3">
                       <span className="text-sm font-medium">
-                        {scheduleProposal.proposedByRole === "client" ? "Client Requested Date" : "Proposed Start Date"}
+                        {scheduleProposal.proposedByRole === "client" ? "Client Requested Date" : 
+                         scheduleProposal.proposedByRole === "partner" ? "Partner Requested Date" : 
+                         "Proposed Start Date"}
                       </span>
                       <Badge variant={
                         scheduleProposal.status === "scheduled" ? "default" :
-                        scheduleProposal.status === "client_countered" ? "secondary" :
+                        scheduleProposal.status === "client_countered" || scheduleProposal.status === "partner_countered" ? "secondary" :
                         scheduleProposal.status === "pending_admin" ? "secondary" :
-                        scheduleProposal.status === "client_declined" ? "destructive" :
+                        scheduleProposal.status === "client_declined" || scheduleProposal.status === "partner_declined" ? "destructive" :
                         scheduleProposal.status === "admin_declined" ? "destructive" :
                         "outline"
                       }>
                         {scheduleProposal.status === "pending_client" && "Awaiting Client Response"}
-                        {scheduleProposal.status === "pending_admin" && "Client Requested - Your Response Needed"}
+                        {scheduleProposal.status === "pending_partner" && "Awaiting Partner Response"}
+                        {scheduleProposal.status === "pending_admin" && (scheduleProposal.proposedByRole === "partner" ? "Partner Requested - Your Response Needed" : "Client Requested - Your Response Needed")}
                         {scheduleProposal.status === "client_accepted" && "Client Accepted"}
+                        {scheduleProposal.status === "partner_accepted" && "Partner Accepted"}
                         {scheduleProposal.status === "client_countered" && "Client Counter-Proposed"}
+                        {scheduleProposal.status === "partner_countered" && "Partner Counter-Proposed"}
                         {scheduleProposal.status === "client_declined" && "Client Declined"}
+                        {scheduleProposal.status === "partner_declined" && "Partner Declined"}
                         {scheduleProposal.status === "admin_declined" && "Declined"}
                         {scheduleProposal.status === "scheduled" && "Scheduled"}
                       </Badge>
@@ -1577,7 +1583,9 @@ export default function JobDetail() {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <p className="text-muted-foreground">
-                          {scheduleProposal.proposedByRole === "client" ? "Client's Requested Date" : "Your Proposed Date"}
+                          {scheduleProposal.proposedByRole === "client" ? "Client's Requested Date" : 
+                           scheduleProposal.proposedByRole === "partner" ? "Partner's Requested Date" :
+                           "Your Proposed Date"}
                         </p>
                         <p className="font-medium">{new Date(scheduleProposal.proposedStartDate).toLocaleDateString()}</p>
                         {scheduleProposal.proposedEndDate && (
@@ -1590,7 +1598,7 @@ export default function JobDetail() {
                       {scheduleProposal.counterProposedDate && (
                         <div>
                           <p className="text-muted-foreground">
-                            {scheduleProposal.proposedByRole === "client" ? "Your Counter Date" : "Client's Counter Date"}
+                            {scheduleProposal.proposedByRole === "admin" ? (scheduleProposal.status?.includes("partner") ? "Partner's Counter Date" : "Client's Counter Date") : "Your Counter Date"}
                           </p>
                           <p className="font-medium">{new Date(scheduleProposal.counterProposedDate).toLocaleDateString()}</p>
                           {scheduleProposal.counterReason && (
@@ -1618,16 +1626,16 @@ export default function JobDetail() {
                             response: "accepted" 
                           })}
                           disabled={adminRespondToClientProposalMutation.isPending}
-                          data-testid="button-accept-client-date"
+                          data-testid="button-accept-requested-date"
                         >
                           <CheckCircle className="w-3 h-3 mr-1" />
-                          Accept Client's Date
+                          Accept {scheduleProposal.proposedByRole === "partner" ? "Partner's" : "Client's"} Date
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => setScheduleDialogOpen(true)}
-                          data-testid="button-counter-client-date"
+                          data-testid="button-counter-requested-date"
                         >
                           Suggest Different Date
                         </Button>
@@ -1639,14 +1647,15 @@ export default function JobDetail() {
                             response: "declined" 
                           })}
                           disabled={adminRespondToClientProposalMutation.isPending}
-                          data-testid="button-decline-client-date"
+                          data-testid="button-decline-requested-date"
                         >
                           <X className="w-3 h-3 mr-1" />
                           Decline
                         </Button>
                       </>
                     )}
-                    {(scheduleProposal.status === "client_countered" || scheduleProposal.status === "client_accepted") && (
+                    {(scheduleProposal.status === "client_countered" || scheduleProposal.status === "client_accepted" || 
+                      scheduleProposal.status === "partner_countered" || scheduleProposal.status === "partner_accepted") && (
                       <>
                         <Button
                           size="sm"
@@ -1655,7 +1664,7 @@ export default function JobDetail() {
                           data-testid="button-confirm-counter"
                         >
                           <CheckCircle className="w-3 h-3 mr-1" />
-                          Accept Client's Date
+                          Accept {scheduleProposal.status?.includes("partner") ? "Partner's" : "Client's"} Date
                         </Button>
                         <Button
                           size="sm"
@@ -1667,7 +1676,8 @@ export default function JobDetail() {
                         </Button>
                       </>
                     )}
-                    {(scheduleProposal.status === "client_declined" || scheduleProposal.status === "admin_declined") && (
+                    {(scheduleProposal.status === "client_declined" || scheduleProposal.status === "admin_declined" ||
+                      scheduleProposal.status === "partner_declined") && (
                       <Button
                         size="sm"
                         variant="outline"

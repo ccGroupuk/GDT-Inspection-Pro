@@ -3614,6 +3614,165 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     }
   });
 
+  // Get active schedule proposal for a job (partner portal)
+  app.get("/api/partner-portal/jobs/:jobId/schedule-proposal", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      // Get active schedule proposal for this job (partner-relevant ones)
+      const proposal = await storage.getActiveScheduleProposal(job.id);
+      res.json(proposal);
+    } catch (error) {
+      console.error("Partner portal get schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to get schedule proposal" });
+    }
+  });
+
+  // Partner requests a start date
+  app.post("/api/partner-portal/jobs/:jobId/request-start-date", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const { proposedStartDate, proposedEndDate, notes } = req.body;
+      
+      if (!proposedStartDate) {
+        return res.status(400).json({ message: "Start date is required" });
+      }
+      
+      // Archive any existing proposal
+      const existingProposal = await storage.getActiveScheduleProposal(job.id);
+      if (existingProposal) {
+        await storage.updateScheduleProposal(existingProposal.id, { isArchived: true });
+      }
+      
+      // Create new schedule proposal from partner
+      const proposal = await storage.createScheduleProposal({
+        jobId: job.id,
+        proposedStartDate: new Date(proposedStartDate),
+        proposedEndDate: proposedEndDate ? new Date(proposedEndDate) : null,
+        status: "pending_admin",
+        proposedByRole: "partner",
+        proposedByPartnerId: access.partnerId,
+        adminNotes: notes || null,
+      });
+      
+      res.json({ proposal });
+    } catch (error) {
+      console.error("Partner portal request start date error:", error);
+      res.status(500).json({ message: "Failed to request start date" });
+    }
+  });
+
+  // Partner responds to admin's schedule proposal
+  app.post("/api/partner-portal/jobs/:jobId/respond-schedule-proposal", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getPartnerPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.partnerId !== access.partnerId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const proposal = await storage.getActiveScheduleProposal(job.id);
+      if (!proposal || proposal.status !== "pending_partner") {
+        return res.status(400).json({ message: "No pending proposal to respond to" });
+      }
+      
+      const { response, counterDate, reason } = req.body;
+      
+      if (response === "accepted") {
+        // Partner accepts the proposed date - create calendar event
+        const eventDate = proposal.proposedStartDate;
+        
+        const calendarEvent = await storage.createCalendarEvent({
+          title: `Project Start: ${job.jobNumber}`,
+          jobId: job.id,
+          partnerId: job.partnerId || undefined,
+          startDate: eventDate,
+          endDate: proposal.proposedEndDate || eventDate,
+          allDay: true,
+          eventType: "project_start",
+          teamType: "partner",
+          status: "confirmed",
+          confirmedByAdmin: true,
+          confirmedAt: new Date(),
+        });
+
+        const updatedProposal = await storage.updateScheduleProposal(proposal.id, {
+          status: "scheduled",
+          clientResponse: "accepted",
+          respondedAt: new Date(),
+          linkedCalendarEventId: calendarEvent.id,
+        });
+
+        // Update job status to scheduled
+        await storage.updateJob(job.id, { status: "scheduled" });
+
+        res.json({ proposal: updatedProposal, calendarEvent });
+      } else if (response === "countered") {
+        if (!counterDate) {
+          return res.status(400).json({ message: "Counter date is required" });
+        }
+
+        const updatedProposal = await storage.updateScheduleProposal(proposal.id, {
+          status: "partner_countered",
+          counterProposedDate: new Date(counterDate),
+          counterReason: reason || null,
+          respondedAt: new Date(),
+        });
+
+        res.json({ proposal: updatedProposal });
+      } else if (response === "declined") {
+        const updatedProposal = await storage.updateScheduleProposal(proposal.id, {
+          status: "partner_declined",
+          counterReason: reason || null,
+          respondedAt: new Date(),
+        });
+
+        res.json({ proposal: updatedProposal });
+      } else {
+        return res.status(400).json({ message: "Invalid response type" });
+      }
+    } catch (error) {
+      console.error("Partner portal respond to schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to respond to schedule proposal" });
+    }
+  });
+
   // Partner portal auth check endpoint
   app.get("/api/partner-portal/auth/me", async (req, res) => {
     try {

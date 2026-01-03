@@ -877,7 +877,10 @@ export const jobScheduleProposals = pgTable("job_schedule_proposals", {
   status: text("status").notNull().default("pending_client"),
   
   // Who proposed this date
-  proposedByRole: text("proposed_by_role").notNull().default("admin"), // admin, client
+  proposedByRole: text("proposed_by_role").notNull().default("admin"), // admin, client, partner
+  
+  // Partner who proposed (if proposedByRole === "partner")
+  proposedByPartnerId: varchar("proposed_by_partner_id").references(() => tradePartners.id),
   
   // Client response
   clientResponse: text("client_response"), // accepted, declined
@@ -916,12 +919,16 @@ export type JobScheduleProposal = typeof jobScheduleProposals.$inferSelect;
 // Schedule proposal statuses
 export const SCHEDULE_PROPOSAL_STATUSES = [
   { value: "pending_client", label: "Awaiting Client", description: "Waiting for client response" },
-  { value: "pending_admin", label: "Awaiting Admin", description: "Client requested date - waiting for admin response" },
+  { value: "pending_partner", label: "Awaiting Partner", description: "Waiting for partner response" },
+  { value: "pending_admin", label: "Awaiting Admin", description: "Client/Partner requested date - waiting for admin response" },
   { value: "client_accepted", label: "Client Accepted", description: "Client accepted proposed date" },
   { value: "client_declined", label: "Client Declined", description: "Client declined without alternative" },
   { value: "client_countered", label: "Client Countered", description: "Client suggested alternative date" },
-  { value: "admin_confirmed", label: "Admin Confirmed", description: "Admin confirmed client's counter" },
-  { value: "admin_declined", label: "Admin Declined", description: "Admin declined client's requested date" },
+  { value: "partner_accepted", label: "Partner Accepted", description: "Partner accepted proposed date" },
+  { value: "partner_declined", label: "Partner Declined", description: "Partner declined proposed date" },
+  { value: "partner_countered", label: "Partner Countered", description: "Partner suggested alternative date" },
+  { value: "admin_confirmed", label: "Admin Confirmed", description: "Admin confirmed counter proposal" },
+  { value: "admin_declined", label: "Admin Declined", description: "Admin declined requested date" },
   { value: "scheduled", label: "Scheduled", description: "Date confirmed and added to calendar" },
 ] as const;
 
