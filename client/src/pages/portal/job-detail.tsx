@@ -122,6 +122,8 @@ interface PortalJobDetail {
   changeOrders: PortalChangeOrder[];
   totalWithChangeOrders: string | null;
   hideClientCostBreakdown?: boolean;
+  depositRequired?: boolean;
+  depositType?: string | null;
   depositReceived?: boolean;
   depositAmount?: string | null;
 }
@@ -613,6 +615,35 @@ export default function PortalJobDetail() {
                             £{quoteTotals.grandTotal.toFixed(2)}
                           </span>
                         </div>
+
+                        {job.depositRequired && (
+                          <div className="flex justify-between pt-2 border-t border-border">
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">
+                                Deposit {job.depositType === "percentage" ? `(${job.depositAmount ? ((Number(job.depositAmount) / quoteTotals.grandTotal) * 100).toFixed(0) : 0}%)` : ""}
+                              </span>
+                              {job.depositReceived && (
+                                <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Paid
+                                </Badge>
+                              )}
+                            </div>
+                            <span className={`font-mono font-semibold ${job.depositReceived ? 'text-green-600 dark:text-green-400' : 'text-primary'}`}>
+                              £{Number(job.depositAmount || 0).toFixed(2)}
+                              {!job.depositReceived && ' (Due)'}
+                            </span>
+                          </div>
+                        )}
+
+                        {job.depositRequired && job.depositReceived && (
+                          <div className="flex justify-between pt-2 border-t border-border bg-green-50 dark:bg-green-900/20 -mx-4 px-4 py-2 rounded-b-lg">
+                            <span className="font-semibold text-green-700 dark:text-green-300">Balance Due</span>
+                            <span className="font-mono font-semibold text-lg text-green-700 dark:text-green-300">
+                              £{Math.max(quoteTotals.grandTotal - Number(job.depositAmount || 0), 0).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
 
