@@ -4,6 +4,7 @@ import {
   jobs, type Job, type InsertJob,
   tasks, type Task, type InsertTask,
   quoteItems, type QuoteItem, type InsertQuoteItem,
+  jobPartners, type JobPartner, type InsertJobPartner,
   clientPortalAccess, type ClientPortalAccess, type InsertClientPortalAccess,
   clientInvites, type ClientInvite, type InsertClientInvite,
   paymentRequests, type PaymentRequest, type InsertPaymentRequest,
@@ -120,6 +121,13 @@ export interface IStorage {
   updateQuoteItem(id: string, item: Partial<InsertQuoteItem>): Promise<QuoteItem | undefined>;
   deleteQuoteItem(id: string): Promise<boolean>;
   deleteQuoteItemsByJob(jobId: string): Promise<boolean>;
+
+  // Job Partners (multiple partners per job)
+  getJobPartners(jobId: string): Promise<JobPartner[]>;
+  getJobPartner(id: string): Promise<JobPartner | undefined>;
+  createJobPartner(partner: InsertJobPartner): Promise<JobPartner>;
+  updateJobPartner(id: string, partner: Partial<InsertJobPartner>): Promise<JobPartner | undefined>;
+  deleteJobPartner(id: string): Promise<boolean>;
 
   // Client Portal
   getClientPortalAccess(contactId: string): Promise<ClientPortalAccess | undefined>;
@@ -892,6 +900,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteQuoteItemsByJob(jobId: string): Promise<boolean> {
     await db.delete(quoteItems).where(eq(quoteItems.jobId, jobId));
+    return true;
+  }
+
+  // Job Partners (multiple partners per job)
+  async getJobPartners(jobId: string): Promise<JobPartner[]> {
+    return db.select().from(jobPartners).where(eq(jobPartners.jobId, jobId)).orderBy(asc(jobPartners.createdAt));
+  }
+
+  async getJobPartner(id: string): Promise<JobPartner | undefined> {
+    const [partner] = await db.select().from(jobPartners).where(eq(jobPartners.id, id));
+    return partner || undefined;
+  }
+
+  async createJobPartner(partner: InsertJobPartner): Promise<JobPartner> {
+    const [created] = await db.insert(jobPartners).values(partner).returning();
+    return created;
+  }
+
+  async updateJobPartner(id: string, partner: Partial<InsertJobPartner>): Promise<JobPartner | undefined> {
+    const [updated] = await db.update(jobPartners).set(partner).where(eq(jobPartners.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteJobPartner(id: string): Promise<boolean> {
+    await db.delete(jobPartners).where(eq(jobPartners.id, id));
     return true;
   }
 

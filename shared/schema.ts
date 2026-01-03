@@ -133,11 +133,46 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
   }),
   tasks: many(tasks),
   quoteItems: many(quoteItems),
+  jobPartners: many(jobPartners),
 }));
 
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, createdAt: true, updatedAt: true, jobNumber: true });
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Job = typeof jobs.$inferSelect;
+
+// Job Partners - for assigning multiple partners to a single job with individual charge settings
+export const jobPartners = pgTable("job_partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
+  
+  // Partner-specific charge settings
+  chargeType: text("charge_type").default("fixed"), // percentage or fixed
+  chargeAmount: decimal("charge_amount", { precision: 10, scale: 2 }),
+  
+  // What this partner is handling
+  notes: text("notes"),
+  
+  // Status tracking
+  status: text("status").default("assigned"), // assigned, in_progress, completed
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const jobPartnersRelations = relations(jobPartners, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobPartners.jobId],
+    references: [jobs.id],
+  }),
+  partner: one(tradePartners, {
+    fields: [jobPartners.partnerId],
+    references: [tradePartners.id],
+  }),
+}));
+
+export const insertJobPartnerSchema = createInsertSchema(jobPartners).omit({ id: true, createdAt: true });
+export type InsertJobPartner = z.infer<typeof insertJobPartnerSchema>;
+export type JobPartner = typeof jobPartners.$inferSelect;
 
 // Tasks & Follow-Ups
 export const tasks = pgTable("tasks", {

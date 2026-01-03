@@ -1787,6 +1787,64 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     }
   });
 
+  // ==================== JOB PARTNERS (MULTI-PARTNER SUPPORT) ====================
+
+  // Get all partners assigned to a job
+  app.get("/api/jobs/:jobId/partners", async (req, res) => {
+    try {
+      const partners = await storage.getJobPartners(req.params.jobId);
+      // Enrich with partner details
+      const allPartners = await storage.getTradePartners();
+      const enrichedPartners = partners.map(jp => ({
+        ...jp,
+        partner: allPartners.find(p => p.id === jp.partnerId),
+      }));
+      res.json(enrichedPartners);
+    } catch (error) {
+      console.error("Get job partners error:", error);
+      res.status(500).json({ message: "Failed to fetch job partners" });
+    }
+  });
+
+  // Add a partner to a job
+  app.post("/api/jobs/:jobId/partners", async (req, res) => {
+    try {
+      const jobPartner = await storage.createJobPartner({
+        ...req.body,
+        jobId: req.params.jobId,
+      });
+      res.status(201).json(jobPartner);
+    } catch (error) {
+      console.error("Add job partner error:", error);
+      res.status(500).json({ message: "Failed to add partner to job" });
+    }
+  });
+
+  // Update a job partner assignment
+  app.patch("/api/job-partners/:id", async (req, res) => {
+    try {
+      const jobPartner = await storage.updateJobPartner(req.params.id, req.body);
+      if (!jobPartner) {
+        return res.status(404).json({ message: "Job partner not found" });
+      }
+      res.json(jobPartner);
+    } catch (error) {
+      console.error("Update job partner error:", error);
+      res.status(500).json({ message: "Failed to update job partner" });
+    }
+  });
+
+  // Remove a partner from a job
+  app.delete("/api/job-partners/:id", async (req, res) => {
+    try {
+      await storage.deleteJobPartner(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete job partner error:", error);
+      res.status(500).json({ message: "Failed to remove partner from job" });
+    }
+  });
+
   // ==================== INVOICES ====================
 
   // Get all invoices for a job
