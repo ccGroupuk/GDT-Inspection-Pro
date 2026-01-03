@@ -3137,7 +3137,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         return res.status(400).json({ message: "Survey is not awaiting your response" });
       }
       
-      const { response, proposedDate, proposedTime, notes } = req.body;
+      const { response, counterDate, counterTime, notes } = req.body;
       
       if (!response || !["accept", "decline", "counter"].includes(response)) {
         return res.status(400).json({ message: "Invalid response type" });
@@ -3191,12 +3191,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       } else if (response === "decline") {
         updateData.bookingStatus = "client_declined";
       } else if (response === "counter") {
-        if (!proposedDate) {
+        if (!counterDate) {
           return res.status(400).json({ message: "Alternative date is required" });
         }
         updateData.bookingStatus = "client_counter";
-        updateData.clientProposedDate = new Date(proposedDate);
-        updateData.clientProposedTime = proposedTime || null;
+        updateData.clientProposedDate = new Date(counterDate);
+        updateData.clientProposedTime = counterTime || null;
       }
       
       const updated = await storage.updateJobSurvey(req.params.id, updateData);
@@ -3786,7 +3786,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           
           // Check if client has portal access
           const portalAccess = await storage.getClientPortalAccess(contact.id);
-          if (!portalAccess?.isActive) return;
+          if (!portalAccess?.isActive || !portalAccess.accessToken) return;
           
           const partner = await storage.getTradePartner(survey.partnerId!);
           const baseUrl = process.env.REPLIT_DEV_DOMAIN 
