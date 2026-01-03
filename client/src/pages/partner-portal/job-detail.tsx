@@ -675,25 +675,59 @@ export default function PartnerPortalJobDetail() {
                     )}
                     
                     {/* Only show request button if no pending request */}
-                    {(!paymentRequests || !paymentRequests.some(r => r.approvalStatus === "pending")) && (
-                      <Button 
-                        className="w-full"
-                        onClick={() => {
-                          setPaymentAmount(job.partnerCharge || "");
-                          setRequestPaymentDialogOpen(true);
-                        }}
-                        data-testid="button-request-payment"
-                      >
-                        <Banknote className="w-4 h-4 mr-2" />
-                        Request Payment
-                      </Button>
-                    )}
-                    
-                    {job.partnerCharge && (
-                      <p className="text-xs text-muted-foreground text-center">
-                        Agreed rate for this job: £{parseFloat(job.partnerCharge).toFixed(2)}
-                      </p>
-                    )}
+                    {(() => {
+                      // Calculate actual deposit value based on depositType
+                      const partnerTotal = parseFloat(job.partnerCharge || "0");
+                      let actualDepositValue = 0;
+                      if (job.depositReceived && job.depositAmount) {
+                        if (job.depositType === "percentage") {
+                          // depositAmount is a percentage, calculate actual value from partnerCharge
+                          actualDepositValue = partnerTotal * (parseFloat(job.depositAmount) / 100);
+                        } else {
+                          // depositAmount is a fixed value
+                          actualDepositValue = parseFloat(job.depositAmount);
+                        }
+                      }
+                      // Sum of already confirmed payments to partner
+                      const confirmedPayments = paymentRequests
+                        ?.filter(r => r.approvalStatus === "confirmed")
+                        .reduce((sum, r) => sum + parseFloat(r.amount), 0) || 0;
+                      const balanceDue = Math.max(partnerTotal - actualDepositValue - confirmedPayments, 0);
+
+                      return (
+                        <>
+                          {(!paymentRequests || !paymentRequests.some(r => r.approvalStatus === "pending")) && (
+                            <Button 
+                              className="w-full"
+                              onClick={() => {
+                                setPaymentAmount(balanceDue.toFixed(2));
+                                setRequestPaymentDialogOpen(true);
+                              }}
+                              data-testid="button-request-payment"
+                            >
+                              <Banknote className="w-4 h-4 mr-2" />
+                              Request Payment
+                            </Button>
+                          )}
+                          
+                          {job.partnerCharge && (
+                            <div className="text-xs text-muted-foreground text-center space-y-1">
+                              <p>Agreed rate: £{partnerTotal.toFixed(2)}</p>
+                              {job.depositReceived && actualDepositValue > 0 && (
+                                <>
+                                  <p className="text-green-600 dark:text-green-400">
+                                    Deposit received: £{actualDepositValue.toFixed(2)}
+                                  </p>
+                                  <p className="font-medium text-foreground">
+                                    Balance due: £{balanceDue.toFixed(2)}
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </>
