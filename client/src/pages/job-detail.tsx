@@ -49,6 +49,7 @@ import {
   PoundSterling,
   Loader2,
   Check,
+  Banknote,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { Job, Contact, TradePartner, Task, QuoteItem, Invoice, JobNote, JobNoteAttachment, JobScheduleProposal, JobSurvey, EmergencyCallout, EmergencyCalloutResponse, ConnectionLink, ChangeOrder, ChangeOrderItem, CatalogItem } from "@shared/schema";
@@ -117,6 +118,11 @@ export default function JobDetail() {
     dueDate?: Date | null;
     status: string;
     showInPortal?: boolean;
+    audience?: string | null;
+    requestedByRole?: string | null;
+    approvalStatus?: string | null;
+    confirmedById?: string | null;
+    confirmedAt?: Date | null;
   }
   const { data: paymentRequests } = useQuery<PaymentRequest[]>({
     queryKey: ["/api/jobs", id, "payment-requests"],
@@ -608,6 +614,34 @@ export default function JobDetail() {
   const hasActiveDepositRequest = paymentRequests?.some(
     pr => pr.type === "deposit" && pr.status !== "paid" && pr.status !== "cancelled"
   );
+
+  // Approve/reject partner payment request mutation
+  const updatePaymentRequestApprovalMutation = useMutation({
+    mutationFn: async ({ requestId, approvalStatus }: { requestId: string; approvalStatus: "marked_paid" | "confirmed" | "rejected" }) => {
+      await apiRequest("PATCH", `/api/payment-requests/${requestId}`, {
+        approvalStatus,
+        ...(approvalStatus === "confirmed" ? { confirmedAt: new Date().toISOString() } : {}),
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "payment-requests"] });
+      if (variables.approvalStatus === "marked_paid") {
+        toast({ title: "Payment marked as processing" });
+      } else if (variables.approvalStatus === "confirmed") {
+        toast({ title: "Payment confirmed" });
+      } else {
+        toast({ title: "Payment request rejected" });
+      }
+    },
+    onError: () => {
+      toast({ title: "Failed to update payment request", variant: "destructive" });
+    },
+  });
+
+  // Get partner payment requests
+  const partnerPaymentRequests = paymentRequests?.filter(
+    pr => pr.type === "partner_payout" && pr.requestedByRole === "partner"
+  ) || [];
 
   const createInvoiceMutation = useMutation({
     mutationFn: async (type: "quote" | "invoice") => {
@@ -1391,6 +1425,84 @@ export default function JobDetail() {
                         )}
                       </div>
                     </div>
+                    
+                    {/* Partner Payment Requests */}
+                    {partnerPaymentRequests.length > 0 && (
+                      <div className="mt-4 pt-4 border-t">
+                        <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                          <Banknote className="w-4 h-4" />
+                          Partner Payment Requests
+                        </h4>
+                        <div className="space-y-2">
+                          {partnerPaymentRequests.map((req) => (
+                            <div key={req.id} className="p-3 rounded-lg bg-muted/50">
+                              <div className="flex items-center justify-between gap-3 mb-2">
+                                <div>
+                                  <span className="font-medium">£{parseFloat(req.amount).toFixed(2)}</span>
+                                  {req.description && (
+                                    <p className="text-xs text-muted-foreground">{req.description}</p>
+                                  )}
+                                </div>
+                                <Badge variant={
+                                  req.approvalStatus === "confirmed" ? "default" :
+                                  req.approvalStatus === "marked_paid" ? "secondary" :
+                                  req.approvalStatus === "rejected" ? "destructive" :
+                                  "outline"
+                                }>
+                                  {req.approvalStatus === "confirmed" ? "Paid" :
+                                   req.approvalStatus === "marked_paid" ? "Processing" :
+                                   req.approvalStatus === "rejected" ? "Rejected" : "Pending"}
+                                </Badge>
+                              </div>
+                              {(!req.approvalStatus || req.approvalStatus === "pending") && (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => updatePaymentRequestApprovalMutation.mutate({ 
+                                      requestId: req.id, 
+                                      approvalStatus: "marked_paid" 
+                                    })}
+                                    disabled={updatePaymentRequestApprovalMutation.isPending}
+                                    data-testid={`button-mark-processing-${req.id}`}
+                                  >
+                                    <Check className="w-3 h-3 mr-1" />
+                                    Mark Processing
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => updatePaymentRequestApprovalMutation.mutate({ 
+                                      requestId: req.id, 
+                                      approvalStatus: "rejected" 
+                                    })}
+                                    disabled={updatePaymentRequestApprovalMutation.isPending}
+                                    data-testid={`button-reject-payment-${req.id}`}
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    Reject
+                                  </Button>
+                                </div>
+                              )}
+                              {req.approvalStatus === "marked_paid" && (
+                                <Button
+                                  size="sm"
+                                  className="mt-2"
+                                  onClick={() => updatePaymentRequestApprovalMutation.mutate({ 
+                                    requestId: req.id, 
+                                    approvalStatus: "confirmed" 
+                                  })}
+                                  disabled={updatePaymentRequestApprovalMutation.isPending}
+                                  data-testid={`button-confirm-payment-${req.id}`}
+                                >
+                                  <Check className="w-3 h-3 mr-1" />
+                                  Confirm Paid
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

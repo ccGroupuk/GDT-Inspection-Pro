@@ -1297,6 +1297,77 @@ export default function PartnerPortalJobDetail() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Request Payment Dialog */}
+        <Dialog open={requestPaymentDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            setRequestPaymentDialogOpen(false);
+            setPaymentAmount("");
+            setPaymentDescription("");
+          }
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Banknote className="w-5 h-5 text-primary" />
+                Request Payment
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                Submit a payment request for your completed work on this job.
+              </p>
+              <div className="space-y-2">
+                <Label>Amount (£)</Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*\.?[0-9]*"
+                  placeholder="e.g., 500.00"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  data-testid="input-payment-amount"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Description (Optional)</Label>
+                <Textarea
+                  placeholder="Brief description of completed work..."
+                  value={paymentDescription}
+                  onChange={(e) => setPaymentDescription(e.target.value)}
+                  className="min-h-[80px]"
+                  data-testid="textarea-payment-description"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setRequestPaymentDialogOpen(false)}
+                data-testid="button-cancel-payment-request"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const amount = parseFloat(paymentAmount);
+                  if (!paymentAmount || isNaN(amount) || amount <= 0) {
+                    toast({ title: "Please enter a valid amount", variant: "destructive" });
+                    return;
+                  }
+                  requestPaymentMutation.mutate({
+                    amount: paymentAmount,
+                    description: paymentDescription || undefined,
+                  });
+                }}
+                disabled={requestPaymentMutation.isPending}
+                data-testid="button-confirm-payment-request"
+              >
+                {requestPaymentMutation.isPending ? "Submitting..." : "Submit Request"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
