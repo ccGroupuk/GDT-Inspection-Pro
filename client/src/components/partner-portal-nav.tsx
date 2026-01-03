@@ -50,7 +50,7 @@ export function PartnerPortalNav({ activeTab = "jobs" }: PartnerPortalNavProps) 
   });
 
   const tabs = [
-    { id: "jobs", label: "Jobs", icon: Briefcase, href: "/partner-portal", count: counts?.jobs },
+    { id: "jobs", label: "Jobs", icon: Briefcase, href: "/partner-portal/jobs", count: counts?.jobs },
     { id: "surveys", label: "Surveys", icon: ClipboardCheck, href: "/partner-portal/surveys", count: counts?.surveys },
     { id: "quotes", label: "Quotes", icon: FileText, href: "/partner-portal/quotes", count: 0 },
     { id: "calendar", label: "Calendar", icon: Calendar, href: "/partner-portal/calendar", count: 0 },
@@ -87,8 +87,8 @@ export function PartnerPortalNav({ activeTab = "jobs" }: PartnerPortalNavProps) 
           <div className="flex items-center gap-1 overflow-x-auto">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id || 
-                (tab.id === "jobs" && location === "/partner-portal") ||
-                (tab.id !== "jobs" && location === tab.href);
+                location === tab.href ||
+                (tab.id === "jobs" && location.startsWith("/partner-portal/jobs"));
               
               return (
                 <Link key={tab.id} href={tab.href}>
