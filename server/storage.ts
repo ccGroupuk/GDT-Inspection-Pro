@@ -1226,10 +1226,19 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(asc(calendarEvents.startDate));
     
-    // Partner can only see their own partner events or hybrid events they're part of
+    // Get all jobs for this partner to check job-based assignments
+    const partnerJobs = await db.select()
+      .from(jobs)
+      .where(eq(jobs.partnerId, partnerId));
+    const partnerJobIds = new Set(partnerJobs.map(j => j.id));
+    
+    // Partner can see:
+    // 1. Events directly assigned to them via partnerId (for partner/hybrid events)
+    // 2. Events linked to jobs that are assigned to this partner
     return allEvents.filter(e => 
       (e.teamType === "partner" && e.partnerId === partnerId) ||
-      (e.teamType === "hybrid" && e.partnerId === partnerId)
+      (e.teamType === "hybrid" && e.partnerId === partnerId) ||
+      (e.jobId && partnerJobIds.has(e.jobId))
     );
   }
 
