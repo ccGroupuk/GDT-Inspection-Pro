@@ -948,27 +948,27 @@ export default function JobDetail() {
     : null;
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
-        <div className="flex items-center gap-3">
+    <div className="p-4 sm:p-6">
+      <div className="flex items-center justify-between gap-3 sm:gap-4 flex-wrap mb-6">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <Link href="/jobs">
-            <Button variant="ghost" size="icon" data-testid="button-back">
+            <Button variant="ghost" size="icon" data-testid="button-back" className="shrink-0">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{job.jobNumber}</h1>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-semibold">{job.jobNumber}</h1>
               <StatusBadge status={job.status} />
             </div>
-            <p className="text-sm text-muted-foreground">{job.serviceType}</p>
+            <p className="text-sm text-muted-foreground truncate">{job.serviceType}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Link href={`/jobs/${id}/edit`}>
             <Button variant="outline" className="gap-2" data-testid="button-edit-job">
               <Edit className="w-4 h-4" />
-              Edit
+              <span className="hidden sm:inline">Edit</span>
             </Button>
           </Link>
           <Button 

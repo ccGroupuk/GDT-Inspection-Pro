@@ -53,19 +53,20 @@ export default function Jobs() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 pb-4 border-b border-border">
-        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
-          <h1 className="text-2xl font-semibold">Jobs Pipeline</h1>
+      <div className="p-4 sm:p-6 pb-4 border-b border-border">
+        <div className="flex items-center justify-between gap-3 sm:gap-4 flex-wrap mb-4">
+          <h1 className="text-xl sm:text-2xl font-semibold">Jobs Pipeline</h1>
           <Link href="/jobs/new">
             <Button className="gap-2" data-testid="button-create-job">
               <Plus className="w-4 h-4" />
-              New Job
+              <span className="hidden sm:inline">New Job</span>
+              <span className="sm:hidden">New</span>
             </Button>
           </Link>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <div className="relative flex-1 min-w-0 w-full sm:w-auto sm:min-w-[200px] sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search jobs..."
@@ -77,8 +78,8 @@ export default function Jobs() {
           </div>
 
           <Select value={deliveryFilter} onValueChange={setDeliveryFilter}>
-            <SelectTrigger className="w-[180px]" data-testid="select-delivery-filter">
-              <Filter className="w-4 h-4 mr-2" />
+            <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-delivery-filter">
+              <Filter className="w-4 h-4 mr-2 shrink-0" />
               <SelectValue placeholder="Filter by type" />
             </SelectTrigger>
             <SelectContent>
@@ -89,7 +90,7 @@ export default function Jobs() {
             </SelectContent>
           </Select>
 
-          <div className="flex items-center border border-border rounded-lg overflow-visible">
+          <div className="flex items-center border border-border rounded-lg overflow-visible shrink-0">
             <Button
               variant={view === "kanban" ? "secondary" : "ghost"}
               size="sm"
@@ -130,18 +131,18 @@ export default function Jobs() {
           />
         ) : view === "kanban" ? (
           <ScrollArea className="h-full">
-            <div className="p-6">
-              <div className="flex gap-4" style={{ minWidth: `${kanbanStages.length * 300}px` }}>
+            <div className="p-4 sm:p-6">
+              <div className="flex gap-4" style={{ minWidth: `${kanbanStages.length * 280}px` }}>
                 {kanbanStages.map(stage => {
                   const stageJobs = filteredJobs.filter(j => j.status === stage.value);
                   return (
-                    <div key={stage.value} className="flex flex-col w-72 shrink-0">
+                    <div key={stage.value} className="flex flex-col w-64 sm:w-72 shrink-0">
                       <div className="flex items-center justify-between gap-2 mb-3 px-1">
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${stage.color}`} />
-                          <span className="text-sm font-medium">{stage.label}</span>
+                          <span className="text-sm font-medium truncate">{stage.label}</span>
                         </div>
-                        <Badge variant="secondary" className="text-xs">
+                        <Badge variant="secondary" className="text-xs shrink-0">
                           {stageJobs.length}
                         </Badge>
                       </div>
@@ -164,18 +165,18 @@ export default function Jobs() {
           </ScrollArea>
         ) : (
           <ScrollArea className="h-full">
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <Card>
-                <CardContent className="p-0">
-                  <table className="w-full">
+                <CardContent className="p-0 overflow-x-auto">
+                  <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Job #</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Client</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Service</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Type</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">Value</th>
+                        <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Job #</th>
+                        <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Client</th>
+                        <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hidden sm:table-cell">Service</th>
+                        <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</th>
+                        <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hidden md:table-cell">Type</th>
+                        <th className="px-3 sm:px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">Value</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -183,24 +184,24 @@ export default function Jobs() {
                         const contact = getContact(job.contactId);
                         return (
                           <tr key={job.id} className="border-b border-border last:border-0 hover-elevate">
-                            <td className="px-4 py-3">
+                            <td className="px-3 sm:px-4 py-3">
                               <Link href={`/jobs/${job.id}`} className="font-mono text-sm text-primary hover:underline" data-testid={`link-job-${job.id}`}>
                                 {job.jobNumber}
                               </Link>
                             </td>
-                            <td className="px-4 py-3 text-sm">{contact?.name || "Unknown"}</td>
-                            <td className="px-4 py-3 text-sm text-muted-foreground">{job.serviceType}</td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 sm:px-4 py-3 text-sm truncate max-w-[120px] sm:max-w-none">{contact?.name || "Unknown"}</td>
+                            <td className="px-3 sm:px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">{job.serviceType}</td>
+                            <td className="px-3 sm:px-4 py-3">
                               <Badge variant="outline" className="text-xs">
                                 {PIPELINE_STAGES.find(s => s.value === job.status)?.label || job.status}
                               </Badge>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 sm:px-4 py-3 hidden md:table-cell">
                               <Badge variant="secondary" className="text-xs">
                                 {DELIVERY_TYPES.find(t => t.value === job.deliveryType)?.label || job.deliveryType}
                               </Badge>
                             </td>
-                            <td className="px-4 py-3 text-right font-mono text-sm font-semibold">
+                            <td className="px-3 sm:px-4 py-3 text-right font-mono text-sm font-semibold">
                               {job.quotedValue ? `£${Number(job.quotedValue).toLocaleString()}` : "-"}
                             </td>
                           </tr>
