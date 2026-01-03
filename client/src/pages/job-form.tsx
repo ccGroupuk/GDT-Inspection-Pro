@@ -473,16 +473,18 @@ export default function JobForm() {
 
   if (isLoading) {
     return (
-      <div className="p-4 sm:p-6">
-        <div className="flex items-center gap-2 sm:gap-3 mb-6">
-          <Link href="/jobs">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-          </Link>
-          <h1 className="text-xl sm:text-2xl font-semibold">{isEdit ? "Edit Job" : "New Job"}</h1>
+      <div className="h-full overflow-auto">
+        <div className="p-4 sm:p-6">
+          <div className="flex items-center gap-2 sm:gap-3 mb-6">
+            <Link href="/jobs">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            </Link>
+            <h1 className="text-xl sm:text-2xl font-semibold">{isEdit ? "Edit Job" : "New Job"}</h1>
+          </div>
+          <FormSkeleton />
         </div>
-        <FormSkeleton />
       </div>
     );
   }
@@ -492,17 +494,18 @@ export default function JobForm() {
   const activePartners = partners.filter(p => p.isActive);
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex items-center gap-2 sm:gap-3 mb-6">
-        <Link href="/jobs">
-          <Button variant="ghost" size="icon" data-testid="button-back">
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-        </Link>
-        <h1 className="text-xl sm:text-2xl font-semibold">{isEdit ? "Edit Job" : "New Job"}</h1>
-      </div>
+    <div className="h-full overflow-auto">
+      <div className="p-4 sm:p-6 pb-24">
+        <div className="flex items-center gap-2 sm:gap-3 mb-6">
+          <Link href="/jobs">
+            <Button variant="ghost" size="icon" data-testid="button-back">
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          </Link>
+          <h1 className="text-xl sm:text-2xl font-semibold">{isEdit ? "Edit Job" : "New Job"}</h1>
+        </div>
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-4xl w-full">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-4xl w-full">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Client & Job Details</CardTitle>
@@ -1593,6 +1596,7 @@ export default function JobForm() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
