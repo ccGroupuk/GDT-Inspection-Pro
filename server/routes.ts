@@ -3708,7 +3708,14 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       }
       
       const proposal = await storage.getActiveScheduleProposal(job.id);
-      if (!proposal || proposal.status !== "pending_partner") {
+      // Partner can respond when:
+      // 1. Status is pending_partner (admin proposed to partner)
+      // 2. Status is pending_admin AND proposedByRole is "client" (client proposed, partner can also respond)
+      const canPartnerRespond = proposal && (
+        proposal.status === "pending_partner" ||
+        (proposal.status === "pending_admin" && proposal.proposedByRole === "client")
+      );
+      if (!proposal || !canPartnerRespond) {
         return res.status(400).json({ message: "No pending proposal to respond to" });
       }
       

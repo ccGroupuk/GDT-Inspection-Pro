@@ -479,10 +479,10 @@ export default function PartnerPortalJobDetail() {
                           </Badge>
                         </div>
                         
-                        {/* Info message when a proposal is pending but not for the partner to respond */}
-                        {(scheduleProposal.status === "pending_admin" && scheduleProposal.proposedByRole !== "partner") && (
+                        {/* Info message when a client proposed and partner can also respond */}
+                        {(scheduleProposal.status === "pending_admin" && scheduleProposal.proposedByRole === "client") && (
                           <p className="text-sm text-muted-foreground mb-3">
-                            A start date request is being reviewed. You'll be notified once it's confirmed or if your input is needed.
+                            The client has requested this start date. You can accept, suggest a different date, or wait for the admin to respond.
                           </p>
                         )}
                         
@@ -519,8 +519,9 @@ export default function PartnerPortalJobDetail() {
                         )}
                       </div>
                       
-                      {/* Response buttons when admin proposes */}
-                      {scheduleProposal.status === "pending_partner" && (
+                      {/* Response buttons when admin proposes OR when client proposes (partner can also respond) */}
+                      {(scheduleProposal.status === "pending_partner" || 
+                        (scheduleProposal.status === "pending_admin" && scheduleProposal.proposedByRole === "client")) && (
                         <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm"
