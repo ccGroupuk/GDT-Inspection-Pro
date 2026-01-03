@@ -896,14 +896,15 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   // Dashboard
   app.get("/api/dashboard", async (req, res) => {
     try {
-      const [jobs, contacts, partners, tasks, scheduleResponses] = await Promise.all([
+      const [jobs, contacts, partners, tasks, scheduleResponses, pendingSurveyAcceptances] = await Promise.all([
         storage.getJobs(),
         storage.getContacts(),
         storage.getTradePartners(),
         storage.getTasks(),
         storage.getPendingScheduleResponses(),
+        storage.getPendingSurveyAcceptances(),
       ]);
-      res.json({ jobs, contacts, partners, tasks, scheduleResponses });
+      res.json({ jobs, contacts, partners, tasks, scheduleResponses, pendingSurveyAcceptances });
     } catch (error) {
       console.error("Dashboard error:", error);
       res.status(500).json({ message: "Failed to load dashboard data" });

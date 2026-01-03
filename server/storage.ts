@@ -383,6 +383,7 @@ export interface IStorage {
   getJobSurvey(id: string): Promise<JobSurvey | undefined>;
   getJobSurveysByJob(jobId: string): Promise<JobSurvey[]>;
   getJobSurveysByPartner(partnerId: string): Promise<JobSurvey[]>;
+  getPendingSurveyAcceptances(): Promise<JobSurvey[]>;
   createJobSurvey(survey: InsertJobSurvey): Promise<JobSurvey>;
   updateJobSurvey(id: string, survey: Partial<InsertJobSurvey>): Promise<JobSurvey | undefined>;
   deleteJobSurvey(id: string): Promise<boolean>;
@@ -2045,6 +2046,18 @@ export class DatabaseStorage implements IStorage {
 
   async getJobSurveysByPartner(partnerId: string): Promise<JobSurvey[]> {
     return db.select().from(jobSurveys).where(eq(jobSurveys.partnerId, partnerId)).orderBy(desc(jobSurveys.createdAt));
+  }
+
+  async getPendingSurveyAcceptances(): Promise<JobSurvey[]> {
+    return db.select()
+      .from(jobSurveys)
+      .where(
+        or(
+          eq(jobSurveys.bookingStatus, "client_accepted"),
+          eq(jobSurveys.bookingStatus, "client_counter")
+        )
+      )
+      .orderBy(desc(jobSurveys.clientRespondedAt));
   }
 
   async createJobSurvey(survey: InsertJobSurvey): Promise<JobSurvey> {

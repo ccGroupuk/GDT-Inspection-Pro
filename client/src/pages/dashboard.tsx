@@ -20,12 +20,13 @@ import {
   CalendarClock,
   UserCheck,
   Check,
+  ClipboardCheck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Job, Contact, TradePartner, Task, JobScheduleProposal } from "@shared/schema";
+import type { Job, Contact, TradePartner, Task, JobScheduleProposal, JobSurvey } from "@shared/schema";
 import { ProjectCountdownWidget } from "@/components/ProjectCountdownWidget";
 import DailyQuote from "@/components/DailyQuote"; // DailyQuote is kept as it was not requested for removal.
 
@@ -35,6 +36,7 @@ interface DashboardData {
   partners: TradePartner[];
   tasks: Task[];
   scheduleResponses: JobScheduleProposal[];
+  pendingSurveyAcceptances: JobSurvey[];
 }
 
 export default function Dashboard() {
@@ -67,6 +69,7 @@ export default function Dashboard() {
   const partners = data?.partners || [];
   const tasks = data?.tasks || [];
   const scheduleResponses = data?.scheduleResponses || [];
+  const pendingSurveyAcceptances = data?.pendingSurveyAcceptances || [];
 
   const activeJobs = jobs.filter(j => !["closed", "lost", "paid"].includes(j.status));
   const newEnquiries = jobs.filter(j => j.status === "new_enquiry");
@@ -229,6 +232,68 @@ export default function Dashboard() {
                             ) : (
                               <>Client proposed: {proposal.counterProposedDate ? new Date(proposal.counterProposedDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : 'New date'}</>
                             )}
+                          </span>
+                        </div>
+                      </div>
+                      <Badge variant={isAccepted ? "default" : "secondary"} className={isAccepted ? "bg-green-600" : ""}>
+                        {isAccepted ? "Accepted" : "Counter Proposal"}
+                      </Badge>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {pendingSurveyAcceptances.length > 0 && (
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <ClipboardCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <CardTitle className="text-base font-semibold">Survey Responses</CardTitle>
+              <Badge variant="secondary" className="ml-auto">{pendingSurveyAcceptances.length}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingSurveyAcceptances.map(survey => {
+                const job = jobs.find(j => j.id === survey.jobId);
+                const partner = partners.find(p => p.id === survey.partnerId);
+                const isAccepted = survey.bookingStatus === "client_accepted";
+                const isCountered = survey.bookingStatus === "client_counter";
+                const displayDate = isCountered && survey.clientProposedDate 
+                  ? survey.clientProposedDate 
+                  : survey.proposedDate;
+                
+                return (
+                  <Link key={survey.id} href={`/jobs/${survey.jobId}`}>
+                    <div 
+                      className="flex items-center justify-between gap-4 p-3 rounded-lg bg-background hover-elevate active-elevate-2 cursor-pointer"
+                      data-testid={`notification-survey-${survey.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {isAccepted ? (
+                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400">
+                            <CalendarCheck className="w-4 h-4" />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                            <CalendarClock className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">
+                            {job?.jobNumber || "Unknown"} - Survey
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {isAccepted ? (
+                              <>Client accepted: {displayDate ? new Date(displayDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : 'Date TBC'}</>
+                            ) : (
+                              <>Client proposed: {displayDate ? new Date(displayDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : 'New date'}</>
+                            )}
+                            {partner && <> with {partner.businessName}</>}
                           </span>
                         </div>
                       </div>
