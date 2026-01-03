@@ -492,7 +492,7 @@ export type ClientInvite = typeof clientInvites.$inferSelect;
 export const paymentRequests = pgTable("payment_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id),
-  type: text("type").notNull(), // deposit, balance, milestone
+  type: text("type").notNull(), // deposit, balance, milestone, final, partner_payout
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description"),
   dueDate: timestamp("due_date"),
@@ -500,6 +500,12 @@ export const paymentRequests = pgTable("payment_requests", {
   sentAt: timestamp("sent_at"),
   paidAt: timestamp("paid_at"),
   showInPortal: boolean("show_in_portal").default(true),
+  audience: text("audience").default("client"), // client (for client payments), partner (for partner payout requests)
+  requestedByRole: text("requested_by_role"), // admin, partner
+  requestedById: varchar("requested_by_id"),
+  approvalStatus: text("approval_status").default("pending"), // pending, marked_paid, confirmed, rejected
+  confirmedById: varchar("confirmed_by_id"),
+  confirmedAt: timestamp("confirmed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
