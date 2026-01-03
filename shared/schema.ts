@@ -916,10 +916,12 @@ export type JobScheduleProposal = typeof jobScheduleProposals.$inferSelect;
 // Schedule proposal statuses
 export const SCHEDULE_PROPOSAL_STATUSES = [
   { value: "pending_client", label: "Awaiting Client", description: "Waiting for client response" },
+  { value: "pending_admin", label: "Awaiting Admin", description: "Client requested date - waiting for admin response" },
   { value: "client_accepted", label: "Client Accepted", description: "Client accepted proposed date" },
   { value: "client_declined", label: "Client Declined", description: "Client declined without alternative" },
   { value: "client_countered", label: "Client Countered", description: "Client suggested alternative date" },
   { value: "admin_confirmed", label: "Admin Confirmed", description: "Admin confirmed client's counter" },
+  { value: "admin_declined", label: "Admin Declined", description: "Admin declined client's requested date" },
   { value: "scheduled", label: "Scheduled", description: "Date confirmed and added to calendar" },
 ] as const;
 

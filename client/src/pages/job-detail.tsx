@@ -515,6 +515,32 @@ export default function JobDetail() {
     },
   });
 
+  // Admin respond to client-initiated schedule proposal
+  const adminRespondToClientProposalMutation = useMutation({
+    mutationFn: async (data: { proposalId: string; response: "accepted" | "countered" | "declined"; counterDate?: string; notes?: string }) => {
+      return apiRequest("POST", `/api/schedule-proposals/${data.proposalId}/admin-respond`, {
+        response: data.response,
+        counterDate: data.counterDate,
+        notes: data.notes,
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "schedule-proposals", "active"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar-events"] });
+      if (variables.response === "accepted") {
+        toast({ title: "Client's requested date accepted and added to calendar" });
+      } else if (variables.response === "declined") {
+        toast({ title: "Request declined" });
+      } else {
+        toast({ title: "Alternative date proposed to client" });
+      }
+    },
+    onError: () => {
+      toast({ title: "Failed to respond to schedule request", variant: "destructive" });
+    },
+  });
+
   // Create deposit request mutation
   const createDepositRequestMutation = useMutation({
     mutationFn: async (data: { amount: string; description: string; dueDate?: string; depositType: "fixed" | "percentage"; originalAmount: string }) => {
@@ -1527,24 +1553,32 @@ export default function JobDetail() {
                 <div className="space-y-4">
                   <div className="p-4 rounded-lg bg-muted/50">
                     <div className="flex items-center justify-between gap-3 mb-3">
-                      <span className="text-sm font-medium">Proposed Start Date</span>
+                      <span className="text-sm font-medium">
+                        {scheduleProposal.proposedByRole === "client" ? "Client Requested Date" : "Proposed Start Date"}
+                      </span>
                       <Badge variant={
                         scheduleProposal.status === "scheduled" ? "default" :
                         scheduleProposal.status === "client_countered" ? "secondary" :
+                        scheduleProposal.status === "pending_admin" ? "secondary" :
                         scheduleProposal.status === "client_declined" ? "destructive" :
+                        scheduleProposal.status === "admin_declined" ? "destructive" :
                         "outline"
                       }>
                         {scheduleProposal.status === "pending_client" && "Awaiting Client Response"}
+                        {scheduleProposal.status === "pending_admin" && "Client Requested - Your Response Needed"}
                         {scheduleProposal.status === "client_accepted" && "Client Accepted"}
                         {scheduleProposal.status === "client_countered" && "Client Counter-Proposed"}
                         {scheduleProposal.status === "client_declined" && "Client Declined"}
+                        {scheduleProposal.status === "admin_declined" && "Declined"}
                         {scheduleProposal.status === "scheduled" && "Scheduled"}
                       </Badge>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <p className="text-muted-foreground">Your Proposed Date</p>
+                        <p className="text-muted-foreground">
+                          {scheduleProposal.proposedByRole === "client" ? "Client's Requested Date" : "Your Proposed Date"}
+                        </p>
                         <p className="font-medium">{new Date(scheduleProposal.proposedStartDate).toLocaleDateString()}</p>
                         {scheduleProposal.proposedEndDate && (
                           <p className="text-xs text-muted-foreground">
@@ -1555,7 +1589,9 @@ export default function JobDetail() {
                       
                       {scheduleProposal.counterProposedDate && (
                         <div>
-                          <p className="text-muted-foreground">Client's Counter Date</p>
+                          <p className="text-muted-foreground">
+                            {scheduleProposal.proposedByRole === "client" ? "Your Counter Date" : "Client's Counter Date"}
+                          </p>
                           <p className="font-medium">{new Date(scheduleProposal.counterProposedDate).toLocaleDateString()}</p>
                           {scheduleProposal.counterReason && (
                             <p className="text-xs text-muted-foreground mt-1">{scheduleProposal.counterReason}</p>
@@ -1573,7 +1609,44 @@ export default function JobDetail() {
                   
                   {/* Actions based on status */}
                   <div className="flex gap-2 flex-wrap">
-                    {scheduleProposal.status === "client_countered" && (
+                    {scheduleProposal.status === "pending_admin" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => adminRespondToClientProposalMutation.mutate({ 
+                            proposalId: scheduleProposal.id, 
+                            response: "accepted" 
+                          })}
+                          disabled={adminRespondToClientProposalMutation.isPending}
+                          data-testid="button-accept-client-date"
+                        >
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Accept Client's Date
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setScheduleDialogOpen(true)}
+                          data-testid="button-counter-client-date"
+                        >
+                          Suggest Different Date
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => adminRespondToClientProposalMutation.mutate({ 
+                            proposalId: scheduleProposal.id, 
+                            response: "declined" 
+                          })}
+                          disabled={adminRespondToClientProposalMutation.isPending}
+                          data-testid="button-decline-client-date"
+                        >
+                          <X className="w-3 h-3 mr-1" />
+                          Decline
+                        </Button>
+                      </>
+                    )}
+                    {(scheduleProposal.status === "client_countered" || scheduleProposal.status === "client_accepted") && (
                       <>
                         <Button
                           size="sm"
@@ -1594,7 +1667,7 @@ export default function JobDetail() {
                         </Button>
                       </>
                     )}
-                    {scheduleProposal.status === "client_declined" && (
+                    {(scheduleProposal.status === "client_declined" || scheduleProposal.status === "admin_declined") && (
                       <Button
                         size="sm"
                         variant="outline"

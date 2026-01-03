@@ -685,3 +685,110 @@ export async function sendSurveyProposalNotification(
 
   return sendEmail(to, subject, html);
 }
+
+// Schedule proposal notifications - for work start date proposals
+export async function sendScheduleProposalNotification(
+  to: string,
+  clientName: string,
+  jobTitle: string,
+  proposedDate: string,
+  portalUrl: string,
+  accessToken: string,
+  notes?: string
+): Promise<EmailResult> {
+  const subject = `Start Date Proposed - ${jobTitle}`;
+  
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #1a1a2e; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0;">CCC Group</h1>
+        <p style="color: #cccccc; margin: 5px 0 0 0;">Project Start Date</p>
+      </div>
+      
+      <div style="padding: 30px; background-color: #f9f9f9;">
+        <h2 style="color: #333; margin-top: 0;">Hello ${clientName},</h2>
+        
+        <p style="color: #555; line-height: 1.6;">
+          We'd like to schedule a start date for your project. Please review and respond:
+        </p>
+        
+        <div style="background-color: #ffffff; border: 1px solid #4f46e5; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="color: #333; margin-top: 0;">${jobTitle}</h3>
+          <p style="font-size: 20px; color: #4f46e5; font-weight: bold; margin: 15px 0;">
+            Proposed Start: ${proposedDate}
+          </p>
+          ${notes ? `<p style="color: #666; margin: 10px 0; font-style: italic;">${notes}</p>` : ''}
+          <p style="color: #4f46e5; font-weight: bold; margin: 15px 0 0 0;">Your Response Required</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${portalUrl}?token=${accessToken}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            Respond to Start Date
+          </a>
+        </div>
+        
+        <p style="color: #888; font-size: 12px;">
+          Log in to your client portal to accept the date, suggest an alternative, or decline.
+        </p>
+      </div>
+      
+      <div style="background-color: #333; padding: 15px; text-align: center;">
+        <p style="color: #888; font-size: 12px; margin: 0;">
+          Cardiff & Caerphilly Carpentry | CCC Group
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(to, subject, html);
+}
+
+export async function sendScheduleConfirmationNotification(
+  to: string,
+  clientName: string,
+  jobTitle: string,
+  confirmedDate: string,
+  portalUrl: string,
+  accessToken: string
+): Promise<EmailResult> {
+  const subject = `Start Date Confirmed - ${jobTitle}`;
+  
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #1a1a2e; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0;">CCC Group</h1>
+        <p style="color: #cccccc; margin: 5px 0 0 0;">Project Scheduled</p>
+      </div>
+      
+      <div style="padding: 30px; background-color: #f9f9f9;">
+        <h2 style="color: #333; margin-top: 0;">Hello ${clientName},</h2>
+        
+        <p style="color: #555; line-height: 1.6;">
+          Great news! Your project start date has been confirmed:
+        </p>
+        
+        <div style="background-color: #ffffff; border: 1px solid #22c55e; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+          <h3 style="color: #333; margin-top: 0;">${jobTitle}</h3>
+          <p style="font-size: 24px; color: #22c55e; font-weight: bold; margin: 15px 0;">
+            ${confirmedDate}
+          </p>
+          <p style="color: #666; margin: 0;">We look forward to seeing you!</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${portalUrl}?token=${accessToken}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            View in Portal
+          </a>
+        </div>
+      </div>
+      
+      <div style="background-color: #333; padding: 15px; text-align: center;">
+        <p style="color: #888; font-size: 12px; margin: 0;">
+          Cardiff & Caerphilly Carpentry | CCC Group
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(to, subject, html);
+}

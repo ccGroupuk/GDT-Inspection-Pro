@@ -216,6 +216,9 @@ export default function PortalJobDetail() {
   const [counterDialogOpen, setCounterDialogOpen] = useState(false);
   const [counterDate, setCounterDate] = useState("");
   const [counterReason, setCounterReason] = useState("");
+  const [requestBookingDialogOpen, setRequestBookingDialogOpen] = useState(false);
+  const [requestedDate, setRequestedDate] = useState("");
+  const [requestNotes, setRequestNotes] = useState("");
 
   // Fetch active schedule proposal
   const { data: scheduleProposal } = useQuery<ScheduleProposal | null>({
@@ -323,6 +326,37 @@ export default function PortalJobDetail() {
       toast({
         title: "Error",
         description: "Failed to submit alternative date. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Client-initiated booking request
+  const requestBookingMutation = useMutation({
+    mutationFn: async (data: { proposedDate: string; notes?: string }) => {
+      if (!token) throw new Error("No token");
+      const res = await portalApiRequest("POST", `/api/portal/jobs/${jobId}/schedule-proposal`, token, { 
+        proposedDate: new Date(data.proposedDate).toISOString(),
+        notes: data.notes || null,
+      });
+      if (!res.ok) throw new Error("Failed to submit booking request");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs", jobId, "schedule-proposal"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/jobs", jobId] });
+      setRequestBookingDialogOpen(false);
+      setRequestedDate("");
+      setRequestNotes("");
+      toast({
+        title: "Booking Request Submitted",
+        description: "CCC Group will review your requested date and confirm shortly.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to submit booking request. Please try again.",
         variant: "destructive",
       });
     },
@@ -1057,6 +1091,94 @@ export default function PortalJobDetail() {
               </Card>
             )}
 
+            {/* Show client's booking request pending admin approval */}
+            {scheduleProposal && scheduleProposal.status === 'pending_admin' && (
+              <Card className="border-primary/50">
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-primary" />
+                    Your Booking Request
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-4 rounded-lg bg-primary/5">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      We're reviewing your requested start date and will confirm shortly.
+                    </p>
+                    <div className="flex items-center gap-2 text-lg font-semibold">
+                      <Calendar className="w-5 h-5 text-primary" />
+                      <span>
+                        {new Date(scheduleProposal.proposedStartDate).toLocaleDateString('en-GB', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Show admin declined message */}
+            {scheduleProposal && scheduleProposal.status === 'admin_declined' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <X className="w-4 h-4 text-destructive" />
+                    Date Not Available
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-4 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Unfortunately, your requested date is not available. You can request a different date or wait for CCC Group to propose one.
+                    </p>
+                    {scheduleProposal.counterReason && (
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Reason: {scheduleProposal.counterReason}
+                      </p>
+                    )}
+                    <Button 
+                      size="sm"
+                      onClick={() => setRequestBookingDialogOpen(true)}
+                      data-testid="button-request-new-date"
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Request Different Date
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Allow client to request booking date when quote is accepted and no proposal exists */}
+            {!scheduleProposal && (job.status === 'quote_accepted' || job.status === 'awaiting_deposit') && (
+              <Card className="border-primary/50">
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Schedule Your Project
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Great news! Your quote has been accepted. Would you like to request a preferred start date for your project?
+                    </p>
+                    <Button 
+                      onClick={() => setRequestBookingDialogOpen(true)}
+                      data-testid="button-request-booking-date"
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Request Start Date
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {job.paymentRequests && job.paymentRequests.length > 0 && (
               <Card>
                 <CardHeader>
@@ -1151,6 +1273,58 @@ export default function PortalJobDetail() {
               data-testid="button-submit-counter"
             >
               Submit Suggestion
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Booking Date Dialog */}
+      <Dialog open={requestBookingDialogOpen} onOpenChange={setRequestBookingDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Start Date</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Let us know your preferred start date for the project. We'll review and confirm as soon as possible.
+            </p>
+            <div className="space-y-2">
+              <Label>Preferred Start Date</Label>
+              <Input
+                type="date"
+                value={requestedDate}
+                onChange={(e) => setRequestedDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                data-testid="input-requested-date"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes (Optional)</Label>
+              <Textarea
+                value={requestNotes}
+                onChange={(e) => setRequestNotes(e.target.value)}
+                placeholder="e.g., 'Mornings work best for me' or 'I'll be on holiday until the 15th'"
+                className="min-h-[80px]"
+                data-testid="textarea-request-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRequestBookingDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!requestedDate) {
+                  toast({ title: "Please select a date", variant: "destructive" });
+                  return;
+                }
+                requestBookingMutation.mutate({ proposedDate: requestedDate, notes: requestNotes });
+              }}
+              disabled={requestBookingMutation.isPending}
+              data-testid="button-submit-booking-request"
+            >
+              Submit Request
             </Button>
           </DialogFooter>
         </DialogContent>

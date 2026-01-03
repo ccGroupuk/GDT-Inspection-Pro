@@ -6464,6 +6464,38 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       
       const data = insertJobScheduleProposalSchema.parse(bodyWithDates);
       const proposal = await storage.createScheduleProposal(data);
+      
+      // Send email notification to client (non-blocking)
+      (async () => {
+        try {
+          const { sendScheduleProposalNotification, isEmailConfigured } = await import("./email");
+          if (!isEmailConfigured()) return;
+          
+          const job = await storage.getJob(req.params.jobId);
+          if (!job || !job.contactId) return;
+          
+          const contact = await storage.getContact(job.contactId);
+          if (!contact?.email || !contact.portalAccessEnabled || !contact.portalAccessToken) return;
+          
+          const formattedDate = new Date(proposal.proposedStartDate).toLocaleDateString('en-GB', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+          });
+          const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
+          
+          await sendScheduleProposalNotification(
+            contact.email,
+            contact.contactName,
+            `${job.jobNumber}: ${job.title}`,
+            formattedDate,
+            portalUrl,
+            contact.portalAccessToken,
+            proposal.notes || undefined
+          );
+        } catch (emailError) {
+          console.error("Failed to send schedule proposal notification:", emailError);
+        }
+      })();
+      
       res.status(201).json(proposal);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -6533,6 +6565,35 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
       // Update job status to scheduled
       await storage.updateJob(job.id, { status: "scheduled" });
+
+      // Send confirmation email to client (non-blocking)
+      (async () => {
+        try {
+          const { sendScheduleConfirmationNotification, isEmailConfigured } = await import("./email");
+          if (!isEmailConfigured()) return;
+          
+          if (!job.contactId) return;
+          
+          const contact = await storage.getContact(job.contactId);
+          if (!contact?.email || !contact.portalAccessEnabled || !contact.portalAccessToken) return;
+          
+          const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+          });
+          const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
+          
+          await sendScheduleConfirmationNotification(
+            contact.email,
+            contact.contactName,
+            `${job.jobNumber}: ${job.title}`,
+            formattedDate,
+            portalUrl,
+            contact.portalAccessToken
+          );
+        } catch (emailError) {
+          console.error("Failed to send schedule confirmation notification:", emailError);
+        }
+      })();
 
       res.json({ proposal: updatedProposal, calendarEvent });
     } catch (error) {
@@ -6625,6 +6686,33 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         // Update job status to scheduled
         await storage.updateJob(job.id, { status: "scheduled" });
 
+        // Send confirmation email to client (non-blocking)
+        (async () => {
+          try {
+            const { sendScheduleConfirmationNotification, isEmailConfigured } = await import("./email");
+            if (!isEmailConfigured()) return;
+            
+            const contact = await storage.getContact(access.contactId);
+            if (!contact?.email || !contact.portalAccessToken) return;
+            
+            const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', {
+              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+            const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
+            
+            await sendScheduleConfirmationNotification(
+              contact.email,
+              contact.contactName,
+              `${job.jobNumber}: ${job.title}`,
+              formattedDate,
+              portalUrl,
+              contact.portalAccessToken
+            );
+          } catch (emailError) {
+            console.error("Failed to send schedule confirmation notification:", emailError);
+          }
+        })();
+
         res.json({ proposal: updatedProposal, calendarEvent });
       } else if (response === "countered") {
         // Client is proposing alternative date
@@ -6656,6 +6744,187 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       }
     } catch (error) {
       console.error("Respond to schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to respond to schedule proposal" });
+    }
+  });
+
+  // Client Portal: Create a new schedule proposal (client-initiated booking request)
+  app.post("/api/portal/jobs/:jobId/schedule-proposal", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Verify job belongs to this client
+      const job = await storage.getJob(req.params.jobId);
+      if (!job || job.contactId !== access.contactId) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Check if job is in a schedulable state (quote accepted)
+      if (job.status !== "quote_accepted" && job.status !== "awaiting_deposit") {
+        return res.status(400).json({ message: "Job is not ready for scheduling" });
+      }
+
+      // Archive any existing active proposals for this job
+      await storage.archiveScheduleProposals(req.params.jobId);
+
+      const { proposedDate, notes } = req.body;
+      if (!proposedDate) {
+        return res.status(400).json({ message: "Proposed date is required" });
+      }
+
+      // Create client-initiated proposal with status pending_admin
+      const proposal = await storage.createScheduleProposal({
+        jobId: req.params.jobId,
+        proposedStartDate: new Date(proposedDate),
+        proposedByRole: "client",
+        status: "pending_admin",
+        adminNotes: notes || null,
+      });
+
+      res.status(201).json(proposal);
+    } catch (error) {
+      console.error("Create client schedule proposal error:", error);
+      res.status(500).json({ message: "Failed to create schedule proposal" });
+    }
+  });
+
+  // Admin: Respond to client-initiated schedule proposal
+  app.post("/api/schedule-proposals/:id/admin-respond", async (req, res) => {
+    try {
+      const proposal = await storage.getScheduleProposal(req.params.id);
+      if (!proposal) {
+        return res.status(404).json({ message: "Schedule proposal not found" });
+      }
+
+      const job = await storage.getJob(proposal.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      const { response, counterDate, notes } = req.body;
+
+      if (response === "accepted") {
+        // Admin accepts client's requested date - create calendar event
+        const eventDate = proposal.proposedStartDate;
+        
+        const calendarEvent = await storage.createCalendarEvent({
+          title: `Project Start: ${job.jobNumber}`,
+          jobId: job.id,
+          partnerId: job.partnerId || undefined,
+          startDate: eventDate,
+          endDate: eventDate,
+          allDay: true,
+          eventType: "project_start",
+          teamType: job.deliveryType === "in_house" ? "in_house" : job.deliveryType === "partner" ? "partner" : "hybrid",
+          status: "confirmed",
+          confirmedByAdmin: true,
+          confirmedByClient: true,
+          clientConfirmedAt: new Date(),
+          confirmedAt: new Date(),
+        });
+
+        const updatedProposal = await storage.updateScheduleProposal(proposal.id, {
+          status: "scheduled",
+          clientResponse: "accepted",
+          respondedAt: new Date(),
+          linkedCalendarEventId: calendarEvent.id,
+        });
+
+        // Update job status to scheduled
+        await storage.updateJob(job.id, { status: "scheduled" });
+
+        // Send confirmation email to client (non-blocking)
+        (async () => {
+          try {
+            const { sendScheduleConfirmationNotification, isEmailConfigured } = await import("./email");
+            if (!isEmailConfigured() || !job.contactId) return;
+            
+            const contact = await storage.getContact(job.contactId);
+            if (!contact?.email || !contact.portalAccessEnabled || !contact.portalAccessToken) return;
+            
+            const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', {
+              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+            const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
+            
+            await sendScheduleConfirmationNotification(
+              contact.email,
+              contact.contactName,
+              `${job.jobNumber}: ${job.title}`,
+              formattedDate,
+              portalUrl,
+              contact.portalAccessToken
+            );
+          } catch (emailError) {
+            console.error("Failed to send schedule confirmation notification:", emailError);
+          }
+        })();
+
+        res.json({ proposal: updatedProposal, calendarEvent });
+      } else if (response === "countered") {
+        // Admin proposes alternative date
+        if (!counterDate) {
+          return res.status(400).json({ message: "Counter date is required" });
+        }
+
+        const updatedProposal = await storage.updateScheduleProposal(proposal.id, {
+          status: "pending_client",
+          counterProposedDate: new Date(counterDate),
+          counterReason: notes || null,
+          proposedByRole: "admin",
+        });
+
+        // Send notification email to client about alternative date (non-blocking)
+        (async () => {
+          try {
+            const { sendScheduleProposalNotification, isEmailConfigured } = await import("./email");
+            if (!isEmailConfigured() || !job.contactId) return;
+            
+            const contact = await storage.getContact(job.contactId);
+            if (!contact?.email || !contact.portalAccessEnabled || !contact.portalAccessToken) return;
+            
+            const formattedDate = new Date(counterDate).toLocaleDateString('en-GB', {
+              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+            const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
+            
+            await sendScheduleProposalNotification(
+              contact.email,
+              contact.contactName,
+              `${job.jobNumber}: ${job.title}`,
+              formattedDate,
+              portalUrl,
+              contact.portalAccessToken,
+              notes || "We've suggested an alternative date for your consideration"
+            );
+          } catch (emailError) {
+            console.error("Failed to send schedule counter-proposal notification:", emailError);
+          }
+        })();
+
+        res.json({ proposal: updatedProposal });
+      } else if (response === "declined") {
+        // Admin declined the request
+        const updatedProposal = await storage.updateScheduleProposal(proposal.id, {
+          status: "admin_declined",
+          counterReason: notes || null,
+          respondedAt: new Date(),
+        });
+
+        res.json({ proposal: updatedProposal });
+      } else {
+        return res.status(400).json({ message: "Invalid response type" });
+      }
+    } catch (error) {
+      console.error("Admin respond to schedule proposal error:", error);
       res.status(500).json({ message: "Failed to respond to schedule proposal" });
     }
   });
