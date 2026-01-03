@@ -1,22 +1,41 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { usePortalAuth } from "@/hooks/use-portal-auth";
+import { Badge } from "@/components/ui/badge";
+import { usePortalAuth, portalApiRequest } from "@/hooks/use-portal-auth";
 import { LogOut, Briefcase, User, Star, Building2, HelpCircle, Calendar } from "lucide-react";
 
 interface PortalLayoutProps {
   children: React.ReactNode;
 }
 
+interface NotificationCounts {
+  pendingSurveys: number;
+}
+
 export function PortalLayout({ children }: PortalLayoutProps) {
-  const { logout } = usePortalAuth();
+  const { logout, token } = usePortalAuth();
   const [location] = useLocation();
 
+  // Fetch notification counts for nav badges
+  const { data: notificationCounts } = useQuery<NotificationCounts>({
+    queryKey: ["/api/portal/notification-counts"],
+    queryFn: async () => {
+      if (!token) return { pendingSurveys: 0 };
+      const response = await portalApiRequest("GET", "/api/portal/notification-counts", token);
+      if (!response.ok) return { pendingSurveys: 0 };
+      return response.json();
+    },
+    enabled: !!token,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
   const navItems = [
-    { href: "/portal/jobs", label: "My Jobs", icon: Briefcase },
-    { href: "/portal/surveys", label: "Surveys", icon: Calendar },
-    { href: "/portal/profile", label: "My Profile", icon: User },
-    { href: "/portal/reviews", label: "Leave a Review", icon: Star },
-    { href: "/portal/help", label: "Help", icon: HelpCircle },
+    { href: "/portal/jobs", label: "My Jobs", icon: Briefcase, badge: 0 },
+    { href: "/portal/surveys", label: "Surveys", icon: Calendar, badge: notificationCounts?.pendingSurveys || 0 },
+    { href: "/portal/profile", label: "My Profile", icon: User, badge: 0 },
+    { href: "/portal/reviews", label: "Leave a Review", icon: Star, badge: 0 },
+    { href: "/portal/help", label: "Help", icon: HelpCircle, badge: 0 },
   ];
 
   return (
@@ -54,7 +73,7 @@ export function PortalLayout({ children }: PortalLayoutProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={`rounded-none border-b-2 ${
+                    className={`relative rounded-none border-b-2 ${
                       isActive
                         ? "border-primary text-foreground"
                         : "border-transparent text-muted-foreground"
@@ -63,6 +82,14 @@ export function PortalLayout({ children }: PortalLayoutProps) {
                   >
                     <item.icon className="w-4 h-4 mr-2" />
                     {item.label}
+                    {item.badge > 0 && (
+                      <Badge 
+                        variant="destructive" 
+                        className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs"
+                      >
+                        {item.badge}
+                      </Badge>
+                    )}
                   </Button>
                 </Link>
               );

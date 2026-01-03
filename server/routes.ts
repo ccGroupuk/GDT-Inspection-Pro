@@ -3020,6 +3020,41 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     }
   });
 
+  // Client Portal: Get notification counts for nav badges
+  app.get("/api/portal/notification-counts", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const access = await storage.getClientPortalAccessByToken(token);
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Get all jobs for this contact
+      const jobs = await storage.getJobsByContact(access.contactId);
+      
+      // Get surveys that need client response (pending_client status)
+      const surveyPromises = jobs.map((job: any) => storage.getJobSurveysByJob(job.id));
+      const surveysArrays = await Promise.all(surveyPromises);
+      const allSurveys = surveysArrays.flat();
+      
+      const pendingSurveyCount = allSurveys.filter((s: any) => 
+        s.status === "accepted" && 
+        s.bookingStatus === "pending_client"
+      ).length;
+      
+      res.json({
+        pendingSurveys: pendingSurveyCount,
+      });
+    } catch (error) {
+      console.error("Get portal notification counts error:", error);
+      res.status(500).json({ message: "Failed to get notification counts" });
+    }
+  });
+
   // Client Portal: Get pending survey appointments
   app.get("/api/portal/surveys", async (req, res) => {
     try {
@@ -3736,6 +3771,43 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         clientNotes: null,
         clientRespondedAt: null,
       });
+      
+      // Send email notification to client (non-blocking)
+      (async () => {
+        try {
+          const { sendSurveyProposalNotification, isEmailConfigured } = await import("./email");
+          if (!isEmailConfigured()) return;
+          
+          const job = await storage.getJob(survey.jobId);
+          if (!job) return;
+          
+          const contact = await storage.getContact(job.contactId);
+          if (!contact?.email) return;
+          
+          // Check if client has portal access
+          const portalAccess = await storage.getClientPortalAccess(contact.id);
+          if (!portalAccess?.isActive) return;
+          
+          const partner = await storage.getTradePartner(survey.partnerId!);
+          const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+            ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+            : process.env.REPLIT_DEPLOYMENT_URL || "http://localhost:5000";
+          
+          await sendSurveyProposalNotification(
+            contact.email,
+            contact.name,
+            `${job.serviceType} - ${job.jobNumber}`,
+            partner?.businessName || "Trade Partner",
+            new Date(proposedDate).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+            proposedTime || null,
+            `${baseUrl}/portal/surveys`,
+            portalAccess.accessToken
+          );
+          console.log(`[Survey] Email notification sent to client ${contact.email} for survey ${survey.id}`);
+        } catch (emailError) {
+          console.error("[Survey] Failed to send email notification:", emailError);
+        }
+      })();
       
       res.json(updated);
     } catch (error) {

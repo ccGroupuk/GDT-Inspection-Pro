@@ -628,3 +628,60 @@ export async function sendQuoteUpdatedNotification(
 
   return sendEmail(to, subject, html);
 }
+
+export async function sendSurveyProposalNotification(
+  to: string,
+  clientName: string,
+  jobTitle: string,
+  partnerName: string,
+  proposedDate: string,
+  proposedTime: string | null,
+  portalUrl: string,
+  accessToken: string
+): Promise<EmailResult> {
+  const subject = `Survey Date Proposed - ${jobTitle}`;
+  
+  const timeText = proposedTime ? ` at ${proposedTime}` : '';
+  
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #1a1a2e; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0;">CCC Group</h1>
+        <p style="color: #cccccc; margin: 5px 0 0 0;">Survey Booking Request</p>
+      </div>
+      
+      <div style="padding: 30px; background-color: #f9f9f9;">
+        <h2 style="color: #333; margin-top: 0;">Hello ${clientName},</h2>
+        
+        <p style="color: #555; line-height: 1.6;">
+          A survey has been proposed for your project. Please review and respond:
+        </p>
+        
+        <div style="background-color: #ffffff; border: 1px solid #4f46e5; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="color: #333; margin-top: 0;">${jobTitle}</h3>
+          <p style="margin: 10px 0;"><strong>Partner:</strong> ${partnerName}</p>
+          <p style="margin: 10px 0;"><strong>Proposed Date:</strong> ${proposedDate}${timeText}</p>
+          <p style="color: #4f46e5; font-weight: bold; margin: 15px 0 0 0;">Your Response Required</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${portalUrl}?token=${accessToken}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            Respond to Survey Request
+          </a>
+        </div>
+        
+        <p style="color: #888; font-size: 12px;">
+          Log in to your client portal to accept, decline, or propose an alternative date.
+        </p>
+      </div>
+      
+      <div style="background-color: #333; padding: 15px; text-align: center;">
+        <p style="color: #888; font-size: 12px; margin: 0;">
+          Cardiff & Caerphilly Carpentry | CCC Group
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(to, subject, html);
+}
