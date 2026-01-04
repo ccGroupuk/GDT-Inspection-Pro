@@ -2447,6 +2447,224 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     }
   });
 
+  // Job Client Payments - record actual money received from clients
+  app.get("/api/jobs/:jobId/client-payments", async (req, res) => {
+    try {
+      const payments = await storage.getJobClientPayments(req.params.jobId);
+      res.json(payments);
+    } catch (error) {
+      console.error("Get client payments error:", error);
+      res.status(500).json({ message: "Failed to load client payments" });
+    }
+  });
+
+  app.post("/api/jobs/:jobId/client-payments", async (req, res) => {
+    try {
+      const { type, amount, paymentMethod, reference, notes, receivedAt } = req.body;
+      
+      // Validate required fields
+      if (!type || !amount) {
+        return res.status(400).json({ message: "Type and amount are required" });
+      }
+      
+      // Get employee ID from session if available
+      let recordedBy = null;
+      if ((req as any).employee) {
+        recordedBy = (req as any).employee.id;
+      }
+      
+      const payment = await storage.createJobClientPayment({
+        jobId: req.params.jobId,
+        type,
+        amount: amount.toString(),
+        paymentMethod: paymentMethod || null,
+        reference: reference || null,
+        notes: notes || null,
+        receivedAt: receivedAt ? new Date(receivedAt) : new Date(),
+        recordedBy,
+      });
+      
+      // Update job depositReceived if this is a deposit
+      if (type === "deposit") {
+        await storage.updateJob(req.params.jobId, { depositReceived: true });
+      }
+      
+      res.status(201).json(payment);
+    } catch (error) {
+      console.error("Create client payment error:", error);
+      res.status(500).json({ message: "Failed to record client payment" });
+    }
+  });
+
+  app.patch("/api/client-payments/:id", async (req, res) => {
+    try {
+      const { type, amount, paymentMethod, reference, notes, receivedAt } = req.body;
+      const payment = await storage.updateJobClientPayment(req.params.id, {
+        type,
+        amount: amount?.toString(),
+        paymentMethod,
+        reference,
+        notes,
+        receivedAt: receivedAt ? new Date(receivedAt) : undefined,
+      });
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+      res.json(payment);
+    } catch (error) {
+      console.error("Update client payment error:", error);
+      res.status(500).json({ message: "Failed to update client payment" });
+    }
+  });
+
+  app.delete("/api/client-payments/:id", async (req, res) => {
+    try {
+      await storage.deleteJobClientPayment(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete client payment error:", error);
+      res.status(500).json({ message: "Failed to delete client payment" });
+    }
+  });
+
+  // Job Fund Allocations - track how client funds are distributed to partners
+  app.get("/api/jobs/:jobId/fund-allocations", async (req, res) => {
+    try {
+      const allocations = await storage.getJobFundAllocations(req.params.jobId);
+      res.json(allocations);
+    } catch (error) {
+      console.error("Get fund allocations error:", error);
+      res.status(500).json({ message: "Failed to load fund allocations" });
+    }
+  });
+
+  app.post("/api/jobs/:jobId/fund-allocations", async (req, res) => {
+    try {
+      const { partnerId, jobPartnerId, clientPaymentId, amount, purpose, notes } = req.body;
+      
+      // Validate required fields
+      if (!amount) {
+        return res.status(400).json({ message: "Amount is required" });
+      }
+      
+      // Validate that partner exists if provided
+      if (partnerId) {
+        const partner = await storage.getTradePartner(partnerId);
+        if (!partner) {
+          return res.status(404).json({ message: "Trade partner not found" });
+        }
+      }
+      
+      // Get total client payments for this job
+      const clientPayments = await storage.getJobClientPayments(req.params.jobId);
+      const totalReceived = clientPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      
+      // Get existing allocations
+      const existingAllocations = await storage.getJobFundAllocations(req.params.jobId);
+      const totalAllocated = existingAllocations.reduce((sum, a) => sum + parseFloat(a.amount), 0);
+      
+      const requestAmount = parseFloat(amount);
+      const remainingUnallocated = totalReceived - totalAllocated;
+      
+      if (requestAmount > remainingUnallocated + 0.01) {
+        return res.status(400).json({ 
+          message: `Amount exceeds unallocated funds. Available: £${remainingUnallocated.toFixed(2)}` 
+        });
+      }
+      
+      // Get employee ID from session
+      let allocatedBy = null;
+      if ((req as any).employee) {
+        allocatedBy = (req as any).employee.id;
+      }
+      
+      const allocation = await storage.createJobFundAllocation({
+        jobId: req.params.jobId,
+        partnerId: partnerId || null,
+        jobPartnerId: jobPartnerId || null,
+        clientPaymentId: clientPaymentId || null,
+        amount: amount.toString(),
+        purpose: purpose || null,
+        notes: notes || null,
+        status: "pending",
+        allocatedBy,
+      });
+      
+      res.status(201).json(allocation);
+    } catch (error) {
+      console.error("Create fund allocation error:", error);
+      res.status(500).json({ message: "Failed to create fund allocation" });
+    }
+  });
+
+  app.patch("/api/fund-allocations/:id", async (req, res) => {
+    try {
+      const { amount, purpose, notes, status, paidAt, confirmedAt } = req.body;
+      const allocation = await storage.updateJobFundAllocation(req.params.id, {
+        amount: amount?.toString(),
+        purpose,
+        notes,
+        status,
+        paidAt: paidAt ? new Date(paidAt) : undefined,
+        confirmedAt: confirmedAt ? new Date(confirmedAt) : undefined,
+      });
+      if (!allocation) {
+        return res.status(404).json({ message: "Allocation not found" });
+      }
+      res.json(allocation);
+    } catch (error) {
+      console.error("Update fund allocation error:", error);
+      res.status(500).json({ message: "Failed to update fund allocation" });
+    }
+  });
+
+  app.delete("/api/fund-allocations/:id", async (req, res) => {
+    try {
+      await storage.deleteJobFundAllocation(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete fund allocation error:", error);
+      res.status(500).json({ message: "Failed to delete fund allocation" });
+    }
+  });
+
+  // Get fund allocation summary for a job
+  app.get("/api/jobs/:jobId/fund-summary", async (req, res) => {
+    try {
+      const clientPayments = await storage.getJobClientPayments(req.params.jobId);
+      const allocations = await storage.getJobFundAllocations(req.params.jobId);
+      const jobPartners = await storage.getJobPartners(req.params.jobId);
+      
+      const totalReceived = clientPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      const totalAllocated = allocations.reduce((sum, a) => sum + parseFloat(a.amount), 0);
+      const unallocated = totalReceived - totalAllocated;
+      
+      // Group allocations by partner
+      const allocationsByPartner: Record<string, { partnerId: string; total: number; allocations: any[] }> = {};
+      for (const alloc of allocations) {
+        const key = alloc.partnerId || 'ccc';
+        if (!allocationsByPartner[key]) {
+          allocationsByPartner[key] = { partnerId: key, total: 0, allocations: [] };
+        }
+        allocationsByPartner[key].total += parseFloat(alloc.amount);
+        allocationsByPartner[key].allocations.push(alloc);
+      }
+      
+      res.json({
+        totalReceived,
+        totalAllocated,
+        unallocated,
+        clientPayments,
+        allocations,
+        allocationsByPartner,
+        jobPartners,
+      });
+    } catch (error) {
+      console.error("Get fund summary error:", error);
+      res.status(500).json({ message: "Failed to load fund summary" });
+    }
+  });
+
   // Company Settings
   app.get("/api/settings", async (req, res) => {
     try {

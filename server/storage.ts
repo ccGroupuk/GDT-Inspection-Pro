@@ -83,6 +83,8 @@ import {
   partnerInvoicePayments, type PartnerInvoicePayment, type InsertPartnerInvoicePayment,
   aiConversations, type AiConversation, type InsertAiConversation,
   buildRequests, type BuildRequest, type InsertBuildRequest,
+  jobClientPayments, type JobClientPayment, type InsertJobClientPayment,
+  jobFundAllocations, type JobFundAllocation, type InsertJobFundAllocation,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -669,6 +671,21 @@ export interface IStorage {
   updateBuildRequest(id: string, request: Partial<InsertBuildRequest>): Promise<BuildRequest | undefined>;
   deleteBuildRequest(id: string): Promise<boolean>;
   getPendingBuildRequestsCount(): Promise<number>;
+
+  // Job Client Payments
+  getJobClientPayments(jobId: string): Promise<JobClientPayment[]>;
+  getJobClientPayment(id: string): Promise<JobClientPayment | undefined>;
+  createJobClientPayment(payment: InsertJobClientPayment): Promise<JobClientPayment>;
+  updateJobClientPayment(id: string, payment: Partial<InsertJobClientPayment>): Promise<JobClientPayment | undefined>;
+  deleteJobClientPayment(id: string): Promise<boolean>;
+
+  // Job Fund Allocations
+  getJobFundAllocations(jobId: string): Promise<JobFundAllocation[]>;
+  getJobFundAllocation(id: string): Promise<JobFundAllocation | undefined>;
+  getJobFundAllocationsByPartner(partnerId: string): Promise<JobFundAllocation[]>;
+  createJobFundAllocation(allocation: InsertJobFundAllocation): Promise<JobFundAllocation>;
+  updateJobFundAllocation(id: string, allocation: Partial<InsertJobFundAllocation>): Promise<JobFundAllocation | undefined>;
+  deleteJobFundAllocation(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3345,6 +3362,72 @@ export class DatabaseStorage implements IStorage {
   async getPendingBuildRequestsCount(): Promise<number> {
     const result = await db.select().from(buildRequests).where(eq(buildRequests.status, "pending"));
     return result.length;
+  }
+
+  // Job Client Payments
+  async getJobClientPayments(jobId: string): Promise<JobClientPayment[]> {
+    return db.select().from(jobClientPayments)
+      .where(eq(jobClientPayments.jobId, jobId))
+      .orderBy(desc(jobClientPayments.receivedAt));
+  }
+
+  async getJobClientPayment(id: string): Promise<JobClientPayment | undefined> {
+    const [payment] = await db.select().from(jobClientPayments).where(eq(jobClientPayments.id, id));
+    return payment || undefined;
+  }
+
+  async createJobClientPayment(payment: InsertJobClientPayment): Promise<JobClientPayment> {
+    const [created] = await db.insert(jobClientPayments).values(payment).returning();
+    return created;
+  }
+
+  async updateJobClientPayment(id: string, payment: Partial<InsertJobClientPayment>): Promise<JobClientPayment | undefined> {
+    const [updated] = await db.update(jobClientPayments)
+      .set(payment)
+      .where(eq(jobClientPayments.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteJobClientPayment(id: string): Promise<boolean> {
+    await db.delete(jobClientPayments).where(eq(jobClientPayments.id, id));
+    return true;
+  }
+
+  // Job Fund Allocations
+  async getJobFundAllocations(jobId: string): Promise<JobFundAllocation[]> {
+    return db.select().from(jobFundAllocations)
+      .where(eq(jobFundAllocations.jobId, jobId))
+      .orderBy(desc(jobFundAllocations.createdAt));
+  }
+
+  async getJobFundAllocation(id: string): Promise<JobFundAllocation | undefined> {
+    const [allocation] = await db.select().from(jobFundAllocations).where(eq(jobFundAllocations.id, id));
+    return allocation || undefined;
+  }
+
+  async getJobFundAllocationsByPartner(partnerId: string): Promise<JobFundAllocation[]> {
+    return db.select().from(jobFundAllocations)
+      .where(eq(jobFundAllocations.partnerId, partnerId))
+      .orderBy(desc(jobFundAllocations.createdAt));
+  }
+
+  async createJobFundAllocation(allocation: InsertJobFundAllocation): Promise<JobFundAllocation> {
+    const [created] = await db.insert(jobFundAllocations).values(allocation).returning();
+    return created;
+  }
+
+  async updateJobFundAllocation(id: string, allocation: Partial<InsertJobFundAllocation>): Promise<JobFundAllocation | undefined> {
+    const [updated] = await db.update(jobFundAllocations)
+      .set(allocation)
+      .where(eq(jobFundAllocations.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteJobFundAllocation(id: string): Promise<boolean> {
+    await db.delete(jobFundAllocations).where(eq(jobFundAllocations.id, id));
+    return true;
   }
 }
 
