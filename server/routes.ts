@@ -2631,13 +2631,80 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   // Get fund allocation summary for a job
   app.get("/api/jobs/:jobId/fund-summary", async (req, res) => {
     try {
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
       const clientPayments = await storage.getJobClientPayments(req.params.jobId);
       const allocations = await storage.getJobFundAllocations(req.params.jobId);
-      const jobPartners = await storage.getJobPartners(req.params.jobId);
+      const jobPartnersList = await storage.getJobPartners(req.params.jobId);
       
-      const totalReceived = clientPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      // Get partner details for commission calculation
+      const partnersWithDetails = await Promise.all(
+        jobPartnersList.map(async (jp) => {
+          const partner = await storage.getTradePartner(jp.partnerId);
+          return { ...jp, partner };
+        })
+      );
+      
+      // Get quote total for calculating commission
+      const quotes = await storage.getQuotesByJob(req.params.jobId);
+      const activeQuote = quotes.find(q => q.status === "accepted") || quotes[0];
+      let quoteTotal = 0;
+      if (activeQuote) {
+        const quoteItems = await storage.getQuoteItems(activeQuote.id);
+        const subtotal = quoteItems.reduce((sum, item) => 
+          sum + (parseFloat(item.unitPrice) * item.quantity), 0);
+        const taxRate = parseFloat(activeQuote.taxRate || "0") / 100;
+        const discountType = activeQuote.discountType || "percentage";
+        const discountValue = parseFloat(activeQuote.discountValue || "0");
+        const discount = discountType === "percentage" 
+          ? subtotal * (discountValue / 100) 
+          : discountValue;
+        quoteTotal = (subtotal - discount) * (1 + taxRate);
+      }
+      
+      // For partner-led jobs, auto-calculate client funds based on payments collected
+      // For hybrid jobs, this is the manual client payments we recorded
+      const manualPayments = clientPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      
+      // Auto-calculate based on deposit status
+      let autoClientFundsReceived = 0;
+      if (job.depositReceived && job.depositAmount) {
+        autoClientFundsReceived = parseFloat(job.depositAmount);
+      }
+      // Check if balance was also paid (quote fully paid)
+      if (job.balancePaid) {
+        autoClientFundsReceived = quoteTotal;
+      }
+      
+      const totalReceived = job.deliveryType === "partner" 
+        ? autoClientFundsReceived  // Partner-led: auto from deposit/balance status
+        : manualPayments;  // Hybrid: from manual client payment records
+      
       const totalAllocated = allocations.reduce((sum, a) => sum + parseFloat(a.amount), 0);
       const unallocated = totalReceived - totalAllocated;
+      
+      // Calculate CCC commission for partner-led jobs
+      let cccCommission = 0;
+      let commissionRate = 0;
+      let commissionType = "percentage";
+      
+      if (job.deliveryType === "partner" && partnersWithDetails.length > 0) {
+        // Use the first partner's commission settings
+        const primaryPartner = partnersWithDetails[0];
+        if (primaryPartner.partner) {
+          commissionType = primaryPartner.partner.commissionType || "percentage";
+          commissionRate = parseFloat(primaryPartner.partner.commissionValue || "10");
+          
+          if (commissionType === "percentage") {
+            cccCommission = quoteTotal * (commissionRate / 100);
+          } else {
+            cccCommission = commissionRate; // Fixed amount
+          }
+        }
+      }
       
       // Group allocations by partner
       const allocationsByPartner: Record<string, { partnerId: string; total: number; allocations: any[] }> = {};
@@ -2657,7 +2724,17 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         clientPayments,
         allocations,
         allocationsByPartner,
-        jobPartners,
+        jobPartners: partnersWithDetails,
+        // Additional data for partner-led jobs
+        quoteTotal,
+        cccCommission,
+        commissionRate,
+        commissionType,
+        autoClientFundsReceived,
+        depositReceived: job.depositReceived,
+        depositAmount: job.depositAmount ? parseFloat(job.depositAmount) : 0,
+        balancePaid: job.balancePaid,
+        deliveryType: job.deliveryType,
       });
     } catch (error) {
       console.error("Get fund summary error:", error);

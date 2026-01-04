@@ -295,6 +295,16 @@ export default function JobDetail() {
     allocations: FundAllocation[];
     allocationsByPartner: Record<string, { partnerId: string; total: number; allocations: FundAllocation[] }>;
     jobPartners: JobPartnerWithDetails[];
+    // Additional fields for partner-led jobs
+    quoteTotal: number;
+    cccCommission: number;
+    commissionRate: number;
+    commissionType: string;
+    autoClientFundsReceived: number;
+    depositReceived: boolean;
+    depositAmount: number;
+    balancePaid: boolean;
+    deliveryType: string;
   }
   const { data: fundSummary } = useQuery<FundSummary>({
     queryKey: ["/api/jobs", id, "fund-summary"],
@@ -1543,21 +1553,44 @@ export default function JobDetail() {
 
                 {isPartnerJob && (
                   <>
+                    {/* For partner-led jobs, show auto-calculated client funds received */}
+                    {job.deliveryType === "partner" && fundSummary && (
+                      <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800" data-testid="text-client-funds-received">
+                        <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Client Funds Received</span>
+                        <span className="font-mono text-lg font-semibold text-blue-700 dark:text-blue-300">
+                          £{(fundSummary.autoClientFundsReceived || 0).toFixed(2)}
+                          {quoteTotals && fundSummary.autoClientFundsReceived < quoteTotals.grandTotal && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              of £{quoteTotals.grandTotal.toFixed(2)}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    
                     <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-muted/50">
                       <span className="text-sm font-medium">Partner Charge</span>
                       <span className="font-mono text-sm font-semibold">
-                        {job.partnerCharge ? `£${Number(job.partnerCharge).toLocaleString()}` : "-"}
+                        {fundSummary?.quoteTotal ? `£${fundSummary.quoteTotal.toFixed(2)}` : 
+                         job.partnerCharge ? `£${Number(job.partnerCharge).toLocaleString()}` : "-"}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-primary/10">
+                    
+                    {/* CCC Commission - auto-calculated from partner's commission rate */}
+                    <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-primary/10" data-testid="text-ccc-margin">
                       <span className="text-sm font-medium">CCC Margin</span>
                       <div className="text-right">
                         <span className="font-mono text-lg font-semibold text-primary">
-                          {margin ? `£${margin.toLocaleString()}` : "-"}
+                          {fundSummary?.cccCommission ? `£${fundSummary.cccCommission.toFixed(2)}` :
+                           margin ? `£${margin.toLocaleString()}` : "-"}
                         </span>
-                        {marginPercentage && (
+                        {fundSummary?.commissionRate ? (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            ({fundSummary.commissionRate}%)
+                          </span>
+                        ) : marginPercentage ? (
                           <span className="text-xs text-muted-foreground ml-2">({marginPercentage}%)</span>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                     
