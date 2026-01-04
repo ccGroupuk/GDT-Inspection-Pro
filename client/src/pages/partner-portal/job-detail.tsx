@@ -676,18 +676,13 @@ export default function PartnerPortalJobDetail() {
                     
                     {/* Only show request button if no pending request */}
                     {(() => {
-                      // Calculate actual deposit value based on depositType
+                      // Calculate balance due
                       const partnerTotal = parseFloat(job.partnerCharge || "0");
-                      let actualDepositValue = 0;
-                      if (job.depositReceived && job.depositAmount) {
-                        if (job.depositType === "percentage") {
-                          // depositAmount is a percentage, calculate actual value from partnerCharge
-                          actualDepositValue = partnerTotal * (parseFloat(job.depositAmount) / 100);
-                        } else {
-                          // depositAmount is a fixed value
-                          actualDepositValue = parseFloat(job.depositAmount);
-                        }
-                      }
+                      // depositAmount always stores the actual currency value (whether originally a percentage or fixed)
+                      // depositType just indicates how it was calculated, not the format of the stored value
+                      const actualDepositValue = (job.depositReceived && job.depositAmount) 
+                        ? parseFloat(job.depositAmount) 
+                        : 0;
                       // Sum of already confirmed payments to partner
                       const confirmedPayments = paymentRequests
                         ?.filter(r => r.approvalStatus === "confirmed")
