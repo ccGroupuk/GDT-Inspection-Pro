@@ -152,6 +152,15 @@ export const jobPartners = pgTable("job_partners", {
   chargeType: text("charge_type").default("fixed"), // percentage or fixed
   chargeAmount: decimal("charge_amount", { precision: 10, scale: 2 }),
   
+  // Subcontract agreement fields
+  subcontractFeeType: text("subcontract_fee_type"), // percentage, fixed, or null (use default)
+  subcontractFeeValue: decimal("subcontract_fee_value", { precision: 10, scale: 2 }),
+  subcontractAgreed: boolean("subcontract_agreed").default(false), // Whether fee has been agreed
+  
+  // Material deposit requirement
+  depositRequired: boolean("deposit_required").default(false),
+  depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }),
+  
   // What this partner is handling
   notes: text("notes"),
   
@@ -3255,3 +3264,92 @@ export const REPO_KNOWLEDGE_TYPES = [
   { value: "file_summary", label: "File Summary" },
   { value: "feature_chunk", label: "Feature Description" },
 ] as const;
+
+// Job Client Payments - tracks actual amounts received from clients
+export const jobClientPayments = pgTable("job_client_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  
+  // Payment details
+  type: text("type").notNull(), // deposit, balance, partial
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paymentMethod: text("payment_method"), // cash, bank_transfer, card, cheque
+  reference: text("reference"), // Bank reference, cheque number, etc.
+  
+  // Status
+  receivedAt: timestamp("received_at").defaultNow(),
+  recordedBy: varchar("recorded_by").references(() => employees.id),
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const jobClientPaymentsRelations = relations(jobClientPayments, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobClientPayments.jobId],
+    references: [jobs.id],
+  }),
+  employee: one(employees, {
+    fields: [jobClientPayments.recordedBy],
+    references: [employees.id],
+  }),
+}));
+
+export const insertJobClientPaymentSchema = createInsertSchema(jobClientPayments).omit({ id: true, createdAt: true });
+export type InsertJobClientPayment = z.infer<typeof insertJobClientPaymentSchema>;
+export type JobClientPayment = typeof jobClientPayments.$inferSelect;
+
+// Job Fund Allocations - tracks how client funds are distributed to partners
+export const jobFundAllocations = pgTable("job_fund_allocations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  
+  // Source of funds (optional - can be linked to a specific client payment)
+  clientPaymentId: varchar("client_payment_id").references(() => jobClientPayments.id),
+  
+  // Recipient
+  partnerId: varchar("partner_id").references(() => tradePartners.id), // null if funds stay with CCC
+  jobPartnerId: varchar("job_partner_id").references(() => jobPartners.id), // link to specific job-partner assignment
+  
+  // Allocation details
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  purpose: text("purpose"), // materials, deposit, labor, equipment, etc.
+  
+  // Status tracking
+  status: text("status").default("pending"), // pending, paid, confirmed
+  paidAt: timestamp("paid_at"),
+  confirmedAt: timestamp("confirmed_at"),
+  
+  // Audit
+  allocatedBy: varchar("allocated_by").references(() => employees.id),
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const jobFundAllocationsRelations = relations(jobFundAllocations, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobFundAllocations.jobId],
+    references: [jobs.id],
+  }),
+  clientPayment: one(jobClientPayments, {
+    fields: [jobFundAllocations.clientPaymentId],
+    references: [jobClientPayments.id],
+  }),
+  partner: one(tradePartners, {
+    fields: [jobFundAllocations.partnerId],
+    references: [tradePartners.id],
+  }),
+  jobPartner: one(jobPartners, {
+    fields: [jobFundAllocations.jobPartnerId],
+    references: [jobPartners.id],
+  }),
+  employee: one(employees, {
+    fields: [jobFundAllocations.allocatedBy],
+    references: [employees.id],
+  }),
+}));
+
+export const insertJobFundAllocationSchema = createInsertSchema(jobFundAllocations).omit({ id: true, createdAt: true });
+export type InsertJobFundAllocation = z.infer<typeof insertJobFundAllocationSchema>;
+export type JobFundAllocation = typeof jobFundAllocations.$inferSelect;
