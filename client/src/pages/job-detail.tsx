@@ -247,6 +247,65 @@ export default function JobDetail() {
     },
   });
 
+  // Fetch fund summary (client payments and allocations)
+  interface ClientPayment {
+    id: string;
+    jobId: string;
+    type: string;
+    amount: string;
+    paymentMethod?: string | null;
+    reference?: string | null;
+    notes?: string | null;
+    receivedAt: string;
+    recordedBy?: string | null;
+    createdAt: string;
+  }
+  interface FundAllocation {
+    id: string;
+    jobId: string;
+    partnerId?: string | null;
+    jobPartnerId?: string | null;
+    clientPaymentId?: string | null;
+    amount: string;
+    purpose?: string | null;
+    notes?: string | null;
+    status: string;
+    allocatedBy?: string | null;
+    paidAt?: string | null;
+    confirmedAt?: string | null;
+    createdAt: string;
+  }
+  interface JobPartnerWithDetails {
+    id: string;
+    jobId: string;
+    partnerId: string;
+    role?: string | null;
+    status: string;
+    subcontractFeeType?: string | null;
+    subcontractFee?: string | null;
+    subcontractDepositRequired?: boolean | null;
+    subcontractDepositAmount?: string | null;
+    partner?: TradePartner;
+  }
+  interface FundSummary {
+    totalReceived: number;
+    totalAllocated: number;
+    unallocated: number;
+    clientPayments: ClientPayment[];
+    allocations: FundAllocation[];
+    allocationsByPartner: Record<string, { partnerId: string; total: number; allocations: FundAllocation[] }>;
+    jobPartners: JobPartnerWithDetails[];
+  }
+  const { data: fundSummary } = useQuery<FundSummary>({
+    queryKey: ["/api/jobs", id, "fund-summary"],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${id}/fund-summary`);
+      if (!response.ok) throw new Error("Failed to fetch fund summary");
+      return response.json();
+    },
+    enabled: Boolean(id),
+  });
+
   // Fetch stage readiness for pipeline progression
   interface StagePrerequisiteResult {
     field: string;
@@ -329,6 +388,21 @@ export default function JobDetail() {
   const [newItemUnitPrice, setNewItemUnitPrice] = useState("");
   const [showCatalogInChangeOrder, setShowCatalogInChangeOrder] = useState(false);
   const [catalogSearchInChangeOrder, setCatalogSearchInChangeOrder] = useState("");
+
+  // Client payment dialog state
+  const [clientPaymentDialogOpen, setClientPaymentDialogOpen] = useState(false);
+  const [clientPaymentType, setClientPaymentType] = useState<string>("deposit");
+  const [clientPaymentAmount, setClientPaymentAmount] = useState("");
+  const [clientPaymentMethod, setClientPaymentMethod] = useState<string>("");
+  const [clientPaymentReference, setClientPaymentReference] = useState("");
+  const [clientPaymentNotes, setClientPaymentNotes] = useState("");
+
+  // Fund allocation dialog state
+  const [fundAllocationDialogOpen, setFundAllocationDialogOpen] = useState(false);
+  const [allocationPartnerId, setAllocationPartnerId] = useState<string>("");
+  const [allocationAmount, setAllocationAmount] = useState("");
+  const [allocationPurpose, setAllocationPurpose] = useState<string>("materials");
+  const [allocationNotes, setAllocationNotes] = useState("");
 
   // Fetch connection links for this job
   const { data: connectionLinks } = useQuery<ConnectionLink[]>({
@@ -642,6 +716,67 @@ export default function JobDetail() {
   const partnerPaymentRequests = paymentRequests?.filter(
     pr => (pr.type === "partner_payout" || pr.type === "partner_deposit" || pr.type === "partner_balance" || pr.type === "partner_commission") && pr.requestedByRole === "partner"
   ) || [];
+
+  // Create client payment mutation
+  const createClientPaymentMutation = useMutation({
+    mutationFn: async (data: { type: string; amount: string; paymentMethod?: string; reference?: string; notes?: string }) => {
+      return apiRequest("POST", `/api/jobs/${id}/client-payments`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "fund-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id] });
+      setClientPaymentDialogOpen(false);
+      setClientPaymentType("deposit");
+      setClientPaymentAmount("");
+      setClientPaymentMethod("");
+      setClientPaymentReference("");
+      setClientPaymentNotes("");
+      toast({ title: "Payment recorded successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to record payment", variant: "destructive" });
+    },
+  });
+
+  // Create fund allocation mutation
+  const createFundAllocationMutation = useMutation({
+    mutationFn: async (data: { partnerId?: string; amount: string; purpose?: string; notes?: string }) => {
+      return apiRequest("POST", `/api/jobs/${id}/fund-allocations`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "fund-summary"] });
+      setFundAllocationDialogOpen(false);
+      setAllocationPartnerId("");
+      setAllocationAmount("");
+      setAllocationPurpose("materials");
+      setAllocationNotes("");
+      toast({ title: "Funds allocated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: error.message || "Failed to allocate funds", 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Update fund allocation status mutation
+  const updateFundAllocationMutation = useMutation({
+    mutationFn: async ({ allocationId, status }: { allocationId: string; status: string }) => {
+      return apiRequest("PATCH", `/api/fund-allocations/${allocationId}`, {
+        status,
+        ...(status === "paid" ? { paidAt: new Date().toISOString() } : {}),
+        ...(status === "confirmed" ? { confirmedAt: new Date().toISOString() } : {}),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "fund-summary"] });
+      toast({ title: "Allocation status updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update allocation", variant: "destructive" });
+    },
+  });
 
   const createInvoiceMutation = useMutation({
     mutationFn: async (type: "quote" | "invoice") => {
@@ -1513,6 +1648,172 @@ export default function JobDetail() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Fund Allocation Card - Only show for hybrid jobs */}
+          {job.deliveryType === "hybrid" && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Banknote className="w-4 h-4" />
+                    Client Funds & Allocations
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setClientPaymentDialogOpen(true)}
+                      data-testid="button-record-payment"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Record Payment
+                    </Button>
+                    {fundSummary && fundSummary.unallocated > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={() => setFundAllocationDialogOpen(true)}
+                        data-testid="button-allocate-funds"
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        Allocate Funds
+                      </Button>
+                    )}
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Fund Summary */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800" data-testid="summary-funds-received">
+                      <p className="text-xs text-green-700 dark:text-green-300">Received</p>
+                      <p className="text-lg font-semibold font-mono text-green-700 dark:text-green-300" data-testid="text-funds-received-amount">
+                        £{(fundSummary?.totalReceived || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800" data-testid="summary-funds-allocated">
+                      <p className="text-xs text-blue-700 dark:text-blue-300">Allocated</p>
+                      <p className="text-lg font-semibold font-mono text-blue-700 dark:text-blue-300" data-testid="text-funds-allocated-amount">
+                        £{(fundSummary?.totalAllocated || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800" data-testid="summary-funds-unallocated">
+                      <p className="text-xs text-amber-700 dark:text-amber-300">Unallocated</p>
+                      <p className="text-lg font-semibold font-mono text-amber-700 dark:text-amber-300" data-testid="text-funds-unallocated-amount">
+                        £{(fundSummary?.unallocated || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Client Payments Received */}
+                  {fundSummary?.clientPayments && fundSummary.clientPayments.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <PoundSterling className="w-4 h-4" />
+                        Payments Received
+                      </h4>
+                      <div className="space-y-2">
+                        {fundSummary.clientPayments.map((payment) => (
+                          <div key={payment.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                {payment.type === "deposit" ? "Deposit" : 
+                                 payment.type === "balance" ? "Balance" : 
+                                 payment.type === "partial" ? "Partial" : "Other"}
+                              </Badge>
+                              <span className="font-mono font-medium">£{parseFloat(payment.amount).toFixed(2)}</span>
+                              {payment.paymentMethod && (
+                                <span className="text-xs text-muted-foreground">via {payment.paymentMethod}</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(payment.receivedAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fund Allocations */}
+                  {fundSummary?.allocations && fundSummary.allocations.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <Handshake className="w-4 h-4" />
+                        Fund Allocations
+                      </h4>
+                      <div className="space-y-2">
+                        {fundSummary.allocations.map((alloc) => {
+                          const partner = fundSummary.jobPartners.find(jp => jp.partnerId === alloc.partnerId)?.partner;
+                          return (
+                            <div key={alloc.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono font-medium">£{parseFloat(alloc.amount).toFixed(2)}</span>
+                                {partner && (
+                                  <Badge variant="outline" className="text-xs">{partner.businessName}</Badge>
+                                )}
+                                {alloc.purpose && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {alloc.purpose === "materials" ? "Materials" : 
+                                     alloc.purpose === "deposit" ? "Deposit" :
+                                     alloc.purpose === "labor" ? "Labor" : alloc.purpose}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={
+                                  alloc.status === "confirmed" ? "default" :
+                                  alloc.status === "paid" ? "secondary" :
+                                  "outline"
+                                }>
+                                  {alloc.status === "confirmed" ? "Confirmed" :
+                                   alloc.status === "paid" ? "Paid" : "Pending"}
+                                </Badge>
+                                {alloc.status === "pending" && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => updateFundAllocationMutation.mutate({ 
+                                      allocationId: alloc.id, 
+                                      status: "paid" 
+                                    })}
+                                    disabled={updateFundAllocationMutation.isPending}
+                                    data-testid={`button-mark-allocation-paid-${alloc.id}`}
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </Button>
+                                )}
+                                {alloc.status === "paid" && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => updateFundAllocationMutation.mutate({ 
+                                      allocationId: alloc.id, 
+                                      status: "confirmed" 
+                                    })}
+                                    disabled={updateFundAllocationMutation.isPending}
+                                    data-testid={`button-confirm-allocation-${alloc.id}`}
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {!fundSummary?.clientPayments?.length && !fundSummary?.allocations?.length && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No payments recorded yet. Record client payments to track funds.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="pb-3">
@@ -3499,6 +3800,236 @@ export default function JobDetail() {
             >
               <Link2 className="w-4 h-4 mr-2" />
               Create Link
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Client Payment Dialog */}
+      <Dialog open={clientPaymentDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setClientPaymentType("deposit");
+          setClientPaymentAmount("");
+          setClientPaymentMethod("");
+          setClientPaymentReference("");
+          setClientPaymentNotes("");
+        }
+        setClientPaymentDialogOpen(open);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Client Payment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Payment Type</Label>
+              <Select value={clientPaymentType} onValueChange={setClientPaymentType}>
+                <SelectTrigger data-testid="select-payment-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="deposit">Deposit</SelectItem>
+                  <SelectItem value="partial">Partial Payment</SelectItem>
+                  <SelectItem value="balance">Final Balance</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Amount Received</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={clientPaymentAmount}
+                onChange={(e) => setClientPaymentAmount(e.target.value)}
+                placeholder="0.00"
+                data-testid="input-payment-amount"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Method (optional)</Label>
+              <Select value={clientPaymentMethod} onValueChange={setClientPaymentMethod}>
+                <SelectTrigger data-testid="select-payment-method">
+                  <SelectValue placeholder="Select method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="card">Card Payment</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Reference (optional)</Label>
+              <Input
+                value={clientPaymentReference}
+                onChange={(e) => setClientPaymentReference(e.target.value)}
+                placeholder="Transaction reference"
+                data-testid="input-payment-reference"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                value={clientPaymentNotes}
+                onChange={(e) => setClientPaymentNotes(e.target.value)}
+                placeholder="Any additional notes..."
+                data-testid="input-payment-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setClientPaymentType("deposit");
+                setClientPaymentAmount("");
+                setClientPaymentMethod("");
+                setClientPaymentReference("");
+                setClientPaymentNotes("");
+                setClientPaymentDialogOpen(false);
+              }}
+              data-testid="button-cancel-payment"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createClientPaymentMutation.mutate({
+                type: clientPaymentType,
+                amount: clientPaymentAmount,
+                paymentMethod: clientPaymentMethod || undefined,
+                reference: clientPaymentReference || undefined,
+                notes: clientPaymentNotes || undefined,
+              })}
+              disabled={createClientPaymentMutation.isPending || !clientPaymentAmount || parseFloat(clientPaymentAmount) <= 0}
+              data-testid="button-confirm-payment"
+            >
+              {createClientPaymentMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4 mr-2" />
+              )}
+              Record Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Allocate Funds Dialog */}
+      <Dialog open={fundAllocationDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setAllocationPartnerId("");
+          setAllocationAmount("");
+          setAllocationPurpose("materials");
+          setAllocationNotes("");
+        }
+        setFundAllocationDialogOpen(open);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Allocate Funds to Partner</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800" data-testid="text-available-to-allocate">
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Available to allocate: <span className="font-semibold font-mono">£{(fundSummary?.unallocated || 0).toFixed(2)}</span>
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Partner <span className="text-destructive">*</span></Label>
+              <Select value={allocationPartnerId} onValueChange={setAllocationPartnerId}>
+                <SelectTrigger data-testid="select-allocation-partner">
+                  <SelectValue placeholder="Select partner" />
+                </SelectTrigger>
+                <SelectContent>
+                  {fundSummary?.jobPartners?.map((jp) => (
+                    <SelectItem key={jp.partnerId} value={jp.partnerId}>
+                      {jp.partner?.businessName || "Unknown Partner"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!allocationPartnerId && fundSummary?.jobPartners?.length === 0 && (
+                <p className="text-xs text-muted-foreground">No partners assigned to this job yet.</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Amount <span className="text-destructive">*</span></Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={allocationAmount}
+                onChange={(e) => setAllocationAmount(e.target.value)}
+                placeholder="0.00"
+                max={fundSummary?.unallocated || 0}
+                data-testid="input-allocation-amount"
+              />
+              {allocationAmount && parseFloat(allocationAmount) > (fundSummary?.unallocated || 0) && (
+                <p className="text-xs text-destructive">Amount exceeds available funds</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Purpose</Label>
+              <Select value={allocationPurpose} onValueChange={setAllocationPurpose}>
+                <SelectTrigger data-testid="select-allocation-purpose">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="materials">Materials</SelectItem>
+                  <SelectItem value="deposit">Subcontract Deposit</SelectItem>
+                  <SelectItem value="labor">Labor Payment</SelectItem>
+                  <SelectItem value="equipment">Equipment Rental</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                value={allocationNotes}
+                onChange={(e) => setAllocationNotes(e.target.value)}
+                placeholder="Reason for this allocation..."
+                data-testid="input-allocation-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAllocationPartnerId("");
+                setAllocationAmount("");
+                setAllocationPurpose("materials");
+                setAllocationNotes("");
+                setFundAllocationDialogOpen(false);
+              }}
+              data-testid="button-cancel-allocation"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createFundAllocationMutation.mutate({
+                partnerId: allocationPartnerId,
+                amount: allocationAmount,
+                purpose: allocationPurpose,
+                notes: allocationNotes || undefined,
+              })}
+              disabled={
+                createFundAllocationMutation.isPending || 
+                !allocationPartnerId || 
+                !allocationAmount || 
+                parseFloat(allocationAmount) <= 0 ||
+                parseFloat(allocationAmount) > (fundSummary?.unallocated || 0)
+              }
+              data-testid="button-confirm-allocation"
+            >
+              {createFundAllocationMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4 mr-2" />
+              )}
+              Allocate Funds
             </Button>
           </DialogFooter>
         </DialogContent>
