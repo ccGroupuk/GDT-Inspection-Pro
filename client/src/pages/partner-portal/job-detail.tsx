@@ -91,7 +91,8 @@ export default function PartnerPortalJobDetail() {
   const [requestPaymentDialogOpen, setRequestPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDescription, setPaymentDescription] = useState("");
-  const [paymentType, setPaymentType] = useState<"partner_deposit" | "partner_balance">("partner_balance");
+  const [paymentType, setPaymentType] = useState<"partner_deposit" | "partner_balance" | "partner_commission">("partner_balance");
+  const [isPartnerPayingCCC, setIsPartnerPayingCCC] = useState(false); // For partner-led jobs
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -200,7 +201,7 @@ export default function PartnerPortalJobDetail() {
 
   // Request payment mutation
   const requestPaymentMutation = useMutation({
-    mutationFn: async (data: { amount: string; description?: string; type: "partner_deposit" | "partner_balance" }) => {
+    mutationFn: async (data: { amount: string; description?: string; type: "partner_deposit" | "partner_balance" | "partner_commission" }) => {
       const res = await partnerApiRequest("POST", `/api/partner-portal/jobs/${jobId}/request-payment`, data, token);
       if (!res.ok) {
         const error = await res.json();
@@ -685,9 +686,21 @@ export default function PartnerPortalJobDetail() {
                     {(() => {
                       // Calculate financial summary
                       const partnerTotal = parseFloat(job.partnerCharge || "0");
-                      // Sum of confirmed payments to partner (both deposits and balance payments)
+                      
+                      // Determine payment flow based on team type FIRST
+                      // partner = Partner collects from client, owes CCC commission
+                      // hybrid/in_house = CCC collects, pays partner
+                      const teamType = (job as Job & { teamType?: string }).teamType || "hybrid";
+                      const isPartnerLed = teamType === "partner";
+                      const isHybrid = teamType === "hybrid";
+                      
+                      // For partner-led jobs: Sum commission payments (partner paying CCC)
+                      // For CCC-led jobs: Sum payments TO partner (deposit/balance/payout)
                       const paidToDate = paymentRequests
                         ?.filter(r => r.approvalStatus === "confirmed")
+                        .filter(r => isPartnerLed 
+                          ? r.type === "partner_commission" 
+                          : (r.type === "partner_deposit" || r.type === "partner_balance" || r.type === "partner_payout"))
                         .reduce((sum, r) => sum + parseFloat(r.amount), 0) || 0;
                       const remainingBalance = Math.max(partnerTotal - paidToDate, 0);
                       
@@ -696,81 +709,139 @@ export default function PartnerPortalJobDetail() {
                         r.approvalStatus === "pending" || r.approvalStatus === "marked_paid"
                       );
                       
-                      // Check if deposit has already been paid or requested
+                      // Check if deposit has already been paid or requested (only for CCC-led jobs)
                       const hasDepositRequest = paymentRequests?.some(r => r.type === "partner_deposit");
                       const depositPaid = paymentRequests?.some(r => 
                         r.type === "partner_deposit" && r.approvalStatus === "confirmed"
                       );
+                      
+                      // For hybrid jobs, show if client deposit was received
+                      const clientDepositReceived = job.depositReceived;
 
                       return (
                         <>
                           {/* Financial Summary Card */}
                           {job.partnerCharge && (
                             <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+                              {/* Team type indicator */}
+                              <div className="flex justify-between items-center pb-2 border-b">
+                                <span className="text-xs text-muted-foreground">Payment Flow:</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {isPartnerLed ? "You collect from client" : 
+                                   isHybrid ? "Shared (CCC collects)" : "CCC collects"}
+                                </Badge>
+                              </div>
+                              
                               <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Agreed Rate:</span>
+                                <span className="text-sm text-muted-foreground">
+                                  {isPartnerLed ? "Job Value:" : "Agreed Rate:"}
+                                </span>
                                 <span className="font-medium">£{partnerTotal.toFixed(2)}</span>
                               </div>
+                              
+                              {/* Show client deposit status for hybrid jobs */}
+                              {isHybrid && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-muted-foreground">Client Deposit:</span>
+                                  <span className={`text-sm ${clientDepositReceived ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}>
+                                    {clientDepositReceived ? "Received" : "Pending"}
+                                  </span>
+                                </div>
+                              )}
+                              
                               <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Paid to Date:</span>
+                                <span className="text-sm text-muted-foreground">
+                                  {isPartnerLed ? "Commission Paid to CCC:" : "Paid to You:"}
+                                </span>
                                 <span className={`font-medium ${paidToDate > 0 ? "text-green-600 dark:text-green-400" : ""}`}>
                                   £{paidToDate.toFixed(2)}
                                 </span>
                               </div>
+                              
                               <div className="border-t pt-2 flex justify-between items-center">
-                                <span className="text-sm font-medium">Balance Remaining:</span>
-                                <span className="font-bold text-lg">£{remainingBalance.toFixed(2)}</span>
+                                <span className="text-sm font-medium">
+                                  {isPartnerLed ? "Commission Due to CCC:" : "CCC Owes You:"}
+                                </span>
+                                <span className={`font-bold text-lg ${isPartnerLed ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                                  £{remainingBalance.toFixed(2)}
+                                </span>
                               </div>
                             </div>
                           )}
                           
-                          {/* Payment Request Buttons */}
+                          {/* Payment Request Buttons - Different based on team type */}
                           {!hasPendingRequest && remainingBalance > 0 && (
                             <div className="flex gap-2 flex-wrap">
-                              {/* Request Deposit - only show if no deposit has been requested yet */}
-                              {!hasDepositRequest && (
+                              {isPartnerLed ? (
+                                /* Partner-led: Partner pays CCC commission */
                                 <Button 
-                                  variant="outline"
                                   className="flex-1"
                                   onClick={() => {
-                                    // Default deposit to 50% of remaining or total
-                                    const depositAmount = (partnerTotal * 0.5).toFixed(2);
-                                    setPaymentAmount(depositAmount);
-                                    setPaymentType("partner_deposit");
+                                    setPaymentAmount(remainingBalance.toFixed(2));
+                                    setPaymentType("partner_commission");
+                                    setIsPartnerPayingCCC(true);
                                     setRequestPaymentDialogOpen(true);
                                   }}
-                                  data-testid="button-request-deposit"
+                                  data-testid="button-pay-commission"
                                 >
                                   <Banknote className="w-4 h-4 mr-2" />
-                                  Request Deposit
+                                  Pay CCC Commission
                                 </Button>
+                              ) : (
+                                /* CCC collects: Partner requests payment from CCC */
+                                <>
+                                  {/* Request Deposit - only show if no deposit has been requested yet */}
+                                  {!hasDepositRequest && (
+                                    <Button 
+                                      variant="outline"
+                                      className="flex-1"
+                                      onClick={() => {
+                                        // Default deposit to 50% of remaining or total
+                                        const depositAmt = (partnerTotal * 0.5).toFixed(2);
+                                        setPaymentAmount(depositAmt);
+                                        setPaymentType("partner_deposit");
+                                        setIsPartnerPayingCCC(false);
+                                        setRequestPaymentDialogOpen(true);
+                                      }}
+                                      data-testid="button-request-deposit"
+                                    >
+                                      <Banknote className="w-4 h-4 mr-2" />
+                                      Request Deposit
+                                    </Button>
+                                  )}
+                                  
+                                  {/* Request Final Balance */}
+                                  <Button 
+                                    className="flex-1"
+                                    onClick={() => {
+                                      setPaymentAmount(remainingBalance.toFixed(2));
+                                      setPaymentType("partner_balance");
+                                      setIsPartnerPayingCCC(false);
+                                      setRequestPaymentDialogOpen(true);
+                                    }}
+                                    data-testid="button-request-balance"
+                                  >
+                                    <Banknote className="w-4 h-4 mr-2" />
+                                    Request Final Balance
+                                  </Button>
+                                </>
                               )}
-                              
-                              {/* Request Final Balance */}
-                              <Button 
-                                className="flex-1"
-                                onClick={() => {
-                                  setPaymentAmount(remainingBalance.toFixed(2));
-                                  setPaymentType("partner_balance");
-                                  setRequestPaymentDialogOpen(true);
-                                }}
-                                data-testid="button-request-balance"
-                              >
-                                <Banknote className="w-4 h-4 mr-2" />
-                                Request Final Balance
-                              </Button>
                             </div>
                           )}
                           
                           {hasPendingRequest && (
                             <p className="text-sm text-amber-600 dark:text-amber-400 text-center">
-                              You have a pending payment request. Please wait for admin approval.
+                              {isPartnerLed 
+                                ? "Your commission payment is being processed."
+                                : "You have a pending payment request. Please wait for admin approval."}
                             </p>
                           )}
                           
                           {remainingBalance === 0 && paidToDate > 0 && (
                             <p className="text-sm text-green-600 dark:text-green-400 text-center">
-                              All payments received. Thank you!
+                              {isPartnerLed 
+                                ? "Commission fully paid. Thank you!"
+                                : "All payments received. Thank you!"}
                             </p>
                           )}
                         </>
@@ -1387,20 +1458,27 @@ export default function PartnerPortalJobDetail() {
             setPaymentAmount("");
             setPaymentDescription("");
             setPaymentType("partner_balance");
+            setIsPartnerPayingCCC(false);
           }
         }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Banknote className="w-5 h-5 text-primary" />
-                {paymentType === "partner_deposit" ? "Request Deposit" : "Request Final Balance"}
+                {isPartnerPayingCCC 
+                  ? "Pay CCC Commission"
+                  : paymentType === "partner_deposit" 
+                    ? "Request Deposit" 
+                    : "Request Final Balance"}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <p className="text-sm text-muted-foreground">
-                {paymentType === "partner_deposit" 
-                  ? "Request an upfront deposit payment before starting work on this job."
-                  : "Request the remaining balance for your completed work on this job."
+                {isPartnerPayingCCC
+                  ? "Submit your commission payment to CCC for this job. You collected payment directly from the client."
+                  : paymentType === "partner_deposit" 
+                    ? "Request an upfront deposit payment before starting work on this job."
+                    : "Request the remaining balance for your completed work on this job."
                 }
               </p>
               <div className="space-y-2">
@@ -1418,9 +1496,11 @@ export default function PartnerPortalJobDetail() {
               <div className="space-y-2">
                 <Label>Description (Optional)</Label>
                 <Textarea
-                  placeholder={paymentType === "partner_deposit" 
-                    ? "Any notes about the deposit request..."
-                    : "Brief description of completed work..."
+                  placeholder={isPartnerPayingCCC
+                    ? "Any notes about this commission payment..."
+                    : paymentType === "partner_deposit" 
+                      ? "Any notes about the deposit request..."
+                      : "Brief description of completed work..."
                   }
                   value={paymentDescription}
                   onChange={(e) => setPaymentDescription(e.target.value)}
@@ -1453,7 +1533,11 @@ export default function PartnerPortalJobDetail() {
                 disabled={requestPaymentMutation.isPending}
                 data-testid="button-confirm-payment-request"
               >
-                {requestPaymentMutation.isPending ? "Submitting..." : "Submit Request"}
+                {requestPaymentMutation.isPending 
+                  ? "Submitting..." 
+                  : isPartnerPayingCCC 
+                    ? "Submit Commission" 
+                    : "Submit Request"}
               </Button>
             </DialogFooter>
           </DialogContent>

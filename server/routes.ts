@@ -5798,7 +5798,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       
       const partnerRequests = allRequests
         .flat()
-        .filter(req => req.audience === 'partner' || req.type === 'partner_payout' || req.type === 'partner_deposit' || req.type === 'partner_balance')
+        .filter(req => req.audience === 'partner' || req.type === 'partner_payout' || req.type === 'partner_deposit' || req.type === 'partner_balance' || req.type === 'partner_commission')
         .map(req => {
           const job = jobs.find(j => j.id === req.jobId);
           return { ...req, job: job ? { id: job.id, jobNumber: job.jobNumber, serviceType: job.serviceType } : null };
@@ -5851,8 +5851,19 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       const paymentType = req.body.type || "partner_payout";
       
       // Validate the type
-      if (!["partner_deposit", "partner_balance", "partner_payout"].includes(paymentType)) {
+      // partner_deposit/partner_balance/partner_payout = CCC pays partner
+      // partner_commission = Partner pays CCC (for partner-led jobs)
+      if (!["partner_deposit", "partner_balance", "partner_payout", "partner_commission"].includes(paymentType)) {
         return res.status(400).json({ message: "Invalid payment type" });
+      }
+      
+      // For partner-led jobs (teamType === "partner"), only allow commission payments
+      // For other team types, only allow deposit/balance/payout payments
+      if (job.teamType === "partner" && paymentType !== "partner_commission") {
+        return res.status(400).json({ message: "Partner-led jobs require commission payments to CCC" });
+      }
+      if (job.teamType !== "partner" && paymentType === "partner_commission") {
+        return res.status(400).json({ message: "Commission payments are only for partner-led jobs" });
       }
       
       // Check if partner already has a pending deposit request (only one deposit allowed)
@@ -5863,16 +5874,29 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         }
       }
       
-      // Validate amount doesn't exceed partner charge
+      // Validate amount doesn't exceed what's owed
+      // For partner-led jobs: partnerCharge is CCC's commission, count partner_commission payments
+      // For CCC-led jobs: partnerCharge is what CCC owes partner, count deposit/balance/payout payments
       const partnerCharge = parseFloat(job.partnerCharge || "0");
       const requestAmount = parseFloat(amount);
-      const confirmedPayments = existingRequests
-        .filter(r => (r.audience === "partner" || r.type?.startsWith("partner_")) && r.approvalStatus === "confirmed")
-        .reduce((sum, r) => sum + parseFloat(r.amount), 0);
+      
+      let confirmedPayments: number;
+      if (job.teamType === "partner") {
+        // Partner-led: count only commission payments TO CCC
+        confirmedPayments = existingRequests
+          .filter(r => r.type === "partner_commission" && r.approvalStatus === "confirmed")
+          .reduce((sum, r) => sum + parseFloat(r.amount), 0);
+      } else {
+        // CCC-led: count payouts FROM CCC to partner
+        confirmedPayments = existingRequests
+          .filter(r => (r.type === "partner_deposit" || r.type === "partner_balance" || r.type === "partner_payout") && r.approvalStatus === "confirmed")
+          .reduce((sum, r) => sum + parseFloat(r.amount), 0);
+      }
       const remainingBalance = partnerCharge - confirmedPayments;
       
       if (requestAmount > remainingBalance + 0.01) { // Small tolerance for rounding
-        return res.status(400).json({ message: `Amount exceeds remaining balance of £${remainingBalance.toFixed(2)}` });
+        const balanceLabel = job.teamType === "partner" ? "commission due" : "remaining balance";
+        return res.status(400).json({ message: `Amount exceeds ${balanceLabel} of £${remainingBalance.toFixed(2)}` });
       }
       
       const paymentRequest = await storage.createPaymentRequest({
@@ -5915,7 +5939,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       
       const requests = await storage.getPaymentRequestsByJob(req.params.jobId);
       // Only return partner-related payment requests
-      const partnerRequests = requests.filter(r => r.audience === 'partner' || r.type === 'partner_payout' || r.type === 'partner_deposit' || r.type === 'partner_balance');
+      const partnerRequests = requests.filter(r => r.audience === 'partner' || r.type === 'partner_payout' || r.type === 'partner_deposit' || r.type === 'partner_balance' || r.type === 'partner_commission');
       
       res.json(partnerRequests);
     } catch (error) {
