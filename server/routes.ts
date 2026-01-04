@@ -5798,7 +5798,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       
       const partnerRequests = allRequests
         .flat()
-        .filter(req => req.audience === 'partner' || req.type === 'partner_payout')
+        .filter(req => req.audience === 'partner' || req.type === 'partner_payout' || req.type === 'partner_deposit' || req.type === 'partner_balance')
         .map(req => {
           const job = jobs.find(j => j.id === req.jobId);
           return { ...req, job: job ? { id: job.id, jobNumber: job.jobNumber, serviceType: job.serviceType } : null };
@@ -5847,10 +5847,37 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       // Create payment request for partner payout
       const amount = req.body.amount || job.partnerCharge || "0";
       const description = req.body.description || `Payment request for completed work on ${job.jobNumber}`;
+      // Use provided type (partner_deposit or partner_balance) or default to partner_payout for backwards compatibility
+      const paymentType = req.body.type || "partner_payout";
+      
+      // Validate the type
+      if (!["partner_deposit", "partner_balance", "partner_payout"].includes(paymentType)) {
+        return res.status(400).json({ message: "Invalid payment type" });
+      }
+      
+      // Check if partner already has a pending deposit request (only one deposit allowed)
+      if (paymentType === "partner_deposit") {
+        const hasExistingDeposit = existingRequests.some(r => r.type === "partner_deposit");
+        if (hasExistingDeposit) {
+          return res.status(400).json({ message: "A deposit has already been requested for this job" });
+        }
+      }
+      
+      // Validate amount doesn't exceed partner charge
+      const partnerCharge = parseFloat(job.partnerCharge || "0");
+      const requestAmount = parseFloat(amount);
+      const confirmedPayments = existingRequests
+        .filter(r => (r.audience === "partner" || r.type?.startsWith("partner_")) && r.approvalStatus === "confirmed")
+        .reduce((sum, r) => sum + parseFloat(r.amount), 0);
+      const remainingBalance = partnerCharge - confirmedPayments;
+      
+      if (requestAmount > remainingBalance + 0.01) { // Small tolerance for rounding
+        return res.status(400).json({ message: `Amount exceeds remaining balance of £${remainingBalance.toFixed(2)}` });
+      }
       
       const paymentRequest = await storage.createPaymentRequest({
         jobId: job.id,
-        type: "partner_payout",
+        type: paymentType,
         amount: amount,
         description: description,
         status: "pending",
@@ -5888,7 +5915,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       
       const requests = await storage.getPaymentRequestsByJob(req.params.jobId);
       // Only return partner-related payment requests
-      const partnerRequests = requests.filter(r => r.audience === 'partner' || r.type === 'partner_payout');
+      const partnerRequests = requests.filter(r => r.audience === 'partner' || r.type === 'partner_payout' || r.type === 'partner_deposit' || r.type === 'partner_balance');
       
       res.json(partnerRequests);
     } catch (error) {

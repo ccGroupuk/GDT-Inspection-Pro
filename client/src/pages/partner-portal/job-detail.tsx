@@ -91,6 +91,7 @@ export default function PartnerPortalJobDetail() {
   const [requestPaymentDialogOpen, setRequestPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDescription, setPaymentDescription] = useState("");
+  const [paymentType, setPaymentType] = useState<"partner_deposit" | "partner_balance">("partner_balance");
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -199,7 +200,7 @@ export default function PartnerPortalJobDetail() {
 
   // Request payment mutation
   const requestPaymentMutation = useMutation({
-    mutationFn: async (data: { amount: string; description?: string }) => {
+    mutationFn: async (data: { amount: string; description?: string; type: "partner_deposit" | "partner_balance" }) => {
       const res = await partnerApiRequest("POST", `/api/partner-portal/jobs/${jobId}/request-payment`, data, token);
       if (!res.ok) {
         const error = await res.json();
@@ -213,6 +214,7 @@ export default function PartnerPortalJobDetail() {
       setRequestPaymentDialogOpen(false);
       setPaymentAmount("");
       setPaymentDescription("");
+      setPaymentType("partner_balance");
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -641,7 +643,12 @@ export default function PartnerPortalJobDetail() {
                         {paymentRequests.map((req) => (
                           <div key={req.id} className="p-3 rounded-lg bg-muted/50">
                             <div className="flex items-center justify-between gap-3 mb-2">
-                              <span className="font-medium">£{parseFloat(req.amount).toFixed(2)}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">£{parseFloat(req.amount).toFixed(2)}</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {req.type === "partner_deposit" ? "Deposit" : "Balance"}
+                                </Badge>
+                              </div>
                               <Badge variant={
                                 req.approvalStatus === "confirmed" ? "default" :
                                 req.approvalStatus === "marked_paid" ? "secondary" :
@@ -650,7 +657,7 @@ export default function PartnerPortalJobDetail() {
                               }>
                                 {req.approvalStatus === "confirmed" && "Paid"}
                                 {req.approvalStatus === "marked_paid" && "Processing"}
-                                {req.approvalStatus === "pending" && "Pending Review"}
+                                {(req.approvalStatus === "pending" || !req.approvalStatus) && "Pending Review"}
                                 {req.approvalStatus === "rejected" && "Rejected"}
                               </Badge>
                             </div>
@@ -674,51 +681,97 @@ export default function PartnerPortalJobDetail() {
                       <p className="text-sm text-muted-foreground">No payment requests yet.</p>
                     )}
                     
-                    {/* Only show request button if no pending request */}
+                    {/* Financial summary and payment request buttons */}
                     {(() => {
-                      // Calculate balance due
+                      // Calculate financial summary
                       const partnerTotal = parseFloat(job.partnerCharge || "0");
-                      // depositAmount always stores the actual currency value (whether originally a percentage or fixed)
-                      // depositType just indicates how it was calculated, not the format of the stored value
-                      const actualDepositValue = (job.depositReceived && job.depositAmount) 
-                        ? parseFloat(job.depositAmount) 
-                        : 0;
-                      // Sum of already confirmed payments to partner
-                      const confirmedPayments = paymentRequests
+                      // Sum of confirmed payments to partner (both deposits and balance payments)
+                      const paidToDate = paymentRequests
                         ?.filter(r => r.approvalStatus === "confirmed")
                         .reduce((sum, r) => sum + parseFloat(r.amount), 0) || 0;
-                      const balanceDue = Math.max(partnerTotal - actualDepositValue - confirmedPayments, 0);
+                      const remainingBalance = Math.max(partnerTotal - paidToDate, 0);
+                      
+                      // Check if there's a pending request
+                      const hasPendingRequest = paymentRequests?.some(r => 
+                        r.approvalStatus === "pending" || r.approvalStatus === "marked_paid"
+                      );
+                      
+                      // Check if deposit has already been paid or requested
+                      const hasDepositRequest = paymentRequests?.some(r => r.type === "partner_deposit");
+                      const depositPaid = paymentRequests?.some(r => 
+                        r.type === "partner_deposit" && r.approvalStatus === "confirmed"
+                      );
 
                       return (
                         <>
-                          {(!paymentRequests || !paymentRequests.some(r => r.approvalStatus === "pending")) && (
-                            <Button 
-                              className="w-full"
-                              onClick={() => {
-                                setPaymentAmount(balanceDue.toFixed(2));
-                                setRequestPaymentDialogOpen(true);
-                              }}
-                              data-testid="button-request-payment"
-                            >
-                              <Banknote className="w-4 h-4 mr-2" />
-                              Request Payment
-                            </Button>
+                          {/* Financial Summary Card */}
+                          {job.partnerCharge && (
+                            <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Agreed Rate:</span>
+                                <span className="font-medium">£{partnerTotal.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Paid to Date:</span>
+                                <span className={`font-medium ${paidToDate > 0 ? "text-green-600 dark:text-green-400" : ""}`}>
+                                  £{paidToDate.toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="border-t pt-2 flex justify-between items-center">
+                                <span className="text-sm font-medium">Balance Remaining:</span>
+                                <span className="font-bold text-lg">£{remainingBalance.toFixed(2)}</span>
+                              </div>
+                            </div>
                           )}
                           
-                          {job.partnerCharge && (
-                            <div className="text-xs text-muted-foreground text-center space-y-1">
-                              <p>Agreed rate: £{partnerTotal.toFixed(2)}</p>
-                              {job.depositReceived && actualDepositValue > 0 && (
-                                <>
-                                  <p className="text-green-600 dark:text-green-400">
-                                    Deposit received: £{actualDepositValue.toFixed(2)}
-                                  </p>
-                                  <p className="font-medium text-foreground">
-                                    Balance due: £{balanceDue.toFixed(2)}
-                                  </p>
-                                </>
+                          {/* Payment Request Buttons */}
+                          {!hasPendingRequest && remainingBalance > 0 && (
+                            <div className="flex gap-2 flex-wrap">
+                              {/* Request Deposit - only show if no deposit has been requested yet */}
+                              {!hasDepositRequest && (
+                                <Button 
+                                  variant="outline"
+                                  className="flex-1"
+                                  onClick={() => {
+                                    // Default deposit to 50% of remaining or total
+                                    const depositAmount = (partnerTotal * 0.5).toFixed(2);
+                                    setPaymentAmount(depositAmount);
+                                    setPaymentType("partner_deposit");
+                                    setRequestPaymentDialogOpen(true);
+                                  }}
+                                  data-testid="button-request-deposit"
+                                >
+                                  <Banknote className="w-4 h-4 mr-2" />
+                                  Request Deposit
+                                </Button>
                               )}
+                              
+                              {/* Request Final Balance */}
+                              <Button 
+                                className="flex-1"
+                                onClick={() => {
+                                  setPaymentAmount(remainingBalance.toFixed(2));
+                                  setPaymentType("partner_balance");
+                                  setRequestPaymentDialogOpen(true);
+                                }}
+                                data-testid="button-request-balance"
+                              >
+                                <Banknote className="w-4 h-4 mr-2" />
+                                Request Final Balance
+                              </Button>
                             </div>
+                          )}
+                          
+                          {hasPendingRequest && (
+                            <p className="text-sm text-amber-600 dark:text-amber-400 text-center">
+                              You have a pending payment request. Please wait for admin approval.
+                            </p>
+                          )}
+                          
+                          {remainingBalance === 0 && paidToDate > 0 && (
+                            <p className="text-sm text-green-600 dark:text-green-400 text-center">
+                              All payments received. Thank you!
+                            </p>
                           )}
                         </>
                       );
@@ -1333,18 +1386,22 @@ export default function PartnerPortalJobDetail() {
             setRequestPaymentDialogOpen(false);
             setPaymentAmount("");
             setPaymentDescription("");
+            setPaymentType("partner_balance");
           }
         }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Banknote className="w-5 h-5 text-primary" />
-                Request Payment
+                {paymentType === "partner_deposit" ? "Request Deposit" : "Request Final Balance"}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <p className="text-sm text-muted-foreground">
-                Submit a payment request for your completed work on this job.
+                {paymentType === "partner_deposit" 
+                  ? "Request an upfront deposit payment before starting work on this job."
+                  : "Request the remaining balance for your completed work on this job."
+                }
               </p>
               <div className="space-y-2">
                 <Label>Amount (£)</Label>
@@ -1361,7 +1418,10 @@ export default function PartnerPortalJobDetail() {
               <div className="space-y-2">
                 <Label>Description (Optional)</Label>
                 <Textarea
-                  placeholder="Brief description of completed work..."
+                  placeholder={paymentType === "partner_deposit" 
+                    ? "Any notes about the deposit request..."
+                    : "Brief description of completed work..."
+                  }
                   value={paymentDescription}
                   onChange={(e) => setPaymentDescription(e.target.value)}
                   className="min-h-[80px]"
@@ -1387,6 +1447,7 @@ export default function PartnerPortalJobDetail() {
                   requestPaymentMutation.mutate({
                     amount: paymentAmount,
                     description: paymentDescription || undefined,
+                    type: paymentType,
                   });
                 }}
                 disabled={requestPaymentMutation.isPending}

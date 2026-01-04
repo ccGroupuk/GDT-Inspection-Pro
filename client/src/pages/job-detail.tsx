@@ -638,9 +638,9 @@ export default function JobDetail() {
     },
   });
 
-  // Get partner payment requests
+  // Get partner payment requests (include all partner-related types)
   const partnerPaymentRequests = paymentRequests?.filter(
-    pr => pr.type === "partner_payout" && pr.requestedByRole === "partner"
+    pr => (pr.type === "partner_payout" || pr.type === "partner_deposit" || pr.type === "partner_balance") && pr.requestedByRole === "partner"
   ) || [];
 
   const createInvoiceMutation = useMutation({
@@ -1437,8 +1437,12 @@ export default function JobDetail() {
                           {partnerPaymentRequests.map((req) => (
                             <div key={req.id} className="p-3 rounded-lg bg-muted/50">
                               <div className="flex items-center justify-between gap-3 mb-2">
-                                <div>
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-medium">£{parseFloat(req.amount).toFixed(2)}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {req.type === "partner_deposit" ? "Deposit" : 
+                                     req.type === "partner_balance" ? "Balance" : "Payout"}
+                                  </Badge>
                                   {req.description && (
                                     <p className="text-xs text-muted-foreground">{req.description}</p>
                                   )}
