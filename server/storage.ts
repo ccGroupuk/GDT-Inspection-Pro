@@ -144,6 +144,7 @@ export interface IStorage {
   acceptClientInvite(token: string): Promise<void>;
 
   getPaymentRequestsByJob(jobId: string): Promise<PaymentRequest[]>;
+  getPaymentRequest(id: string): Promise<PaymentRequest | undefined>;
   createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest>;
   updatePaymentRequest(id: string, request: Partial<InsertPaymentRequest>): Promise<PaymentRequest | undefined>;
   deletePaymentRequest(id: string): Promise<boolean>;
@@ -859,6 +860,11 @@ export class DatabaseStorage implements IStorage {
 
   async getPaymentRequestsByJob(jobId: string): Promise<PaymentRequest[]> {
     return db.select().from(paymentRequests).where(eq(paymentRequests.jobId, jobId)).orderBy(desc(paymentRequests.createdAt));
+  }
+
+  async getPaymentRequest(id: string): Promise<PaymentRequest | undefined> {
+    const [request] = await db.select().from(paymentRequests).where(eq(paymentRequests.id, id));
+    return request || undefined;
   }
 
   async createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest> {

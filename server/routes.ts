@@ -2423,6 +2423,72 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.patch("/api/payment-requests/:id", async (req, res) => {
     try {
       const data = insertPaymentRequestSchema.partial().parse(req.body);
+      
+      // Get the existing payment request
+      const existingRequest = await storage.getPaymentRequest(req.params.id);
+      if (!existingRequest) {
+        return res.status(404).json({ message: "Payment request not found" });
+      }
+      
+      // If confirming a partner payment, validate sufficient funds
+      if (data.approvalStatus === "confirmed" && 
+          (existingRequest.type === "partner_deposit" || 
+           existingRequest.type === "partner_balance" || 
+           existingRequest.type === "partner_payout")) {
+        
+        const job = await storage.getJob(existingRequest.jobId);
+        if (job && (job.deliveryType === "hybrid" || job.deliveryType === "partner")) {
+          // Calculate available funds
+          const quotes = await storage.getQuotesByJob(existingRequest.jobId);
+          const activeQuote = quotes.find(q => q.status === "accepted") || quotes[0];
+          let quoteTotal = 0;
+          if (activeQuote) {
+            const quoteItems = await storage.getQuoteItems(activeQuote.id);
+            const subtotal = quoteItems.reduce((sum, item) => 
+              sum + (parseFloat(item.unitPrice) * item.quantity), 0);
+            const taxRate = parseFloat(activeQuote.taxRate || "0") / 100;
+            const discountType = activeQuote.discountType || "percentage";
+            const discountValue = parseFloat(activeQuote.discountValue || "0");
+            const discount = discountType === "percentage" 
+              ? subtotal * (discountValue / 100) 
+              : discountValue;
+            quoteTotal = (subtotal - discount) * (1 + taxRate);
+          }
+          
+          // Calculate total received from client
+          let totalReceived = 0;
+          if (job.depositReceived && job.depositAmount) {
+            totalReceived = parseFloat(job.depositAmount);
+          }
+          if (job.balancePaid) {
+            totalReceived = quoteTotal;
+          }
+          
+          // Get confirmed partner payments (already paid out)
+          const allPaymentRequests = await storage.getJobPaymentRequests(existingRequest.jobId);
+          const confirmedPartnerPayments = allPaymentRequests
+            .filter(pr => 
+              (pr.type === "partner_deposit" || pr.type === "partner_balance" || pr.type === "partner_payout") &&
+              pr.approvalStatus === "confirmed" &&
+              pr.id !== req.params.id  // Exclude current request
+            )
+            .reduce((sum, pr) => sum + parseFloat(pr.amount), 0);
+          
+          const availableFunds = totalReceived - confirmedPartnerPayments;
+          const paymentAmount = parseFloat(existingRequest.amount);
+          
+          if (availableFunds < paymentAmount) {
+            const shortfall = paymentAmount - availableFunds;
+            return res.status(400).json({ 
+              message: `Insufficient client funds. Need £${shortfall.toFixed(2)} more before confirming this payment.`,
+              availableFunds,
+              paymentAmount,
+              shortfall
+            });
+          }
+        }
+      }
+      
       const request = await storage.updatePaymentRequest(req.params.id, data);
       if (!request) {
         return res.status(404).json({ message: "Payment request not found" });
@@ -2719,6 +2785,27 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         allocationsByPartner[key].allocations.push(alloc);
       }
       
+      // Calculate available funds for partner payments
+      // Available = totalReceived - confirmed partner payments (already paid out)
+      const paymentRequests = await storage.getJobPaymentRequests(req.params.jobId);
+      const confirmedPartnerPayments = paymentRequests
+        .filter(pr => 
+          (pr.type === "partner_deposit" || pr.type === "partner_balance" || pr.type === "partner_payout") &&
+          pr.approvalStatus === "confirmed"
+        )
+        .reduce((sum, pr) => sum + parseFloat(pr.amount), 0);
+      
+      const pendingPartnerPayments = paymentRequests
+        .filter(pr => 
+          (pr.type === "partner_deposit" || pr.type === "partner_balance" || pr.type === "partner_payout") &&
+          (pr.approvalStatus === "pending" || pr.approvalStatus === "marked_paid")
+        )
+        .reduce((sum, pr) => sum + parseFloat(pr.amount), 0);
+      
+      const availableFunds = totalReceived - confirmedPartnerPayments;
+      const fundsNeededForPending = pendingPartnerPayments;
+      const fundsShortfall = Math.max(0, pendingPartnerPayments - availableFunds);
+      
       res.json({
         totalReceived,
         totalAllocated,
@@ -2737,6 +2824,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         depositAmount: job.depositAmount ? parseFloat(job.depositAmount) : 0,
         balancePaid: job.balancePaid,
         deliveryType: job.deliveryType,
+        // Fund availability for partner payments
+        availableFunds,
+        confirmedPartnerPayments,
+        pendingPartnerPayments,
+        fundsNeededForPending,
+        fundsShortfall,
       });
     } catch (error) {
       console.error("Get fund summary error:", error);

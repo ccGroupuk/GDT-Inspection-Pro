@@ -305,6 +305,12 @@ export default function JobDetail() {
     depositAmount: number;
     balancePaid: boolean;
     deliveryType: string;
+    // Fund availability for partner payments
+    availableFunds: number;
+    confirmedPartnerPayments: number;
+    pendingPartnerPayments: number;
+    fundsNeededForPending: number;
+    fundsShortfall: number;
   }
   const { data: fundSummary } = useQuery<FundSummary>({
     queryKey: ["/api/jobs", id, "fund-summary"],
@@ -1723,21 +1729,36 @@ export default function JobDetail() {
                                   </Button>
                                 </div>
                               )}
-                              {req.approvalStatus === "marked_paid" && (
-                                <Button
-                                  size="sm"
-                                  className="mt-2"
-                                  onClick={() => updatePaymentRequestApprovalMutation.mutate({ 
-                                    requestId: req.id, 
-                                    approvalStatus: "confirmed" 
-                                  })}
-                                  disabled={updatePaymentRequestApprovalMutation.isPending}
-                                  data-testid={`button-confirm-payment-${req.id}`}
-                                >
-                                  <Check className="w-3 h-3 mr-1" />
-                                  Confirm Paid
-                                </Button>
-                              )}
+                              {req.approvalStatus === "marked_paid" && (() => {
+                                const paymentAmount = parseFloat(req.amount);
+                                const hasSufficientFunds = (fundSummary?.availableFunds || 0) >= paymentAmount;
+                                const shortfall = paymentAmount - (fundSummary?.availableFunds || 0);
+                                
+                                return (
+                                  <div className="mt-2 space-y-2">
+                                    {!hasSufficientFunds && (
+                                      <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                                        <p className="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                                          <AlertCircle className="w-3 h-3" />
+                                          Insufficient client funds. Need £{shortfall.toFixed(2)} more before paying partner.
+                                        </p>
+                                      </div>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      onClick={() => updatePaymentRequestApprovalMutation.mutate({ 
+                                        requestId: req.id, 
+                                        approvalStatus: "confirmed" 
+                                      })}
+                                      disabled={updatePaymentRequestApprovalMutation.isPending || !hasSufficientFunds}
+                                      data-testid={`button-confirm-payment-${req.id}`}
+                                    >
+                                      <Check className="w-3 h-3 mr-1" />
+                                      {hasSufficientFunds ? "Confirm Paid" : "Waiting for Client Payment"}
+                                    </Button>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           ))}
                         </div>
