@@ -723,8 +723,10 @@ export default function JobDetail() {
   });
 
   // Get partner payment requests (include all partner-related types)
+  // Include both partner-requested and admin-created commission requests
   const partnerPaymentRequests = paymentRequests?.filter(
-    pr => (pr.type === "partner_payout" || pr.type === "partner_deposit" || pr.type === "partner_balance" || pr.type === "partner_commission") && pr.requestedByRole === "partner"
+    pr => (pr.type === "partner_payout" || pr.type === "partner_deposit" || pr.type === "partner_balance" || pr.type === "partner_commission") && 
+          (pr.requestedByRole === "partner" || pr.type === "partner_commission")
   ) || [];
 
   // Create client payment mutation
@@ -767,6 +769,27 @@ export default function JobDetail() {
         title: error.message || "Failed to allocate funds", 
         variant: "destructive" 
       });
+    },
+  });
+
+  // Create partner commission invoice mutation
+  const createPartnerCommissionMutation = useMutation({
+    mutationFn: async (data: { amount: number; description: string }) => {
+      return apiRequest("POST", `/api/jobs/${id}/payment-requests`, {
+        type: "partner_commission",
+        amount: data.amount.toFixed(2),
+        description: data.description,
+        audience: "partner",
+        requestedByRole: "admin",
+        status: "pending",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", id, "payment-requests"] });
+      toast({ title: "Commission invoice sent to partner" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create commission invoice", variant: "destructive" });
     },
   });
 
@@ -1578,19 +1601,63 @@ export default function JobDetail() {
                     
                     {/* CCC Commission - auto-calculated from partner's commission rate */}
                     <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-primary/10" data-testid="text-ccc-margin">
-                      <span className="text-sm font-medium">CCC Margin</span>
-                      <div className="text-right">
-                        <span className="font-mono text-lg font-semibold text-primary">
-                          {fundSummary?.cccCommission ? `£${fundSummary.cccCommission.toFixed(2)}` :
-                           margin ? `£${margin.toLocaleString()}` : "-"}
-                        </span>
-                        {fundSummary?.commissionRate ? (
-                          <span className="text-xs text-muted-foreground ml-2">
-                            ({fundSummary.commissionRate}%)
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">CCC Margin</span>
+                        {job.deliveryType === "partner" && fundSummary?.cccCommission && fundSummary.cccCommission > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            Commission owed by partner
                           </span>
-                        ) : marginPercentage ? (
-                          <span className="text-xs text-muted-foreground ml-2">({marginPercentage}%)</span>
-                        ) : null}
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <span className="font-mono text-lg font-semibold text-primary">
+                            {fundSummary?.cccCommission ? `£${fundSummary.cccCommission.toFixed(2)}` :
+                             margin ? `£${margin.toLocaleString()}` : "-"}
+                          </span>
+                          {fundSummary?.commissionRate ? (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({fundSummary.commissionRate}%)
+                            </span>
+                          ) : marginPercentage ? (
+                            <span className="text-xs text-muted-foreground ml-2">({marginPercentage}%)</span>
+                          ) : null}
+                        </div>
+                        {job.deliveryType === "partner" && fundSummary?.cccCommission && fundSummary.cccCommission > 0 && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              const hasExistingCommissionRequest = paymentRequests?.some(
+                                pr => pr.type === "partner_commission" && pr.approvalStatus !== "rejected"
+                              );
+                              if (hasExistingCommissionRequest) {
+                                toast({ 
+                                  title: "Commission already invoiced", 
+                                  description: "A commission invoice has already been created for this job.",
+                                  variant: "destructive" 
+                                });
+                                return;
+                              }
+                              createPartnerCommissionMutation.mutate({
+                                amount: fundSummary.cccCommission,
+                                description: `${fundSummary.commissionRate}% commission on £${fundSummary.quoteTotal.toFixed(2)} job total`,
+                              });
+                            }}
+                            disabled={createPartnerCommissionMutation.isPending || paymentRequests?.some(
+                              pr => pr.type === "partner_commission" && pr.approvalStatus !== "rejected"
+                            )}
+                            data-testid="button-invoice-partner-commission"
+                          >
+                            {createPartnerCommissionMutation.isPending ? (
+                              <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                            ) : (
+                              <FileText className="w-3 h-3 mr-1" />
+                            )}
+                            {paymentRequests?.some(pr => pr.type === "partner_commission" && pr.approvalStatus !== "rejected") 
+                              ? "Invoiced" 
+                              : "Invoice Partner"}
+                          </Button>
+                        )}
                       </div>
                     </div>
                     
