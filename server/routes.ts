@@ -2617,6 +2617,51 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         }
       }
       
+      // For hybrid jobs, auto-create partner balance payment when client balance is received
+      if (type === "balance") {
+        const job = await storage.getJob(req.params.jobId);
+        if (job && job.deliveryType === "hybrid") {
+          // Update job balancePaid flag
+          await storage.updateJob(req.params.jobId, { balancePaid: true });
+          
+          const jobPartners = await storage.getJobPartners(req.params.jobId);
+          
+          for (const jp of jobPartners) {
+            // Check if partner balance already exists
+            const existingRequests = await storage.getJobPaymentRequests(req.params.jobId);
+            const hasPartnerBalance = existingRequests.some(
+              r => r.type === "partner_balance" && r.requestedById === jp.partnerId
+            );
+            
+            if (!hasPartnerBalance) {
+              const partner = await storage.getTradePartner(jp.partnerId);
+              
+              // Calculate partner's balance share
+              // Total partner charge minus what was already paid as deposit
+              const partnerTotal = parseFloat(job.partnerCharge || "0");
+              const confirmedDeposits = existingRequests
+                .filter(r => r.type === "partner_deposit" && r.approvalStatus === "confirmed")
+                .reduce((sum, r) => sum + parseFloat(r.amount), 0);
+              
+              const partnerBalanceAmount = partnerTotal - confirmedDeposits;
+              
+              if (partnerBalanceAmount > 0) {
+                // Create partner balance payment request
+                await storage.createPaymentRequest({
+                  jobId: req.params.jobId,
+                  type: "partner_balance",
+                  amount: partnerBalanceAmount.toFixed(2),
+                  description: `Final payment for completed work on ${job.jobNumber}`,
+                  audience: "partner",
+                  requestedByRole: "admin",
+                  approvalStatus: "pending",
+                });
+              }
+            }
+          }
+        }
+      }
+      
       res.status(201).json(payment);
     } catch (error) {
       console.error("Create client payment error:", error);
