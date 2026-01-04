@@ -2666,10 +2666,10 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       }
       
       // For partner-led jobs, auto-calculate client funds based on payments collected
-      // For hybrid jobs, this is the manual client payments we recorded
+      // For hybrid jobs, we use both manual payments AND auto-calculated from deposit status
       const manualPayments = clientPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
       
-      // Auto-calculate based on deposit status
+      // Auto-calculate based on deposit status (deposit marked as received)
       let autoClientFundsReceived = 0;
       if (job.depositReceived && job.depositAmount) {
         autoClientFundsReceived = parseFloat(job.depositAmount);
@@ -2679,9 +2679,11 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         autoClientFundsReceived = quoteTotal;
       }
       
-      const totalReceived = job.deliveryType === "partner" 
-        ? autoClientFundsReceived  // Partner-led: auto from deposit/balance status
-        : manualPayments;  // Hybrid: from manual client payment records
+      // For hybrid and partner-led jobs, use auto-calculated when deposit is marked as received
+      // For in-house jobs OR when no deposit is marked received, use manual payments
+      const totalReceived = (job.deliveryType === "partner" || job.deliveryType === "hybrid") && autoClientFundsReceived > 0
+        ? autoClientFundsReceived  // Partner/Hybrid with deposit received: auto from deposit/balance status
+        : manualPayments;  // In-house or no deposit: from manual client payment records
       
       const totalAllocated = allocations.reduce((sum, a) => sum + parseFloat(a.amount), 0);
       const unallocated = totalReceived - totalAllocated;

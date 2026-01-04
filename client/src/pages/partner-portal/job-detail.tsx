@@ -831,9 +831,17 @@ export default function PartnerPortalJobDetail() {
                           
                           {hasPendingRequest && (
                             <p className="text-sm text-amber-600 dark:text-amber-400 text-center">
-                              {isPartnerLed 
-                                ? "Your commission payment is being processed."
-                                : "You have a pending payment request. Please wait for admin approval."}
+                              {(() => {
+                                const processingRequest = paymentRequests?.find(r => r.approvalStatus === "marked_paid");
+                                if (processingRequest) {
+                                  return isPartnerLed 
+                                    ? "Your commission payment is being processed."
+                                    : "Your payment request is being processed. Please wait for final confirmation.";
+                                }
+                                return isPartnerLed 
+                                  ? "Your commission payment is pending review."
+                                  : "You have a pending payment request. Please wait for admin approval.";
+                              })()}
                             </p>
                           )}
                           
