@@ -2553,6 +2553,68 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       // Update job depositReceived if this is a deposit
       if (type === "deposit") {
         await storage.updateJob(req.params.jobId, { depositReceived: true });
+        
+        // For hybrid jobs, auto-create partner deposit payment request
+        const job = await storage.getJob(req.params.jobId);
+        if (job && job.deliveryType === "hybrid") {
+          const jobPartners = await storage.getJobPartners(req.params.jobId);
+          
+          for (const jp of jobPartners) {
+            // Check if partner deposit already exists
+            const existingRequests = await storage.getJobPaymentRequests(req.params.jobId);
+            const hasPartnerDeposit = existingRequests.some(
+              r => r.type === "partner_deposit" && r.requestedById === jp.partnerId
+            );
+            
+            if (!hasPartnerDeposit) {
+              const partner = await storage.getTradePartner(jp.partnerId);
+              
+              // Calculate partner's deposit share
+              // Partner gets: client deposit minus proportional CCC margin
+              const clientDeposit = parseFloat(amount);
+              const commissionType = partner?.commissionType || "percentage";
+              const commissionValue = parseFloat(partner?.commissionValue || "10");
+              
+              let partnerDepositAmount: number;
+              if (commissionType === "percentage") {
+                // Partner gets deposit minus CCC's percentage
+                partnerDepositAmount = clientDeposit * (1 - commissionValue / 100);
+              } else {
+                // Fixed commission - harder to split, so use proportional approach
+                // Calculate CCC margin as proportion of total job value
+                const quotes = await storage.getQuotesByJob(req.params.jobId);
+                const activeQuote = quotes.find(q => q.status === "accepted") || quotes[0];
+                let quoteTotal = clientDeposit * 2; // Default assumption if no quote
+                if (activeQuote) {
+                  const quoteItems = await storage.getQuoteItems(activeQuote.id);
+                  const subtotal = quoteItems.reduce((sum, item) => 
+                    sum + (parseFloat(item.unitPrice) * item.quantity), 0);
+                  const taxRate = parseFloat(activeQuote.taxRate || "0") / 100;
+                  const discountType = activeQuote.discountType || "percentage";
+                  const discountValue = parseFloat(activeQuote.discountValue || "0");
+                  const discount = discountType === "percentage" 
+                    ? subtotal * (discountValue / 100) 
+                    : discountValue;
+                  quoteTotal = (subtotal - discount) * (1 + taxRate);
+                }
+                // CCC takes fixed amount from total, so partner gets proportional share
+                const cccMarginProportion = commissionValue / quoteTotal;
+                partnerDepositAmount = clientDeposit * (1 - cccMarginProportion);
+              }
+              
+              // Create partner deposit payment request
+              await storage.createPaymentRequest({
+                jobId: req.params.jobId,
+                type: "partner_deposit",
+                amount: partnerDepositAmount.toFixed(2),
+                description: `Material deposit for ${job.jobNumber}`,
+                audience: "partner",
+                requestedByRole: "admin",
+                approvalStatus: "pending",
+              });
+            }
+          }
+        }
       }
       
       res.status(201).json(payment);
