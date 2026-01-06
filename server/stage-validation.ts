@@ -4,21 +4,22 @@
  */
 
 import { db } from "./db";
-import { 
-  jobs, 
-  quoteItems, 
-  jobSurveys, 
-  calendarEvents, 
-  invoices, 
+import {
+  jobs,
+  quoteItems,
+  jobSurveys,
+  calendarEvents,
+  invoices,
   jobScheduleProposals,
-  financialTransactions 
+  financialTransactions,
+  jobClientPayments
 } from "@shared/schema";
-import { 
-  JOB_STAGE_RULES, 
-  getStageRule, 
-  isUnrestrictedStage, 
+import {
+  JOB_STAGE_RULES,
+  getStageRule,
+  isUnrestrictedStage,
   isForwardProgression,
-  type StagePrerequisite 
+  type StagePrerequisite
 } from "@shared/stage-rules";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -101,8 +102,15 @@ async function getEnrichedJobData(jobId: string) {
         )
       );
 
+    const [clientPaymentsResult] = await db
+      .select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+      .from(jobClientPayments)
+      .where(eq(jobClientPayments.jobId, jobId));
+
     const quotedValue = parseFloat(String(job.quotedValue)) || 0;
-    const paidAmount = parseFloat(paymentsResult?.total || "0");
+    const finTxParams = parseFloat(paymentsResult?.total || "0");
+    const clientPaymentsTotal = parseFloat(clientPaymentsResult?.total || "0");
+    const paidAmount = finTxParams + clientPaymentsTotal;
 
     return {
       ...job,
@@ -123,7 +131,7 @@ async function getEnrichedJobData(jobId: string) {
  * Check if a single prerequisite is met
  */
 function checkPrerequisite(
-  prereq: StagePrerequisite, 
+  prereq: StagePrerequisite,
   jobData: Record<string, unknown>
 ): PrerequisiteResult {
   const fieldValue = jobData[prereq.field];
@@ -160,7 +168,7 @@ export async function validateStageTransition(
   targetStage: string
 ): Promise<StageValidationResult> {
   const jobData = await getEnrichedJobData(jobId);
-  
+
   if (!jobData) {
     return {
       allowed: false,
@@ -208,7 +216,7 @@ export async function validateStageTransition(
   }
 
   // Check all prerequisites
-  const allPrerequisites = rule.prerequisites.map(prereq => 
+  const allPrerequisites = rule.prerequisites.map(prereq =>
     checkPrerequisite(prereq, jobData as Record<string, unknown>)
   );
 
@@ -237,16 +245,16 @@ export async function validateStageTransition(
  */
 export async function getJobStageReadiness(jobId: string) {
   const jobData = await getEnrichedJobData(jobId);
-  
+
   if (!jobData) {
     return null;
   }
 
   const currentStage = jobData.status;
-  
+
   // Check each stage's prerequisites
   const stageReadiness = JOB_STAGE_RULES.map(rule => {
-    const prerequisites = rule.prerequisites.map(prereq => 
+    const prerequisites = rule.prerequisites.map(prereq =>
       checkPrerequisite(prereq, jobData as Record<string, unknown>)
     );
 

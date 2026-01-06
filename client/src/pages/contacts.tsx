@@ -74,7 +74,7 @@ export default function Contacts() {
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
-  
+
   // Import dialog state
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importStep, setImportStep] = useState<"upload" | "mapping" | "result">("upload");
@@ -85,6 +85,10 @@ export default function Contacts() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  // Delete confirm state
+  const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
+  const [deletePassword, setDeletePassword] = useState("");
+
   const { data: contacts = [], isLoading } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
   });
@@ -93,10 +97,10 @@ export default function Contacts() {
   const searchString = useSearch();
   useEffect(() => {
     if (!contacts.length) return;
-    
+
     const params = new URLSearchParams(searchString);
     const selectedId = params.get("selected");
-    
+
     if (selectedId) {
       const contact = contacts.find(c => c.id === selectedId);
       if (contact) {
@@ -154,16 +158,22 @@ export default function Contacts() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/contacts/${id}`);
+    mutationFn: async ({ id, password }: { id: string; password: string }) => {
+      return apiRequest("DELETE", `/api/contacts/${id}`, { password });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       toast({ title: "Contact deleted" });
+      setContactToDelete(null);
+      setDeletePassword("");
     },
-    onError: () => {
-      toast({ title: "Error deleting contact", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({
+        title: "Error deleting contact",
+        description: error.message || "Failed to delete contact. Check your password.",
+        variant: "destructive"
+      });
     },
   });
 
@@ -355,7 +365,7 @@ export default function Contacts() {
 
   const handleImportExecute = async () => {
     if (!importFile) return;
-    
+
     setIsImporting(true);
     try {
       const response = await apiRequest("POST", "/api/contacts/import/execute", {
@@ -367,7 +377,7 @@ export default function Contacts() {
       const result: ImportResult = await response.json();
       setImportResult(result);
       setImportStep("result");
-      
+
       // Refresh contacts list
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
@@ -415,79 +425,79 @@ export default function Contacts() {
                 Add Contact
               </Button>
             </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editingContact ? "Edit Contact" : "Add New Contact"}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name *</Label>
-                  <Input
-                    {...form.register("name")}
-                    placeholder="Client name"
-                    data-testid="input-contact-name"
-                  />
-                  {form.formState.errors.name && (
-                    <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
-                  )}
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>{editingContact ? "Edit Contact" : "Add New Contact"}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Name *</Label>
+                    <Input
+                      {...form.register("name")}
+                      placeholder="Client name"
+                      data-testid="input-contact-name"
+                    />
+                    {form.formState.errors.name && (
+                      <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone *</Label>
+                    <Input
+                      {...form.register("phone")}
+                      placeholder="Phone number"
+                      data-testid="input-contact-phone"
+                    />
+                    {form.formState.errors.phone && (
+                      <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      {...form.register("email")}
+                      type="email"
+                      placeholder="Email address"
+                      data-testid="input-contact-email"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="address">Address</Label>
+                    <Input
+                      {...form.register("address")}
+                      placeholder="Street address"
+                      data-testid="input-contact-address"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="postcode">Postcode</Label>
+                    <Input
+                      {...form.register("postcode")}
+                      placeholder="e.g. CF10 1AA"
+                      data-testid="input-contact-postcode"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone *</Label>
-                  <Input
-                    {...form.register("phone")}
-                    placeholder="Phone number"
-                    data-testid="input-contact-phone"
-                  />
-                  {form.formState.errors.phone && (
-                    <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
-                  )}
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    {...form.register("email")}
-                    type="email"
-                    placeholder="Email address"
-                    data-testid="input-contact-email"
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    {...form.register("notes")}
+                    placeholder="Additional notes..."
+                    data-testid="textarea-contact-notes"
                   />
                 </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    {...form.register("address")}
-                    placeholder="Street address"
-                    data-testid="input-contact-address"
-                  />
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-contact">
+                    {createMutation.isPending ? "Saving..." : editingContact ? "Update" : "Create"}
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="postcode">Postcode</Label>
-                  <Input
-                    {...form.register("postcode")}
-                    placeholder="e.g. CF10 1AA"
-                    data-testid="input-contact-postcode"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  {...form.register("notes")}
-                  placeholder="Additional notes..."
-                  data-testid="textarea-contact-notes"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-contact">
-                  {createMutation.isPending ? "Saving..." : editingContact ? "Update" : "Create"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -536,7 +546,7 @@ export default function Contacts() {
                   Choose different file
                 </Button>
               </div>
-              
+
               <div className="space-y-3">
                 <h4 className="font-medium text-sm">Map your columns to contact fields:</h4>
                 <div className="grid grid-cols-2 gap-3">
@@ -738,184 +748,250 @@ export default function Contacts() {
                 {filteredContacts.map(contact => {
                   const portalAccess = portalAccessMap[contact.id];
                   const hasPortalAccess = portalAccess && portalAccess.isActive;
-                  
+
                   return (
-                  <tr key={contact.id} className="border-b border-border last:border-0 hover-elevate" data-testid={`contact-row-${contact.id}`}>
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-sm">{contact.name}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Phone className="w-3 h-3" />
-                        {contact.phone}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {contact.email ? (
+                    <tr key={contact.id} className="border-b border-border last:border-0 hover-elevate" data-testid={`contact-row-${contact.id}`}>
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-sm">{contact.name}</span>
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Mail className="w-3 h-3" />
-                          {contact.email}
+                          <Phone className="w-3 h-3" />
+                          {contact.phone}
                         </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {contact.postcode ? (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MapPin className="w-3 h-3" />
-                          {contact.postcode}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {portalAccess?.portalToken ? (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge 
-                            variant={portalAccess.isActive ? "secondary" : "outline"} 
-                            className="gap-1" 
-                            data-testid={`badge-portal-access-${contact.id}`}
-                          >
-                            <CheckCircle className="w-3 h-3" />
-                            {portalAccess.isActive ? "Active" : "Pending"}
-                          </Badge>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => copyPortalLink(portalAccess.portalToken!, !portalAccess.isActive)}
-                                data-testid={`button-copy-portal-link-${contact.id}`}
-                              >
-                                <Copy className="w-3 h-3" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>{portalAccess.isActive ? "Copy portal link" : "Copy invite link"}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openPortalAsClient(portalAccess.portalToken!, !portalAccess.isActive)}
-                                data-testid={`button-open-portal-${contact.id}`}
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>{portalAccess.isActive ? "View portal as client" : "Open invite page"}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          {portalAccess.isActive && (
+                      </td>
+                      <td className="px-4 py-3">
+                        {contact.email ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Mail className="w-3 h-3" />
+                            {contact.email}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {contact.postcode ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <MapPin className="w-3 h-3" />
+                            {contact.postcode}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {portalAccess?.portalToken ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge
+                              variant={portalAccess.isActive ? "secondary" : "outline"}
+                              className="gap-1"
+                              data-testid={`badge-portal-access-${contact.id}`}
+                            >
+                              <CheckCircle className="w-3 h-3" />
+                              {portalAccess.isActive ? "Active" : "Pending"}
+                            </Badge>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => setResetPasswordContact(contact)}
-                                  data-testid={`button-reset-password-${contact.id}`}
+                                  onClick={() => copyPortalLink(portalAccess.portalToken!, !portalAccess.isActive)}
+                                  data-testid={`button-copy-portal-link-${contact.id}`}
                                 >
-                                  <KeyRound className="w-3 h-3" />
+                                  <Copy className="w-3 h-3" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Reset Password</p>
+                                <p>{portalAccess.isActive ? "Copy portal link" : "Copy invite link"}</p>
                               </TooltipContent>
                             </Tooltip>
-                          )}
-                        </div>
-                      ) : hasPortalAccess ? (
-                        <Badge variant="secondary" className="gap-1" data-testid={`badge-portal-access-${contact.id}`}>
-                          <CheckCircle className="w-3 h-3" />
-                          Active
-                        </Badge>
-                      ) : contact.email ? (
-                        <div className="flex items-center gap-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => inviteMutation.mutate({ contactId: contact.id, sendEmail: true })}
-                                disabled={inviteMutation.isPending}
-                                className="gap-1"
-                                data-testid={`button-invite-portal-${contact.id}`}
-                              >
-                                <Mail className="w-3 h-3" />
-                                Email Invite
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openPortalAsClient(portalAccess.portalToken!, !portalAccess.isActive)}
+                                  data-testid={`button-open-portal-${contact.id}`}
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{portalAccess.isActive ? "View portal as client" : "Open invite page"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            {portalAccess.isActive && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setResetPasswordContact(contact)}
+                                    data-testid={`button-reset-password-${contact.id}`}
+                                  >
+                                    <KeyRound className="w-3 h-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Reset Password</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        ) : hasPortalAccess ? (
+                          <Badge variant="secondary" className="gap-1" data-testid={`badge-portal-access-${contact.id}`}>
+                            <CheckCircle className="w-3 h-3" />
+                            Active
+                          </Badge>
+                        ) : contact.email ? (
+                          <div className="flex items-center gap-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => inviteMutation.mutate({ contactId: contact.id, sendEmail: true })}
+                                  disabled={inviteMutation.isPending}
+                                  className="gap-1"
+                                  data-testid={`button-invite-portal-${contact.id}`}
+                                >
+                                  <Mail className="w-3 h-3" />
+                                  Email Invite
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Send portal invite email to {contact.email}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => inviteMutation.mutate({ contactId: contact.id, sendEmail: false })}
+                                  disabled={inviteMutation.isPending}
+                                  data-testid={`button-invite-link-${contact.id}`}
+                                >
+                                  <UserPlus className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Create invite link only (no email)</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No email</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <SendMessageDialog
+                            recipientId={contact.id}
+                            recipientName={contact.name}
+                            recipientType="client"
+                            trigger={
+                              <Button variant="ghost" size="icon" data-testid={`button-message-contact-${contact.id}`}>
+                                <MessageSquare className="w-4 h-4" />
                               </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Send portal invite email to {contact.email}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => inviteMutation.mutate({ contactId: contact.id, sendEmail: false })}
-                                disabled={inviteMutation.isPending}
-                                data-testid={`button-invite-link-${contact.id}`}
-                              >
-                                <UserPlus className="w-3 h-3" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Create invite link only (no email)</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No email</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <SendMessageDialog
-                          recipientId={contact.id}
-                          recipientName={contact.name}
-                          recipientType="client"
-                          trigger={
-                            <Button variant="ghost" size="icon" data-testid={`button-message-contact-${contact.id}`}>
-                              <MessageSquare className="w-4 h-4" />
-                            </Button>
-                          }
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDialog(contact)}
-                          data-testid={`button-edit-contact-${contact.id}`}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            if (confirm("Delete this contact?")) {
-                              deleteMutation.mutate(contact.id);
                             }
-                          }}
-                          data-testid={`button-delete-contact-${contact.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                )})}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditDialog(contact)}
+                            data-testid={`button-edit-contact-${contact.id}`}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setContactToDelete(contact)}
+                            data-testid={`button-delete-contact-${contact.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </CardContent>
         </Card>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!contactToDelete} onOpenChange={(open) => {
+        if (!open) {
+          setContactToDelete(null);
+          setDeletePassword("");
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
+              Delete Contact?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-md text-sm text-red-800 dark:text-red-200">
+              <p className="font-semibold mb-1">Warning: Irreversible Action</p>
+              <p>
+                You are about to delete <strong>{contactToDelete?.name}</strong>.
+                This will permanently remove the contact and <strong>ALL associated data</strong>, including:
+              </p>
+              <ul className="list-disc pl-5 mt-2 space-y-1">
+                <li>Jobs and Projects</li>
+                <li>Invoices and Quotes</li>
+                <li>Notes and Files</li>
+                <li>Portal Access</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="deletePassword">Enter Admin Password to Confirm</Label>
+              <Input
+                id="deletePassword"
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="Admin password"
+                autoComplete="new-password"
+                className="border-red-200 focus-visible:ring-red-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setContactToDelete(null);
+                  setDeletePassword("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (contactToDelete) {
+                    deleteMutation.mutate({ id: contactToDelete.id, password: deletePassword });
+                  }
+                }}
+                disabled={!deletePassword || deleteMutation.isPending}
+                className="gap-2"
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Reset Password Dialog */}
       <Dialog open={!!resetPasswordContact} onOpenChange={(open) => {

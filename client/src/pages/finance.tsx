@@ -10,10 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { StatCard } from "@/components/stat-card";
-import { 
-  PoundSterling, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  PoundSterling,
+  TrendingUp,
+  TrendingDown,
   Plus,
   ChevronLeft,
   ChevronRight,
@@ -27,11 +27,23 @@ import {
   Loader2,
   Image as ImageIcon,
   ExternalLink,
+  TrendingUp as TrendingUpIcon,
 } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine
+} from "recharts";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { FinancialCategory, FinancialTransaction, Job } from "@shared/schema";
+import type { FinancialCategory, FinancialTransaction, Job, SalesCommission, Employee } from "@shared/schema";
+import { COMMISSION_STATUSES } from "@shared/schema";
 
 interface FinancialSummary {
   income: number;
@@ -102,6 +114,24 @@ interface ScannedReceiptData {
   category: string;
 }
 
+interface ProjectionData {
+  currentBalance: number;
+  projection: {
+    date: string;
+    balance: number;
+    events: {
+      type: 'in' | 'out';
+      description: string;
+      amount: number;
+    }[];
+  }[];
+  summary: {
+    lowestBalance: number;
+    highestBalance: number;
+    finalBalance: number;
+  };
+}
+
 export default function Finance() {
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -112,7 +142,7 @@ export default function Finance() {
   const [isScanning, setIsScanning] = useState(false);
   const [scannedData, setScannedData] = useState<ScannedReceiptData | null>(null);
   const [receiptJobId, setReceiptJobId] = useState<string>("none");
-  
+
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
 
@@ -147,6 +177,33 @@ export default function Finance() {
     queryKey: ["/api/financial-forecast"],
   });
 
+  const { data: projection } = useQuery<ProjectionData>({
+    queryKey: ["/api/financial-projection"],
+  });
+
+  const { data: commissions = [] } = useQuery<SalesCommission[]>({
+    queryKey: ["/api/sales-commissions"],
+  });
+
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees"],
+  });
+
+  const getEmployeeName = (id: string) => {
+    const emp = employees.find(e => e.id === id);
+    return emp ? `${emp.firstName} ${emp.lastName}` : "Unknown";
+  };
+
+  const getStatusColor = (status: string) => {
+    const s = COMMISSION_STATUSES.find(cs => cs.value === status);
+    return s ? s.color.replace("bg-", "text-") : "text-gray-500";
+  };
+
+  const getStatusBadge = (status: string) => {
+    const s = COMMISSION_STATUSES.find(cs => cs.value === status);
+    return <Badge className={`${s?.color || "bg-gray-500"}`}>{s?.label || status}</Badge>;
+  };
+
   const { data: partnerVolume } = useQuery<PartnerJobVolume>({
     queryKey: ["/api/partner-job-volume", year, month],
     queryFn: async () => {
@@ -180,7 +237,7 @@ export default function Finance() {
     },
   });
 
-  const totalOutstandingFees = outstandingFees.reduce((sum, fee) => 
+  const totalOutstandingFees = outstandingFees.reduce((sum, fee) =>
     sum + parseFloat(fee.calloutFeeAmount || "0"), 0
   );
 
@@ -372,6 +429,66 @@ export default function Finance() {
         />
       </div>
 
+      {projection && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold">90-Day Cash Flow Projection</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={projection.projection}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(str) => format(new Date(str), "MMM d")}
+                    minTickGap={30}
+                  />
+                  <YAxis />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <Tooltip
+                    labelFormatter={(label) => format(new Date(label), "EEE, MMM d, yyyy")}
+                    formatter={(value: number) => [`£${value.toLocaleString()}`, "Predicted Balance"]}
+                  />
+                  <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="3 3" />
+                  <Area
+                    type="monotone"
+                    dataKey="balance"
+                    stroke="#10b981"
+                    fillOpacity={1}
+                    fill="url(#colorBalance)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-sm">
+              <div className="p-3 bg-muted/50 rounded-md flex justify-between">
+                <span className="text-muted-foreground">Current Balance</span>
+                <span className="font-semibold">£{projection.currentBalance.toLocaleString()}</span>
+              </div>
+              <div className="p-3 bg-muted/50 rounded-md flex justify-between">
+                <span className="text-muted-foreground">Lowest Point</span>
+                <span className={`font-semibold ${projection.summary.lowestBalance < 0 ? 'text-red-500' : ''}`}>
+                  £{projection.summary.lowestBalance.toLocaleString()}
+                </span>
+              </div>
+              <div className="p-3 bg-muted/50 rounded-md flex justify-between">
+                <span className="text-muted-foreground">90-Day Result</span>
+                <span className="font-semibold">£{projection.summary.finalBalance.toLocaleString()}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold">Cash Flow Forecast</CardTitle>
@@ -400,7 +517,7 @@ export default function Finance() {
               <p className="text-xs text-muted-foreground">Outstanding balances</p>
             </div>
           </div>
-          
+
           {forecast?.jobs && forecast.jobs.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-muted-foreground">Confirmed Jobs</p>
@@ -425,116 +542,163 @@ export default function Finance() {
               ))}
             </div>
           )}
-          
+
           {(!forecast?.jobs || forecast.jobs.length === 0) && (
             <p className="text-center text-muted-foreground py-4">No confirmed jobs yet</p>
           )}
         </CardContent>
+
       </Card>
 
-      {(partnerVolume?.totalJobCount || 0) > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">Partner Job Volume</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div className="p-4 rounded-md bg-muted/50">
-                <p className="text-sm text-muted-foreground">Total Job Value</p>
-                <p className="text-2xl font-semibold" data-testid="text-partner-volume">
-                  £{(partnerVolume?.totalVolume || 0).toLocaleString()}
-                </p>
-                <p className="text-xs text-muted-foreground">{partnerVolume?.totalJobCount || 0} partner jobs</p>
-              </div>
-              <div className="p-4 rounded-md bg-muted/50">
-                <p className="text-sm text-muted-foreground">CCC Profit</p>
-                <p className="text-2xl font-semibold text-green-600" data-testid="text-partner-margin">
-                  £{(partnerVolume?.totalMargin || 0).toLocaleString()}
-                </p>
-                <p className="text-xs text-muted-foreground">Your earnings</p>
-              </div>
-            </div>
-            {partnerVolume?.partners && partnerVolume.partners.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">By Partner</p>
-                {partnerVolume.partners.map(p => (
-                  <div key={p.partnerId} className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/30" data-testid={`partner-volume-${p.partnerId}`}>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="font-medium">{p.businessName}</span>
-                      <Badge variant="secondary" className="text-xs">{p.jobCount} job{p.jobCount !== 1 ? "s" : ""}</Badge>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">£{p.totalValue.toLocaleString()}</p>
-                      <p className="text-xs text-green-600">Profit: £{p.cccMargin.toLocaleString()}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {outstandingFees.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-4">
-              <CardTitle className="text-base font-semibold">Partner Fees Outstanding</CardTitle>
-              <Badge variant="destructive" data-testid="badge-total-outstanding">
-                £{totalOutstandingFees.toFixed(2)} owed
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {partnerFeeBalances.filter(b => parseFloat(b.totalOutstanding) > 0).map(balance => (
-                <div key={balance.partnerId} className="space-y-2">
-                  <div className="flex items-center justify-between gap-4 p-3 rounded-md bg-amber-100 dark:bg-amber-900/50" data-testid={`partner-balance-${balance.partnerId}`}>
-                    <div>
-                      <p className="font-medium">{balance.partnerName}</p>
-                      <p className="text-sm text-muted-foreground">{balance.outstandingCount} unpaid callout{balance.outstandingCount !== 1 ? "s" : ""}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-amber-600 dark:text-amber-400" data-testid={`text-balance-${balance.partnerId}`}>
-                        £{balance.totalOutstanding} outstanding
-                      </p>
-                    </div>
-                  </div>
-                  {outstandingFees.filter(fee => fee.partner?.id === balance.partnerId).map(fee => (
-                    <div key={fee.id} className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/30 ml-4" data-testid={`fee-row-${fee.id}`}>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-sm font-medium">{fee.incidentType}</span>
-                        {fee.job && (
-                          <Link href={`/jobs/${fee.job.id}`}>
-                            <Badge variant="outline" className="text-xs cursor-pointer">{fee.job.jobNumber}</Badge>
-                          </Link>
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                          {fee.completedAt && format(new Date(fee.completedAt), "dd MMM yyyy")}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className="text-sm">Collected: £{parseFloat(fee.totalCollected || "0").toFixed(2)}</p>
-                          <p className="text-sm font-medium">Fee: £{parseFloat(fee.calloutFeeAmount || "0").toFixed(2)}</p>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Sales Commissions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {commissions.length === 0 ? (
+            <p className="text-center text-muted-foreground py-4">No commissions found.</p>
+          ) : (
+            <div className="space-y-2">
+              {commissions.slice(0, 5).map(commission => {
+                const job = allJobs.find(j => j.id === commission.jobId);
+                return (
+                  <div key={commission.id} className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <p className="font-medium">{getEmployeeName(commission.employeeId)}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {job && (
+                            <Link href={`/jobs/${job.id}`}>
+                              <span className="hover:underline cursor-pointer">{job.jobNumber}</span>
+                            </Link>
+                          )}
+                          <span>•</span>
+                          <span>{format(new Date(commission.createdAt || new Date()), "dd MMM yyyy")}</span>
                         </div>
-                        <Button
-                          size="sm"
-                          onClick={() => markFeePaidMutation.mutate(fee.id)}
-                          disabled={markFeePaidMutation.isPending}
-                          data-testid={`button-mark-paid-${fee.id}`}
-                        >
-                          Mark Paid
-                        </Button>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">£{Number(commission.amount).toLocaleString()}</p>
+                      <div className="mt-1">{getStatusBadge(commission.status)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              {commissions.length > 5 && (
+                <Button variant="ghost" className="w-full text-xs" size="sm">View All Commissions</Button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {
+        (partnerVolume?.totalJobCount || 0) > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Partner Job Volume</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="p-4 rounded-md bg-muted/50">
+                  <p className="text-sm text-muted-foreground">Total Job Value</p>
+                  <p className="text-2xl font-semibold" data-testid="text-partner-volume">
+                    £{(partnerVolume?.totalVolume || 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{partnerVolume?.totalJobCount || 0} partner jobs</p>
+                </div>
+                <div className="p-4 rounded-md bg-muted/50">
+                  <p className="text-sm text-muted-foreground">CCC Profit</p>
+                  <p className="text-2xl font-semibold text-green-600" data-testid="text-partner-margin">
+                    £{(partnerVolume?.totalMargin || 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Your earnings</p>
+                </div>
+              </div>
+              {partnerVolume?.partners && partnerVolume.partners.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">By Partner</p>
+                  {partnerVolume.partners.map(p => (
+                    <div key={p.partnerId} className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/30" data-testid={`partner-volume-${p.partnerId}`}>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="font-medium">{p.businessName}</span>
+                        <Badge variant="secondary" className="text-xs">{p.jobCount} job{p.jobCount !== 1 ? "s" : ""}</Badge>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium">£{p.totalValue.toLocaleString()}</p>
+                        <p className="text-xs text-green-600">Profit: £{p.cccMargin.toLocaleString()}</p>
                       </div>
                     </div>
                   ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              )}
+            </CardContent>
+          </Card>
+        )
+      }
+
+      {
+        outstandingFees.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-4">
+                <CardTitle className="text-base font-semibold">Partner Fees Outstanding</CardTitle>
+                <Badge variant="destructive" data-testid="badge-total-outstanding">
+                  £{totalOutstandingFees.toFixed(2)} owed
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {partnerFeeBalances.filter(b => parseFloat(b.totalOutstanding) > 0).map(balance => (
+                  <div key={balance.partnerId} className="space-y-2">
+                    <div className="flex items-center justify-between gap-4 p-3 rounded-md bg-amber-100 dark:bg-amber-900/50" data-testid={`partner-balance-${balance.partnerId}`}>
+                      <div>
+                        <p className="font-medium">{balance.partnerName}</p>
+                        <p className="text-sm text-muted-foreground">{balance.outstandingCount} unpaid callout{balance.outstandingCount !== 1 ? "s" : ""}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-amber-600 dark:text-amber-400" data-testid={`text-balance-${balance.partnerId}`}>
+                          £{balance.totalOutstanding} outstanding
+                        </p>
+                      </div>
+                    </div>
+                    {outstandingFees.filter(fee => fee.partner?.id === balance.partnerId).map(fee => (
+                      <div key={fee.id} className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/30 ml-4" data-testid={`fee-row-${fee.id}`}>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-sm font-medium">{fee.incidentType}</span>
+                          {fee.job && (
+                            <Link href={`/jobs/${fee.job.id}`}>
+                              <Badge variant="outline" className="text-xs cursor-pointer">{fee.job.jobNumber}</Badge>
+                            </Link>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            {fee.completedAt && format(new Date(fee.completedAt), "dd MMM yyyy")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-sm">Collected: £{parseFloat(fee.totalCollected || "0").toFixed(2)}</p>
+                            <p className="text-sm font-medium">Fee: £{parseFloat(fee.calloutFeeAmount || "0").toFixed(2)}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => markFeePaidMutation.mutate(fee.id)}
+                            disabled={markFeePaidMutation.isPending}
+                            data-testid={`button-mark-paid-${fee.id}`}
+                          >
+                            Mark Paid
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      }
 
       <Card>
         <CardHeader className="pb-3">
@@ -594,9 +758,9 @@ export default function Finance() {
                     ) : !scannedData ? (
                       <div className="space-y-4">
                         <div className="relative">
-                          <img 
-                            src={receiptImage} 
-                            alt="Receipt preview" 
+                          <img
+                            src={receiptImage}
+                            alt="Receipt preview"
                             className="w-full max-h-64 object-contain rounded-lg border"
                           />
                           {isScanning && (
@@ -609,15 +773,15 @@ export default function Finance() {
                           )}
                         </div>
                         <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             onClick={resetReceiptScanner}
                             className="flex-1"
                             data-testid="button-retake-receipt"
                           >
                             Retake
                           </Button>
-                          <Button 
+                          <Button
                             onClick={handleScanReceipt}
                             disabled={isScanning}
                             className="flex-1"
@@ -673,15 +837,15 @@ export default function Finance() {
                           </Select>
                         </div>
                         <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             onClick={resetReceiptScanner}
                             className="flex-1"
                             data-testid="button-scan-again"
                           >
                             Scan Another
                           </Button>
-                          <Button 
+                          <Button
                             onClick={handleCreateFromScan}
                             disabled={createMutation.isPending}
                             className="flex-1"
@@ -705,26 +869,26 @@ export default function Finance() {
                     Add Transaction
                   </Button>
                 </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{editingTransaction ? "Edit Transaction" : "Add Transaction"}</DialogTitle>
-                </DialogHeader>
-                <TransactionForm
-                  transaction={editingTransaction}
-                  incomeCategories={incomeCategories}
-                  expenseCategories={expenseCategories}
-                  jobs={allJobs}
-                  onSubmit={(data) => {
-                    if (editingTransaction) {
-                      updateMutation.mutate({ id: editingTransaction.id, data });
-                    } else {
-                      createMutation.mutate(data);
-                    }
-                  }}
-                  isLoading={createMutation.isPending || updateMutation.isPending}
-                />
-              </DialogContent>
-            </Dialog>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>{editingTransaction ? "Edit Transaction" : "Add Transaction"}</DialogTitle>
+                  </DialogHeader>
+                  <TransactionForm
+                    transaction={editingTransaction}
+                    incomeCategories={incomeCategories}
+                    expenseCategories={expenseCategories}
+                    jobs={allJobs}
+                    onSubmit={(data) => {
+                      if (editingTransaction) {
+                        updateMutation.mutate({ id: editingTransaction.id, data });
+                      } else {
+                        createMutation.mutate(data);
+                      }
+                    }}
+                    isLoading={createMutation.isPending || updateMutation.isPending}
+                  />
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </CardHeader>
@@ -834,7 +998,7 @@ export default function Finance() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </div >
   );
 }
 

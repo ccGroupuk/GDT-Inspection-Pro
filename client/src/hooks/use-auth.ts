@@ -15,6 +15,7 @@ interface EmployeeUser {
   lastName: string;
   email: string;
   accessLevel: "owner" | "full_access" | "standard";
+  role: string | "admin" | "accounting" | "fitting" | "sales";
   isActive: boolean;
 }
 
@@ -63,7 +64,7 @@ async function performLogout(): Promise<void> {
 export function useAuth() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  
+
   const { data: authData, isLoading, refetch } = useQuery<AuthData | null>({
     queryKey: ["/api/auth/me"],
     queryFn: fetchAuthStatus,
@@ -83,7 +84,9 @@ export function useAuth() {
   const isAuthenticated = !!authData?.authType;
   const hasAdminAccess = isAuthenticated && (
     authData?.authType === "replit" ||
-    (authData?.employee?.accessLevel === "owner" || authData?.employee?.accessLevel === "full_access")
+    (authData?.employee?.accessLevel === "owner" ||
+      authData?.employee?.accessLevel === "full_access" ||
+      authData?.employee?.role === "admin")
   );
 
   return {

@@ -1,4 +1,4 @@
-import { 
+import {
   contacts, type Contact, type InsertContact,
   tradePartners, type TradePartner, type InsertTradePartner,
   jobs, type Job, type InsertJob,
@@ -85,6 +85,7 @@ import {
   buildRequests, type BuildRequest, type InsertBuildRequest,
   jobClientPayments, type JobClientPayment, type InsertJobClientPayment,
   jobFundAllocations, type JobFundAllocation, type InsertJobFundAllocation,
+  salesCommissions, type SalesCommission, type InsertSalesCommission,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -190,12 +191,12 @@ export interface IStorage {
   createPartnerPortalAccess(access: InsertPartnerPortalAccess): Promise<PartnerPortalAccess>;
   updatePartnerPortalAccessLastLogin(partnerId: string): Promise<void>;
   updatePartnerPortalAccessPassword(accessId: string, passwordHash: string): Promise<void>;
-  
+
   getPartnerInviteByToken(token: string): Promise<PartnerInvite | undefined>;
   getPartnerInviteByPartner(partnerId: string): Promise<PartnerInvite | undefined>;
   createPartnerInvite(invite: InsertPartnerInvite): Promise<PartnerInvite>;
   acceptPartnerInvite(token: string): Promise<void>;
-  
+
   getJobsByPartner(partnerId: string): Promise<Job[]>;
 
   // Job Notes
@@ -205,7 +206,7 @@ export interface IStorage {
   updateJobNote(id: string, note: Partial<InsertJobNote>): Promise<JobNote | undefined>;
   deleteJobNote(id: string): Promise<boolean>;
   getJobNotesForPartner(jobId: string): Promise<JobNote[]>;
-  
+
   // Job Note Attachments
   getJobNoteAttachments(noteId: string): Promise<JobNoteAttachment[]>;
   createJobNoteAttachment(attachment: InsertJobNoteAttachment): Promise<JobNoteAttachment>;
@@ -378,10 +379,26 @@ export interface IStorage {
   createPayrollRun(run: InsertPayrollRun): Promise<PayrollRun>;
   updatePayrollRun(id: string, run: Partial<InsertPayrollRun>): Promise<PayrollRun | undefined>;
 
+
+  // Pay Periods
+  getPayPeriods(): Promise<PayPeriod[]>;
+  getPayPeriod(id: string): Promise<PayPeriod | undefined>;
+  createPayPeriod(period: InsertPayPeriod): Promise<PayPeriod>;
+  updatePayPeriod(id: string, period: Partial<InsertPayPeriod>): Promise<PayPeriod | undefined>;
+  deletePayPeriod(id: string): Promise<boolean>;
+
   // Payroll Adjustments
   getPayrollAdjustments(payrollRunId: string): Promise<PayrollAdjustment[]>;
   createPayrollAdjustment(adjustment: InsertPayrollAdjustment): Promise<PayrollAdjustment>;
   deletePayrollAdjustment(id: string): Promise<boolean>;
+
+  // Sales Commissions
+  getSalesCommissionsByJob(jobId: string): Promise<SalesCommission[]>;
+  getSalesCommissionsByEmployee(employeeId: string): Promise<SalesCommission[]>;
+  getPendingSalesCommissions(employeeId: string): Promise<SalesCommission[]>;
+  createSalesCommission(commission: InsertSalesCommission): Promise<SalesCommission>;
+  updateSalesCommission(id: string, commission: Partial<InsertSalesCommission>): Promise<SalesCommission | undefined>;
+  getSalesCommissions(): Promise<SalesCommission[]>;
 
   // Employee Documents
   getEmployeeDocuments(employeeId: string): Promise<EmployeeDocument[]>;
@@ -710,6 +727,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteContact(id: string): Promise<boolean> {
+    // Delete all associated jobs first (using deleteJob for full cleanup)
+    const contactJobs = await db.select().from(jobs).where(eq(jobs.contactId, id));
+    for (const job of contactJobs) {
+      await this.deleteJob(job.id);
+    }
+
+    // Delete contact-specific relations
+    await db.delete(clientPortalAccess).where(eq(clientPortalAccess.contactId, id));
+    await db.delete(clientInvites).where(eq(clientInvites.contactId, id));
+    await db.delete(reviewRequests).where(eq(reviewRequests.contactId, id));
+
+    // Delete the contact
     const result = await db.delete(contacts).where(eq(contacts.id, id));
     return true;
   }
@@ -773,6 +802,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteJob(id: string): Promise<boolean> {
+    // Manual cascade for relations without DB-level cascade
+    await db.delete(tasks).where(eq(tasks.jobId, id));
+    await db.delete(calendarEvents).where(eq(calendarEvents.jobId, id));
+    await db.delete(paymentRequests).where(eq(paymentRequests.jobId, id));
+    await db.delete(reviewRequests).where(eq(reviewRequests.jobId, id));
+    await db.delete(financialTransactions).where(eq(financialTransactions.jobId, id));
+    await db.delete(jobSurveys).where(eq(jobSurveys.jobId, id));
+
+    // Relations with DB-level cascade (quoteItems, invoices, changeOrders, jobNotes, jobPartners) 
+    // will be handled by the database
     await db.delete(jobs).where(eq(jobs.id, id));
     return true;
   }
@@ -1281,17 +1320,17 @@ export class DatabaseStorage implements IStorage {
         lte(calendarEvents.endDate, endDate)
       ))
       .orderBy(asc(calendarEvents.startDate));
-    
+
     // Get all jobs for this partner to check job-based assignments
     const partnerJobs = await db.select()
       .from(jobs)
       .where(eq(jobs.partnerId, partnerId));
     const partnerJobIds = new Set(partnerJobs.map(j => j.id));
-    
+
     // Partner can see:
     // 1. Events directly assigned to them via partnerId (for partner/hybrid events)
     // 2. Events linked to jobs that are assigned to this partner
-    return allEvents.filter(e => 
+    return allEvents.filter(e =>
       (e.teamType === "partner" && e.partnerId === partnerId) ||
       (e.teamType === "hybrid" && e.partnerId === partnerId) ||
       (e.jobId && partnerJobIds.has(e.jobId))
@@ -2781,7 +2820,7 @@ export class DatabaseStorage implements IStorage {
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
-    
+
     return db.select().from(personalTasks)
       .where(and(
         eq(personalTasks.employeeId, employeeId),
@@ -2806,7 +2845,7 @@ export class DatabaseStorage implements IStorage {
     today.setHours(0, 0, 0, 0);
     const futureDate = new Date(today);
     futureDate.setDate(futureDate.getDate() + daysAhead);
-    
+
     return db.select().from(personalTasks)
       .where(and(
         eq(personalTasks.employeeId, employeeId),
@@ -2845,7 +2884,7 @@ export class DatabaseStorage implements IStorage {
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
-    
+
     return db.select().from(dailyFocusTasks)
       .where(and(
         eq(dailyFocusTasks.employeeId, employeeId),
@@ -2883,7 +2922,7 @@ export class DatabaseStorage implements IStorage {
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
-    
+
     await db.delete(dailyFocusTasks).where(and(
       eq(dailyFocusTasks.employeeId, employeeId),
       gte(dailyFocusTasks.focusDate, startOfDay),
@@ -3270,7 +3309,7 @@ export class DatabaseStorage implements IStorage {
   async getNextPartnerInvoiceNumber(): Promise<string> {
     const year = new Date().getFullYear();
     const allInvoices = await db.select().from(partnerInvoices);
-    const yearInvoices = allInvoices.filter(inv => 
+    const yearInvoices = allInvoices.filter(inv =>
       inv.invoiceNumber?.startsWith(`PI-${year}`)
     );
     const nextNumber = yearInvoices.length + 1;
@@ -3434,6 +3473,67 @@ export class DatabaseStorage implements IStorage {
   async deleteJobFundAllocation(id: string): Promise<boolean> {
     await db.delete(jobFundAllocations).where(eq(jobFundAllocations.id, id));
     return true;
+  }
+  async deleteJobFundAllocation(id: string): Promise<boolean> {
+    await db.delete(jobFundAllocations).where(eq(jobFundAllocations.id, id));
+    return true;
+  }
+
+  // Sales Commissions
+  async getSalesCommissionsByJob(jobId: string): Promise<SalesCommission[]> {
+    return db.select().from(salesCommissions).where(eq(salesCommissions.jobId, jobId));
+  }
+
+  async getSalesCommissionsByEmployee(employeeId: string): Promise<SalesCommission[]> {
+    return db.select().from(salesCommissions).where(eq(salesCommissions.employeeId, employeeId));
+  }
+
+  async getPendingSalesCommissions(employeeId: string): Promise<SalesCommission[]> {
+    return db.select().from(salesCommissions).where(
+      and(
+        eq(salesCommissions.employeeId, employeeId),
+        eq(salesCommissions.status, "pending")
+      )
+    );
+  }
+
+  async createSalesCommission(commission: InsertSalesCommission): Promise<SalesCommission> {
+    const [created] = await db.insert(salesCommissions).values(commission).returning();
+    return created;
+  }
+
+  async updateSalesCommission(id: string, commission: Partial<InsertSalesCommission>): Promise<SalesCommission | undefined> {
+    const [updated] = await db.update(salesCommissions).set({ ...commission, updatedAt: new Date() }).where(eq(salesCommissions.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async getSalesCommissions(): Promise<SalesCommission[]> {
+    return db.select().from(salesCommissions).orderBy(desc(salesCommissions.createdAt));
+  }
+
+  // Pay Periods
+  async getPayPeriods(): Promise<PayPeriod[]> {
+    return db.select().from(payPeriods).orderBy(desc(payPeriods.startDate));
+  }
+
+  async getPayPeriod(id: string): Promise<PayPeriod | undefined> {
+    const [period] = await db.select().from(payPeriods).where(eq(payPeriods.id, id));
+    return period;
+  }
+
+  async createPayPeriod(period: InsertPayPeriod): Promise<PayPeriod> {
+    const [created] = await db.insert(payPeriods).values(period).returning();
+    return created;
+  }
+
+  async updatePayPeriod(id: string, period: Partial<InsertPayPeriod>): Promise<PayPeriod | undefined> {
+    const [updated] = await db.update(payPeriods).set({ ...period }).where(eq(payPeriods.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deletePayPeriod(id: string): Promise<boolean> {
+    const [deleted] = await db.delete(payPeriods).where(eq(payPeriods.id, id)).returning();
+    return !!deleted;
   }
 }
 

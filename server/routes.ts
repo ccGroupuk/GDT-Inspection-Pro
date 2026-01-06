@@ -19,16 +19,16 @@ const MAX_LOGIN_ATTEMPTS = 10;
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
   const attempts = loginAttempts.get(ip);
-  
+
   if (!attempts || now - attempts.firstAttempt > RATE_LIMIT_WINDOW) {
     loginAttempts.set(ip, { count: 1, firstAttempt: now });
     return true;
   }
-  
+
   if (attempts.count >= MAX_LOGIN_ATTEMPTS) {
     return false;
   }
-  
+
   attempts.count++;
   return true;
 }
@@ -48,7 +48,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+
   // Setup authentication (BEFORE other routes)
   await setupAuth(app);
   registerAuthRoutes(app);
@@ -58,7 +58,7 @@ export async function registerRoutes(
   const getEmployeeFromCookie = async (req: Request): Promise<Employee | null> => {
     const sessionToken = req.cookies?.employeeSession;
     if (!sessionToken) return null;
-    
+
     try {
       const session = await storage.getEmployeeSession(sessionToken);
       if (session && new Date(session.expiresAt) > new Date()) {
@@ -73,7 +73,7 @@ export async function registerRoutes(
     return null;
   };
 
-  // Combined admin auth middleware - allows authorized Replit Auth OR employee with owner/full_access
+  // Combined admin auth middleware - allows authorized Replit Auth OR employee with owner/full_access/admin role
   const isAdminAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
     // First check Replit Auth - must be linked to employee or whitelisted
     const user = req.user as any;
@@ -82,17 +82,17 @@ export async function registerRoutes(
       if (now <= user.expires_at) {
         const replitEmail = user.claims.email;
         const replitUserId = user.claims.sub;
-        
+
         // Check if Replit user has linked employee record
         if (replitEmail) {
           const linkedEmployee = await storage.getEmployeeByEmail(replitEmail);
-          if (linkedEmployee && linkedEmployee.isActive && 
-              (linkedEmployee.accessLevel === "owner" || linkedEmployee.accessLevel === "full_access")) {
+          if (linkedEmployee && linkedEmployee.isActive &&
+            (linkedEmployee.accessLevel === "owner" || linkedEmployee.accessLevel === "full_access" || linkedEmployee.role === "admin")) {
             (req as any).employee = linkedEmployee;
             return next();
           }
         }
-        
+
         // Check whitelist
         const adminWhitelist = process.env.REPLIT_ADMIN_USER_IDS?.split(",").map(id => id.trim()) || [];
         if (adminWhitelist.includes(replitUserId)) {
@@ -100,14 +100,14 @@ export async function registerRoutes(
         }
       }
     }
-    
+
     // Then check employee cookie auth
     const employee = await getEmployeeFromCookie(req);
-    if (employee && (employee.accessLevel === "owner" || employee.accessLevel === "full_access")) {
+    if (employee && (employee.accessLevel === "owner" || employee.accessLevel === "full_access" || employee.role === "admin")) {
       (req as any).employee = employee;
       return next();
     }
-    
+
     // Fallback: check Bearer token for backward compatibility
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
@@ -116,8 +116,8 @@ export async function registerRoutes(
         const session = await storage.getEmployeeSession(token);
         if (session && new Date(session.expiresAt) > new Date()) {
           const emp = await storage.getEmployee(session.employeeId);
-          if (emp && emp.isActive && 
-              (emp.accessLevel === "owner" || emp.accessLevel === "full_access")) {
+          if (emp && emp.isActive &&
+            (emp.accessLevel === "owner" || emp.accessLevel === "full_access" || emp.role === "admin")) {
             (req as any).employee = emp;
             return next();
           }
@@ -126,12 +126,12 @@ export async function registerRoutes(
         console.error("Employee token auth error:", error);
       }
     }
-    
+
     res.status(401).json({ message: "Unauthorized" });
   };
 
   // ==================== UNIFIED AUTH ENDPOINTS ====================
-  
+
   // Public routes that don't require authentication
   // Note: req.path inside app.use("/api", ...) is the path AFTER /api
   const publicRoutes = [
@@ -148,6 +148,8 @@ export async function registerRoutes(
     "/partner-portal/login",
     "/partner-portal/logout",
     "/partner-portal/auth/me",
+    "/public/enquiry",
+    "/public/partner-signup",
     "/employee/auth/me",
   ];
 
@@ -172,23 +174,23 @@ export async function registerRoutes(
         // Verify Replit user is authorized (must have matching employee record OR be in whitelist)
         const replitEmail = user.claims.email;
         const replitUserId = user.claims.sub;
-        
+
         // Check if there's an employee with matching email (linking Replit account to employee)
         if (replitEmail) {
           const linkedEmployee = await storage.getEmployeeByEmail(replitEmail);
-          if (linkedEmployee && linkedEmployee.isActive && 
-              (linkedEmployee.accessLevel === "owner" || linkedEmployee.accessLevel === "full_access")) {
+          if (linkedEmployee && linkedEmployee.isActive &&
+            (linkedEmployee.accessLevel === "owner" || linkedEmployee.accessLevel === "full_access")) {
             (req as any).employee = linkedEmployee;
             return next();
           }
         }
-        
+
         // Check whitelist in environment (comma-separated Replit user IDs)
         const adminWhitelist = process.env.REPLIT_ADMIN_USER_IDS?.split(",").map(id => id.trim()) || [];
         if (adminWhitelist.includes(replitUserId)) {
           return next();
         }
-        
+
         // Replit user not authorized for this app
         console.log(`Unauthorized Replit user attempt: ${replitEmail} (${replitUserId})`);
       }
@@ -206,7 +208,7 @@ export async function registerRoutes(
   });
 
   // ==================== AI ASSISTANT ====================
-  
+
   // Get conversation history
   app.get("/api/ai-assistant/conversations", isAdminAuthenticated, async (req, res) => {
     try {
@@ -233,13 +235,13 @@ export async function registerRoutes(
   app.post("/api/ai-assistant/chat", isAdminAuthenticated, async (req, res) => {
     try {
       const { message } = req.body;
-      
+
       if (!message || typeof message !== 'string') {
         return res.status(400).json({ message: "Message is required" });
       }
-      
+
       const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-      
+
       if (!GEMINI_API_KEY) {
         console.log('Gemini Error: GEMINI_API_KEY is not set in environment');
         return res.status(500).json({ message: "Gemini API key not configured. Please add GEMINI_API_KEY to your Secrets." });
@@ -255,11 +257,11 @@ export async function registerRoutes(
       // Get recent conversation history for context
       const history = await storage.getAiConversations();
       const recentHistory = history.slice(-10); // Last 10 messages for context
-      
-      const conversationContext = recentHistory.map(msg => 
+
+      const conversationContext = recentHistory.map(msg =>
         `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
       ).join('\n\n');
-      
+
       // Get repository knowledge context for AI understanding
       let knowledgeContext = '';
       try {
@@ -283,7 +285,7 @@ ${context.featureChunks.length > 0 ? context.featureChunks.join('\n\n') : 'No fe
       } catch (error) {
         console.log('Could not load knowledge context:', error);
       }
-      
+
       const systemPrompt = `You are a patient, friendly AI Co-Developer named "AI Assistant" for the CCC Group CRM system. You are an expert in React, TypeScript, Node.js, Express, Drizzle ORM, PostgreSQL, and Tailwind CSS. You write production-ready code and help build features for this CRM application.
 
 ${knowledgeContext}
@@ -382,12 +384,12 @@ USER'S LATEST MESSAGE: ${message}`;
         // Initialize Gemini SDK
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        
+
         // Generate content
         const result = await model.generateContent(systemPrompt);
         const response = await result.response;
         let responseText = response.text();
-        
+
         if (!responseText) {
           console.log('Gemini Error: No response generated - empty response');
           return res.status(500).json({ message: "No response generated" });
@@ -400,7 +402,7 @@ USER'S LATEST MESSAGE: ${message}`;
         while ((match = codeBlockRegex.exec(responseText)) !== null) {
           codeBlocks.push(match);
         }
-        const extractedCode = codeBlocks.length > 0 
+        const extractedCode = codeBlocks.length > 0
           ? codeBlocks.map(m => m[1]).join('\n\n---\n\n')
           : null;
 
@@ -410,29 +412,29 @@ USER'S LATEST MESSAGE: ${message}`;
           content: responseText,
           codeSnippet: extractedCode,
         });
-        
+
         console.log(`[ai-assistant] Responded to: "${message.substring(0, 50)}..."`);
-        res.json({ 
+        res.json({
           response: responseText,
-          codeSnippet: extractedCode 
+          codeSnippet: extractedCode
         });
-        
+
       } catch (error: any) {
         console.log('Gemini Error - Full error object:', error);
         console.log('Gemini Error - Message:', error?.message);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        
+
         // Check for rate limit errors (429)
         if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('quota')) {
-          return res.status(429).json({ 
+          return res.status(429).json({
             message: "The AI is temporarily unavailable due to rate limits. The free tier allows 20 requests per day. Please wait a few hours or try again tomorrow.",
             isRateLimit: true
           });
         }
-        
+
         res.status(500).json({ message: `Failed to generate response: ${errorMessage}` });
       }
-      
+
     } catch (error) {
       console.log('AI Assistant Error:', error);
       res.status(500).json({ message: "Failed to process message" });
@@ -443,18 +445,18 @@ USER'S LATEST MESSAGE: ${message}`;
   app.post("/api/ai-bridge/generate", isAdminAuthenticated, async (req, res) => {
     try {
       const { prompt } = req.body;
-      
+
       if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ message: "Prompt is required" });
       }
-      
+
       const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-      
+
       if (!GEMINI_API_KEY) {
         console.log('Gemini Error: GEMINI_API_KEY is not set in environment');
         return res.status(500).json({ message: "Gemini API key not configured. Please add GEMINI_API_KEY to your Secrets." });
       }
-      
+
       const systemPrompt = `You are an AI Co-Developer for the CCC Group CRM. Generate production-ready code for React/TypeScript/Node.js applications.
 
 USER REQUEST: ${prompt}
@@ -468,24 +470,24 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       try {
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        
+
         const result = await model.generateContent(systemPrompt);
         const response = await result.response;
         let code = response.text();
-        
+
         if (!code) {
           return res.status(500).json({ message: "No code generated" });
         }
-        
+
         console.log(`[ai-bridge] Generated code for prompt: "${prompt.substring(0, 50)}..."`);
         res.json({ code });
-        
+
       } catch (error: any) {
         console.log('Gemini Error:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         res.status(500).json({ message: `Failed to generate code: ${errorMessage}` });
       }
-      
+
     } catch (error) {
       console.log('Gemini Error:', error);
       res.status(500).json({ message: "Failed to generate code" });
@@ -529,7 +531,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.post("/api/build-requests", isAdminAuthenticated, async (req, res) => {
     try {
       const { code, filename, description, language, conversationId } = req.body;
-      
+
       if (!code || typeof code !== 'string') {
         return res.status(400).json({ message: "Code is required" });
       }
@@ -555,7 +557,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const { status, notes } = req.body;
       const employee = await getEmployeeFromCookie(req);
-      
+
       const updateData: any = {};
       if (status) updateData.status = status;
       if (notes !== undefined) updateData.notes = notes;
@@ -570,7 +572,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!updated) {
         return res.status(404).json({ message: "Build request not found" });
       }
-      
+
       console.log(`[build-request] Updated request ${req.params.id} to status: ${status}`);
       res.json(updated);
     } catch (error) {
@@ -590,7 +592,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   });
 
   // ========== GitHub Integration Routes ==========
-  
+
   // Check GitHub configuration status
   app.get("/api/github/status", isAdminAuthenticated, async (req, res) => {
     try {
@@ -598,7 +600,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!configured) {
         return res.json({ configured: false, message: "GitHub not configured" });
       }
-      
+
       const repoInfo = await github.getRepoInfo();
       res.json({
         configured: true,
@@ -628,7 +630,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!path || typeof path !== "string") {
         return res.status(400).json({ message: "Path is required" });
       }
-      
+
       const result = await github.getFileContent(path, (branch as string) || "main");
       res.json(result);
     } catch (error: any) {
@@ -651,20 +653,20 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.post("/api/github/commit", isAdminAuthenticated, async (req, res) => {
     try {
       const { path, content, message, branch } = req.body;
-      
+
       if (!path || !content || !message) {
         return res.status(400).json({ message: "Path, content, and message are required" });
       }
-      
+
       const result = await github.commitFile(
         path,
         content,
         message,
         branch || "main"
       );
-      
+
       console.log(`[github] Committed file: ${path} to ${branch || "main"}`);
-      
+
       // Auto-refresh knowledge after successful commit
       try {
         await githubKnowledge.refreshAllKnowledge(
@@ -676,7 +678,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       } catch (knowledgeError) {
         console.log(`[github-knowledge] Could not refresh knowledge:`, knowledgeError);
       }
-      
+
       res.json({
         success: true,
         path: result.content.path,
@@ -739,32 +741,32 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const { id } = req.params;
       const { path, message, branch } = req.body;
-      
+
       const buildRequest = await storage.getBuildRequest(id);
       if (!buildRequest) {
         return res.status(404).json({ message: "Build request not found" });
       }
-      
+
       if (!path) {
         return res.status(400).json({ message: "File path is required" });
       }
-      
+
       const commitMessage = message || `[AI Bridge] ${buildRequest.description || 'Update ' + (buildRequest.filename || path)}`;
-      
+
       const result = await github.commitFile(
         path,
         buildRequest.code,
         commitMessage,
         branch || "main"
       );
-      
+
       // Update build request status to implemented
       await storage.updateBuildRequest(id, {
         status: "implemented",
         notes: `Committed to GitHub: ${result.commit.html_url}`,
         reviewedAt: new Date(),
       });
-      
+
       console.log(`[github] Build request ${id} committed to ${path}`);
       res.json({
         success: true,
@@ -779,8 +781,8 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   });
 
   // Register checklist, wellbeing, messages, and product routes AFTER auth middleware
-  registerChecklistRoutes(app);
-  
+  registerChecklistRoutes(app, isAdminAuthenticated);
+
   // Check authentication status (supports both Replit OAuth and employee sessions)
   // Also verifies authorization for admin access
   app.get("/api/auth/me", async (req, res) => {
@@ -792,25 +794,25 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         if (now <= user.expires_at) {
           const replitEmail = user.claims.email;
           const replitUserId = user.claims.sub;
-          
+
           // Check if Replit user has linked employee record
           let linkedEmployee = null;
           let isAuthorized = false;
-          
+
           if (replitEmail) {
             linkedEmployee = await storage.getEmployeeByEmail(replitEmail);
-            if (linkedEmployee && linkedEmployee.isActive && 
-                (linkedEmployee.accessLevel === "owner" || linkedEmployee.accessLevel === "full_access")) {
+            if (linkedEmployee && linkedEmployee.isActive &&
+              (linkedEmployee.accessLevel === "owner" || linkedEmployee.accessLevel === "full_access")) {
               isAuthorized = true;
             }
           }
-          
+
           // Check whitelist
           const adminWhitelist = process.env.REPLIT_ADMIN_USER_IDS?.split(",").map(id => id.trim()) || [];
           if (adminWhitelist.includes(replitUserId)) {
             isAuthorized = true;
           }
-          
+
           if (isAuthorized) {
             return res.json({
               authType: "replit",
@@ -831,16 +833,16 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
               } : null,
             });
           }
-          
+
           // Replit user authenticated but not authorized
-          return res.status(403).json({ 
+          return res.status(403).json({
             message: "Access denied. Your account is not authorized for this application.",
             authenticated: true,
-            authorized: false 
+            authorized: false
           });
         }
       }
-      
+
       // Check employee session cookie
       const employee = await getEmployeeFromCookie(req);
       if (employee) {
@@ -857,7 +859,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           },
         });
       }
-      
+
       res.status(401).json({ message: "Not authenticated" });
     } catch (error) {
       console.error("Auth check error:", error);
@@ -875,24 +877,147 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         const isProduction = process.env.NODE_ENV === "production";
         res.clearCookie("employeeSession", {
           httpOnly: true,
-          secure: true,
-          sameSite: isProduction ? "lax" : "none",
+          secure: isProduction,
+          sameSite: "lax",
           path: "/",
         });
       }
-      
+
       // If using Replit Auth, log them out too
       if (req.isAuthenticated()) {
-        req.logout(() => {});
+        req.logout(() => { });
       }
-      
+
       res.json({ message: "Logged out successfully" });
     } catch (error) {
       console.error("Logout error:", error);
       res.status(500).json({ message: "Logout failed" });
     }
   });
-  
+
+  // ==================== PUBLIC ENQUIRY FORM ====================
+
+  // Configure multer for image uploads (memory storage)
+  const multer = (await import("multer")).default;
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB per file
+      files: 5, // Max 5 files
+    },
+    fileFilter: (_req, file, cb) => {
+      // Only allow images
+      if (file.mimetype.startsWith('image/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only image files are allowed'));
+      }
+    },
+  });
+
+  // Public enquiry form submission with image uploads
+  app.post("/api/public/enquiry", upload.array('images', 5), async (req, res) => {
+    try {
+      const { name, email, phone, address, postcode, serviceType, description, timeframe } = req.body;
+
+      // Validate required fields
+      if (!name || !phone || !address || !postcode || !serviceType || !description) {
+        return res.status(400).json({
+          message: "Missing required fields: name, phone, address, postcode, serviceType, and description are required"
+        });
+      }
+
+      // Validate email format if provided
+      if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        return res.status(400).json({ message: "Invalid email format" });
+      }
+
+      // Create or find contact
+      const allContacts = await storage.getContacts();
+      let contact = allContacts.find(c => c.phone === phone);
+
+      if (!contact) {
+        contact = await storage.createContact({
+          name,
+          email: email || undefined,
+          phone,
+          address,
+          postcode,
+          notes: `Enquiry submitted via public form - ${serviceType}`,
+        });
+      }
+
+      // Generate job number
+      const jobNumber = await storage.getNextJobNumber();
+
+      // Create job from enquiry
+      const job = await storage.createJob({
+        jobNumber,
+        contactId: contact.id,
+        serviceType,
+        description,
+        clientTimeframe: timeframe || 'flexible',
+        jobAddress: address,
+        jobPostcode: postcode,
+        deliveryType: 'in_house',
+        status: 'new_enquiry',
+        leadSource: 'Website',
+      });
+
+      // Handle uploaded images
+      const files = req.files as Express.Multer.File[];
+      if (files && files.length > 0) {
+        // Store images as job note attachments
+        const noteContent = `Enquiry images uploaded (${files.length} file${files.length > 1 ? 's' : ''})`;
+
+        const jobNote = await storage.createJobNote({
+          jobId: job.id,
+          content: noteContent,
+          visibility: 'internal',
+          authorName: contact.name,
+        });
+
+        // For now, we'll store images as base64 in the database
+        // In production, you'd want to upload to cloud storage (S3, GCS, etc.)
+        for (const file of files) {
+          const base64Data = file.buffer.toString('base64');
+          const dataUrl = `data:${file.mimetype};base64,${base64Data}`;
+
+          await storage.createJobNoteAttachment({
+            noteId: jobNote.id,
+            fileName: file.originalname,
+            fileUrl: dataUrl, // In production, replace with cloud storage URL
+            mimeType: file.mimetype,
+            fileSize: file.size,
+          });
+        }
+      }
+
+      console.log(`[enquiry] New enquiry from ${name} (${phone}) - Job ${jobNumber} created`);
+
+      res.status(201).json({
+        success: true,
+        message: "Enquiry submitted successfully",
+        jobNumber,
+      });
+    } catch (error: any) {
+      console.error("Public enquiry error:", error);
+
+      // Handle multer errors
+      if (error.message === 'Only image files are allowed') {
+        return res.status(400).json({ message: error.message });
+      }
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: "File size too large. Maximum 10MB per image." });
+      }
+      if (error.code === 'LIMIT_FILE_COUNT') {
+        return res.status(400).json({ message: "Too many files. Maximum 5 images allowed." });
+      }
+
+      res.status(500).json({ message: "Failed to submit enquiry. Please try again." });
+    }
+  });
+
   // Dashboard
   app.get("/api/dashboard", async (req, res) => {
     try {
@@ -926,7 +1051,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         storage.getTradePartners(),
       ]);
 
-      const matchedContacts = contacts.filter(c => 
+      const matchedContacts = contacts.filter(c =>
         c.name.toLowerCase().includes(query) ||
         c.email?.toLowerCase().includes(query) ||
         c.phone?.toLowerCase().includes(query) ||
@@ -949,7 +1074,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         contact: contactMap.get(j.contactId),
       }));
 
-      const matchedPartners = partners.filter(p => 
+      const matchedPartners = partners.filter(p =>
         p.businessName.toLowerCase().includes(query) ||
         p.contactName?.toLowerCase().includes(query) ||
         p.email?.toLowerCase().includes(query) ||
@@ -1063,6 +1188,33 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
 
   app.delete("/api/contacts/:id", async (req, res) => {
     try {
+      const { password } = req.body;
+      const employee = (req as any).employee;
+
+      if (!password) {
+        return res.status(400).json({ message: "Password is required to confirm deletion" });
+      }
+
+      // If user is an employee, verify their password
+      if (employee) {
+        // Build requests where we might not have the password hash loaded in the session object
+        // So fetch fresh employee record to be safe
+        const freshEmployee = await storage.getEmployee(employee.id);
+
+        if (!freshEmployee || !freshEmployee.password) {
+          return res.status(403).json({ message: "Security check failed: No password set for this account" });
+        }
+
+        const match = await bcrypt.compare(password, freshEmployee.password);
+        if (!match) {
+          return res.status(403).json({ message: "Incorrect password" });
+        }
+      } else {
+        // For Replit Auth users without linked employee account, currently disallowing destructive actions
+        // lacking a password challenge.
+        return res.status(403).json({ message: "Action requires an employee account with password protection" });
+      }
+
       await storage.deleteContact(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1080,15 +1232,15 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       }
 
       const xlsx = await import("xlsx");
-      
+
       // Decode base64 file content
       const buffer = Buffer.from(fileContent, "base64");
-      
+
       // Parse the file
       const workbook = xlsx.read(buffer, { type: "buffer" });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawData = xlsx.utils.sheet_to_json<unknown[]>(firstSheet, { header: 1 });
-      
+
       if (rawData.length < 2) {
         return res.status(400).json({ message: "File must have at least a header row and one data row" });
       }
@@ -1096,7 +1248,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       // First row is headers (sheet_to_json with header: 1 returns array of arrays)
       const headerRow = rawData[0] as unknown[];
       const headers = headerRow.map(h => String(h || "").trim());
-      
+
       // Get first 5 data rows for preview
       const previewRows = rawData.slice(1, 6).map(row => {
         const rowArray = row as unknown[];
@@ -1110,7 +1262,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       // Auto-detect column mappings based on header names
       const contactFields = ["name", "email", "phone", "address", "postcode", "notes"];
       const autoMapping: Record<string, string> = {};
-      
+
       headers.forEach(header => {
         const lowerHeader = header.toLowerCase();
         if (lowerHeader.includes("name") && !autoMapping.name) {
@@ -1279,7 +1431,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         const parsed = parseFloat(body.emergencyCalloutFee);
         body.emergencyCalloutFee = isNaN(parsed) ? null : parsed.toFixed(2);
       }
-      
+
       const data = insertTradePartnerSchema.parse(body);
       const partner = await storage.createTradePartner(data);
       res.status(201).json(partner);
@@ -1302,7 +1454,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         const parsed = parseFloat(body.emergencyCalloutFee);
         body.emergencyCalloutFee = isNaN(parsed) ? null : parsed.toFixed(2);
       }
-      
+
       const data = insertTradePartnerSchema.partial().parse(body);
       const partner = await storage.updateTradePartner(req.params.id, data);
       if (!partner) {
@@ -1333,7 +1485,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const { newPassword } = req.body;
       const partner = await storage.getTradePartner(req.params.id);
-      
+
       if (!partner) {
         return res.status(404).json({ message: "Partner not found" });
       }
@@ -1379,7 +1531,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const [contact, partner, allTasks, contacts, partners] = await Promise.all([
         storage.getContact(job.contactId),
         job.partnerId ? storage.getTradePartner(job.partnerId) : Promise.resolve(undefined),
@@ -1387,9 +1539,9 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         storage.getContacts(),
         storage.getTradePartners(),
       ]);
-      
+
       const tasks = allTasks.filter(t => t.jobId === job.id);
-      
+
       res.json({ job, contact, partner, tasks, contacts, partners });
     } catch (error) {
       console.error("Get job error:", error);
@@ -1402,11 +1554,11 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const { getJobStageReadiness } = await import("./stage-validation");
       const readiness = await getJobStageReadiness(req.params.id);
-      
+
       if (!readiness) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       res.json(readiness);
     } catch (error) {
       console.error("Get job stage readiness error:", error);
@@ -1421,14 +1573,98 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!targetStage) {
         return res.status(400).json({ message: "targetStage is required" });
       }
-      
+
       const { validateStageTransition } = await import("./stage-validation");
       const validation = await validateStageTransition(req.params.id, targetStage);
-      
+
       res.json(validation);
     } catch (error) {
       console.error("Validate stage transition error:", error);
       res.status(500).json({ message: "Failed to validate stage transition" });
+    }
+  });
+
+
+  // Get financial projection for the next 90 days
+  app.get("/api/financial-projection", async (req, res) => {
+    try {
+      // 1. Get current real balance (Income - Expenses)
+      // Note: In a real app, this might come from a "Bank Accounts" table.
+      // Here we calculate it from all historical transactions.
+      const allTransactions = await storage.getFinancialTransactions();
+      const currentBalance = allTransactions.reduce((sum, t) => {
+        const amount = Number(t.amount);
+        return t.type === 'income' ? sum + amount : sum - amount;
+      }, 0);
+
+      // 2. limit dates
+      const today = new Date();
+      const ninetyDaysLater = new Date();
+      ninetyDaysLater.setDate(today.getDate() + 90);
+
+      // 3. Get all future Money IN (Unpaid Invoices)
+      const invoices = await storage.getInvoices();
+      const incoming = invoices
+        .filter(inv => inv.status === 'sent' && inv.dueDate && new Date(inv.dueDate) >= today)
+        .map(inv => ({
+          date: new Date(inv.dueDate!).toISOString().split('T')[0],
+          amount: Number(inv.grandTotal),
+          type: 'in',
+          description: `Invoice #${inv.referenceNumber}`
+        }));
+
+      // 4. Get all future Money OUT (Partner Invoices & Planned Expenses)
+      const partnerInvoices = await storage.getPartnerInvoices();
+      const outgoing = partnerInvoices
+        .filter(inv => inv.status !== 'paid' && inv.dueDate && new Date(inv.dueDate) >= today)
+        .map(inv => ({
+          date: new Date(inv.dueDate!).toISOString().split('T')[0],
+          amount: Number(inv.totalAmount),
+          type: 'out',
+          description: `Partner Inv #${inv.invoiceNumber}`
+        }));
+
+      // 5. Build daily timeline
+      const projection = [];
+      let runningBalance = currentBalance;
+      const events = [...incoming, ...outgoing].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Create a map for quick lookups
+      const eventsByDate: Record<string, typeof events> = {};
+      events.forEach(e => {
+        if (!eventsByDate[e.date]) eventsByDate[e.date] = [];
+        eventsByDate[e.date].push(e);
+      });
+
+      for (let d = new Date(today); d <= ninetyDaysLater; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        const dayEvents = eventsByDate[dateStr] || [];
+
+        dayEvents.forEach(e => {
+          if (e.type === 'in') runningBalance += e.amount;
+          else runningBalance -= e.amount;
+        });
+
+        projection.push({
+          date: dateStr,
+          balance: runningBalance,
+          events: dayEvents
+        });
+      }
+
+      res.json({
+        currentBalance,
+        projection,
+        summary: {
+          lowestBalance: Math.min(...projection.map(p => p.balance)),
+          highestBalance: Math.max(...projection.map(p => p.balance)),
+          finalBalance: projection[projection.length - 1].balance
+        }
+      });
+
+    } catch (error) {
+      console.error("Financial projection error:", error);
+      res.status(500).json({ message: "Failed to generate projection" });
     }
   });
 
@@ -1449,18 +1685,18 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.patch("/api/jobs/:id", async (req, res) => {
     try {
       const data = insertJobSchema.partial().parse(req.body);
-      
+
       // Get current job to check if status is changing to "paid"
       const currentJob = await storage.getJob(req.params.id);
       if (!currentJob) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       // Validate stage transition if status is changing
       if (data.status && data.status !== currentJob.status) {
         const { validateStageTransition } = await import("./stage-validation");
         const validation = await validateStageTransition(req.params.id, data.status);
-        
+
         if (!validation.allowed) {
           return res.status(409).json({
             message: "Cannot move to this stage - requirements not met",
@@ -1470,19 +1706,49 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           });
         }
       }
-      
+
       // Auto-set partnerStatus to "offered" when a partner is first assigned to the job
       if (data.partnerId && data.partnerId !== currentJob.partnerId) {
         (data as any).partnerStatus = "offered";
         (data as any).partnerRespondedAt = null;
         (data as any).partnerDeclineReason = null;
       }
-      
+
       const job = await storage.updateJob(req.params.id, data);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
+
+      // Auto-create sales commission when job is completed
+      if (data.status === 'completed' && currentJob.status !== 'completed') {
+        const freshJob = await storage.getJob(job.id);
+        if (freshJob && freshJob.salesRepId && freshJob.quotedValue) {
+          // Avoid duplicates
+          const existingCommissions = await storage.getSalesCommissionsByJob(freshJob.id);
+          if (existingCommissions.length === 0) {
+            const salesRep = await storage.getEmployee(freshJob.salesRepId);
+            if (salesRep && Number(salesRep.defaultCommissionRate) > 0) {
+              const jobValue = Number(freshJob.quotedValue);
+              const rate = Number(salesRep.defaultCommissionRate);
+              const amount = (jobValue * rate) / 100;
+
+              await storage.createSalesCommission({
+                jobId: freshJob.id,
+                employeeId: salesRep.id,
+                commissionType: 'sales_onboarding',
+                rate: salesRep.defaultCommissionRate,
+                jobValueSnapshot: freshJob.quotedValue,
+                amount: amount.toFixed(2),
+                status: 'pending',
+                notes: `Commission generated for Job ${freshJob.jobNumber} (${rate}%)`
+              });
+              console.log(`[commission] Generated £${amount.toFixed(2)} for ${salesRep.firstName} on job ${freshJob.jobNumber}`);
+            }
+          }
+        }
+      }
+
       // Auto-send email notification when status changes to a notifiable status
       // Note: quote_sent and invoice_sent are handled by POST /api/invoices/:id/send with specific templates
       if (data.status && data.status !== currentJob.status && currentJob.contactId) {
@@ -1496,25 +1762,25 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           'on_hold': { message: 'Project is on hold', actionRequired: false },
           'final_inspection': { message: 'Final inspection is complete', actionRequired: false },
         };
-        
+
         const statusInfo = clientNotifiableStatuses[data.status];
         if (statusInfo) {
           (async () => {
             try {
               const { sendJobStatusUpdate, isEmailConfigured } = await import("./email");
               if (!isEmailConfigured()) return;
-              
+
               const contact = await storage.getContact(currentJob.contactId!);
               if (!contact?.email) return;
-              
+
               const portalAccess = await storage.getClientPortalAccess(currentJob.contactId!);
               if (!portalAccess?.accessToken) return;
-              
+
               const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
-              
+
               // Format status for display
               const displayStatus = data.status!.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-              
+
               await sendJobStatusUpdate(
                 contact.email,
                 contact.name,
@@ -1532,22 +1798,22 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           })();
         }
       }
-      
+
       // Auto-create finance transaction when job moves to "paid" status
       if (data.status === "paid" && currentJob.status !== "paid" && job.quotedValue != null) {
         try {
           // Find income category
           const incomeCategory = await storage.getFinancialCategoryByName("Client Payments");
-          
+
           // Get contact info for description
-          const contact = currentJob.contactId 
-            ? await storage.getContact(currentJob.contactId) 
+          const contact = currentJob.contactId
+            ? await storage.getContact(currentJob.contactId)
             : null;
-          
+
           const grossAmount = parseFloat(job.quotedValue);
           let cccMargin = grossAmount;
           let partnerEarnings = 0;
-          
+
           // Calculate CCC margin vs partner earnings for partner jobs
           if (job.deliveryType === "partner" && job.partnerId && job.partnerCharge) {
             const partnerCharge = parseFloat(job.partnerCharge);
@@ -1560,14 +1826,14 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
             }
             partnerEarnings = grossAmount - cccMargin;
           }
-          
+
           // Create income transaction for CCC's actual profit (margin only for partner jobs)
           await storage.createFinancialTransaction({
             date: new Date(),
             type: "income",
             categoryId: incomeCategory?.id,
             amount: cccMargin.toFixed(2),
-            description: job.deliveryType === "partner" 
+            description: job.deliveryType === "partner"
               ? `CCC Margin for ${job.jobNumber}${contact ? ` - ${contact.name}` : ""} (${job.partnerChargeType === "percentage" ? job.partnerCharge + "%" : "£" + job.partnerCharge} of £${grossAmount.toFixed(2)})`
               : `Payment received for ${job.jobNumber}${contact ? ` - ${contact.name}` : ""}`,
             jobId: job.id,
@@ -1578,7 +1844,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
             profitAmount: cccMargin.toFixed(2),
           });
           console.log(`Auto-created income transaction for job ${job.jobNumber} - CCC Margin: £${cccMargin.toFixed(2)}`);
-          
+
           // Create fee accrual for partner jobs - this tracks what partner owes CCC
           if (job.deliveryType === "partner" && job.partnerId && job.partnerCharge) {
             try {
@@ -1588,7 +1854,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
                 const feeType = job.partnerChargeType === "percentage" ? "percentage" : "flat";
                 const feeValue = partnerCharge;
                 const feeAmount = cccMargin;
-                
+
                 await storage.createPartnerFeeAccrual({
                   partnerId: job.partnerId,
                   jobId: job.id,
@@ -1611,7 +1877,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           console.error("Failed to auto-create finance transaction:", financeError);
         }
       }
-      
+
       res.json(job);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1639,7 +1905,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       await storage.updateJob(req.params.id, { partnerAcceptanceAcknowledged: true });
       res.json({ message: "Partner acceptance acknowledged" });
     } catch (error) {
@@ -1878,18 +2144,18 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const { jobId } = req.params;
       const { type, notes, dueDate, paymentTerms } = req.body;
-      
+
       // Get job and quote items
       const job = await storage.getJob(jobId);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const quoteItems = await storage.getQuoteItemsByJob(jobId);
-      
+
       // Calculate totals
       const subtotal = quoteItems.reduce((sum, item) => sum + parseFloat(item.lineTotal || "0"), 0);
-      
+
       let discountAmount = 0;
       if (job.discountType && job.discountValue) {
         if (job.discountType === "percentage") {
@@ -1898,16 +2164,16 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           discountAmount = parseFloat(job.discountValue) || 0;
         }
       }
-      
+
       const afterDiscount = subtotal - discountAmount;
-      
+
       let taxAmount = 0;
       if (job.taxEnabled && job.taxRate) {
         taxAmount = afterDiscount * (parseFloat(job.taxRate) / 100);
       }
-      
+
       const grandTotal = afterDiscount + taxAmount;
-      
+
       // Calculate deposit if applicable
       let depositCalculated = null;
       if (job.depositRequired && job.depositAmount) {
@@ -1917,14 +2183,14 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           depositCalculated = job.depositAmount;
         }
       }
-      
+
       // Normalize type and generate reference number (count by type to ensure uniqueness)
       const normalizedType = type === "invoice" ? "invoice" : "quote";
       const existingInvoices = await storage.getInvoicesByJob(jobId);
       const prefix = normalizedType === "invoice" ? "INV" : "QTE";
       const sameTypeCount = existingInvoices.filter(inv => inv.type === normalizedType).length + 1;
       const referenceNumber = `${job.jobNumber}-${prefix}-${String(sameTypeCount).padStart(2, "0")}`;
-      
+
       // Create invoice
       const invoice = await storage.createInvoice({
         jobId,
@@ -1948,7 +2214,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         notes,
         showInPortal: false,
       });
-      
+
       // Copy quote items to invoice line items
       for (let i = 0; i < quoteItems.length; i++) {
         const item = quoteItems[i];
@@ -1961,7 +2227,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           sortOrder: i,
         });
       }
-      
+
       const lineItems = await storage.getInvoiceLineItems(invoice.id);
       res.status(201).json({ invoice, lineItems });
     } catch (error) {
@@ -1977,40 +2243,40 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
+
       const updated = await storage.updateInvoice(req.params.id, {
         status: "sent",
         showInPortal: true,
         sentAt: new Date(),
       });
-      
+
       // Update job status based on invoice type
       const job = await storage.getJob(invoice.jobId);
       if (job) {
         const newStatus = invoice.type === "invoice" ? "invoice_sent" : "quote_sent";
         await storage.updateJob(invoice.jobId, { status: newStatus });
-        
+
         // Send email notification to client (non-blocking)
         if (job.contactId) {
           (async () => {
             try {
               const { sendQuoteNotification, sendJobStatusUpdate, isEmailConfigured } = await import("./email");
               if (!isEmailConfigured()) return;
-              
+
               const contact = await storage.getContact(job.contactId!);
               if (!contact?.email) return;
-              
+
               const portalAccess = await storage.getClientPortalAccess(job.contactId!);
               if (!portalAccess?.accessToken) return;
-              
+
               const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
-              
+
               if (invoice.type === "quote") {
                 // Format quote amount safely
-                const amount = invoice.grandTotal 
+                const amount = invoice.grandTotal
                   ? `£${Number(invoice.grandTotal).toFixed(2)}`
                   : 'See portal for details';
-                  
+
                 await sendQuoteNotification(
                   contact.email,
                   contact.name,
@@ -2040,7 +2306,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           })();
         }
       }
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Send invoice error:", error);
@@ -2108,12 +2374,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       // Generate reference number
       const existing = await storage.getChangeOrdersByJob(req.params.jobId);
       const count = existing.length + 1;
       const referenceNumber = `${job.jobNumber}-CO-${count.toString().padStart(2, "0")}`;
-      
+
       const changeOrder = await storage.createChangeOrder({
         jobId: req.params.jobId,
         referenceNumber,
@@ -2193,7 +2459,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         changeOrderId: req.params.changeOrderId,
         ...req.body,
       });
-      
+
       // Recalculate totals
       const items = await storage.getChangeOrderItems(req.params.changeOrderId);
       const changeOrder = await storage.getChangeOrder(req.params.changeOrderId);
@@ -2207,7 +2473,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           grandTotal: grandTotal.toFixed(2),
         });
       }
-      
+
       res.status(201).json(item);
     } catch (error) {
       console.error("Create change order item error:", error);
@@ -2222,7 +2488,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!item) {
         return res.status(404).json({ message: "Change order item not found" });
       }
-      
+
       // Recalculate totals
       const items = await storage.getChangeOrderItems(item.changeOrderId);
       const changeOrder = await storage.getChangeOrder(item.changeOrderId);
@@ -2236,7 +2502,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           grandTotal: grandTotal.toFixed(2),
         });
       }
-      
+
       res.json(item);
     } catch (error) {
       console.error("Update change order item error:", error);
@@ -2250,9 +2516,9 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       // Get item first to get changeOrderId for recalculation
       const items = await storage.getChangeOrderItems(req.params.id);
       const targetItem = items.find(i => i.id === req.params.id);
-      
+
       await storage.deleteChangeOrderItem(req.params.id);
-      
+
       // Recalculate if we found the item
       if (targetItem) {
         const remainingItems = await storage.getChangeOrderItems(targetItem.changeOrderId);
@@ -2268,7 +2534,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           });
         }
       }
-      
+
       res.status(204).send();
     } catch (error) {
       console.error("Delete change order item error:", error);
@@ -2290,7 +2556,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!contact.email) {
         return res.status(400).json({ message: "Contact must have an email address" });
       }
-      
+
       const inviteToken = crypto.randomUUID();
       const invite = await storage.createClientInvite({
         contactId,
@@ -2298,7 +2564,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         inviteToken,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       });
-      
+
       // Optionally send email with invite link
       let emailSent = false;
       if (shouldSendEmail) {
@@ -2318,7 +2584,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           console.error("Failed to send invite email:", emailError);
         }
       }
-      
+
       res.status(201).json({ ...invite, emailSent });
     } catch (error) {
       console.error("Create invite error:", error);
@@ -2331,7 +2597,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       const { contactId } = req.params;
       const access = await storage.getClientPortalAccess(contactId);
       const invite = await storage.getClientInviteByContact(contactId);
-      
+
       // Priority 1: Active portal access (client has accepted invite)
       if (access && access.isActive) {
         res.json({
@@ -2339,7 +2605,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           inviteStatus: "accepted",
           portalToken: access.accessToken,
         });
-      // Priority 2: Pending invite (not yet accepted)
+        // Priority 2: Pending invite (not yet accepted)
       } else if (invite) {
         res.json({
           id: null,
@@ -2352,7 +2618,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           inviteSentAt: invite.createdAt,
           inviteExpiresAt: invite.expiresAt,
         });
-      // Priority 3: No active access or pending invite
+        // Priority 3: No active access or pending invite
       } else {
         res.json(access || null);
       }
@@ -2367,7 +2633,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const { newPassword } = req.body;
       const contact = await storage.getContact(req.params.id);
-      
+
       if (!contact) {
         return res.status(404).json({ message: "Contact not found" });
       }
@@ -2423,19 +2689,19 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.patch("/api/payment-requests/:id", async (req, res) => {
     try {
       const data = insertPaymentRequestSchema.partial().parse(req.body);
-      
+
       // Get the existing payment request
       const existingRequest = await storage.getPaymentRequest(req.params.id);
       if (!existingRequest) {
         return res.status(404).json({ message: "Payment request not found" });
       }
-      
+
       // If confirming a partner payment, validate sufficient funds
-      if (data.approvalStatus === "confirmed" && 
-          (existingRequest.type === "partner_deposit" || 
-           existingRequest.type === "partner_balance" || 
-           existingRequest.type === "partner_payout")) {
-        
+      if (data.approvalStatus === "confirmed" &&
+        (existingRequest.type === "partner_deposit" ||
+          existingRequest.type === "partner_balance" ||
+          existingRequest.type === "partner_payout")) {
+
         const job = await storage.getJob(existingRequest.jobId);
         if (job && (job.deliveryType === "hybrid" || job.deliveryType === "partner")) {
           // Calculate available funds
@@ -2444,17 +2710,17 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           let quoteTotal = 0;
           if (activeQuote) {
             const quoteItems = await storage.getQuoteItems(activeQuote.id);
-            const subtotal = quoteItems.reduce((sum, item) => 
+            const subtotal = quoteItems.reduce((sum, item) =>
               sum + (parseFloat(item.unitPrice) * item.quantity), 0);
             const taxRate = parseFloat(activeQuote.taxRate || "0") / 100;
             const discountType = activeQuote.discountType || "percentage";
             const discountValue = parseFloat(activeQuote.discountValue || "0");
-            const discount = discountType === "percentage" 
-              ? subtotal * (discountValue / 100) 
+            const discount = discountType === "percentage"
+              ? subtotal * (discountValue / 100)
               : discountValue;
             quoteTotal = (subtotal - discount) * (1 + taxRate);
           }
-          
+
           // Calculate total received from client
           let totalReceived = 0;
           if (job.depositReceived && job.depositAmount) {
@@ -2463,23 +2729,23 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           if (job.balancePaid) {
             totalReceived = quoteTotal;
           }
-          
+
           // Get confirmed partner payments (already paid out)
           const allPaymentRequests = await storage.getJobPaymentRequests(existingRequest.jobId);
           const confirmedPartnerPayments = allPaymentRequests
-            .filter(pr => 
+            .filter(pr =>
               (pr.type === "partner_deposit" || pr.type === "partner_balance" || pr.type === "partner_payout") &&
               pr.approvalStatus === "confirmed" &&
               pr.id !== req.params.id  // Exclude current request
             )
             .reduce((sum, pr) => sum + parseFloat(pr.amount), 0);
-          
+
           const availableFunds = totalReceived - confirmedPartnerPayments;
           const paymentAmount = parseFloat(existingRequest.amount);
-          
+
           if (availableFunds < paymentAmount) {
             const shortfall = paymentAmount - availableFunds;
-            return res.status(400).json({ 
+            return res.status(400).json({
               message: `Insufficient client funds. Need £${shortfall.toFixed(2)} more before confirming this payment.`,
               availableFunds,
               paymentAmount,
@@ -2488,7 +2754,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           }
         }
       }
-      
+
       const request = await storage.updatePaymentRequest(req.params.id, data);
       if (!request) {
         return res.status(404).json({ message: "Payment request not found" });
@@ -2527,18 +2793,18 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.post("/api/jobs/:jobId/client-payments", async (req, res) => {
     try {
       const { type, amount, paymentMethod, reference, notes, receivedAt } = req.body;
-      
+
       // Validate required fields
       if (!type || !amount) {
         return res.status(400).json({ message: "Type and amount are required" });
       }
-      
+
       // Get employee ID from session if available
       let recordedBy = null;
       if ((req as any).employee) {
         recordedBy = (req as any).employee.id;
       }
-      
+
       const payment = await storage.createJobClientPayment({
         jobId: req.params.jobId,
         type,
@@ -2549,32 +2815,32 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         receivedAt: receivedAt ? new Date(receivedAt) : new Date(),
         recordedBy,
       });
-      
+
       // Update job depositReceived if this is a deposit
       if (type === "deposit") {
         await storage.updateJob(req.params.jobId, { depositReceived: true });
-        
+
         // For hybrid jobs, auto-create partner deposit payment request
         const job = await storage.getJob(req.params.jobId);
         if (job && job.deliveryType === "hybrid") {
           const jobPartners = await storage.getJobPartners(req.params.jobId);
-          
+
           for (const jp of jobPartners) {
             // Check if partner deposit already exists
             const existingRequests = await storage.getJobPaymentRequests(req.params.jobId);
             const hasPartnerDeposit = existingRequests.some(
               r => r.type === "partner_deposit" && r.requestedById === jp.partnerId
             );
-            
+
             if (!hasPartnerDeposit) {
               const partner = await storage.getTradePartner(jp.partnerId);
-              
+
               // Calculate partner's deposit share
               // Partner gets: client deposit minus proportional CCC margin
               const clientDeposit = parseFloat(amount);
               const commissionType = partner?.commissionType || "percentage";
               const commissionValue = parseFloat(partner?.commissionValue || "10");
-              
+
               let partnerDepositAmount: number;
               if (commissionType === "percentage") {
                 // Partner gets deposit minus CCC's percentage
@@ -2587,13 +2853,13 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
                 let quoteTotal = clientDeposit * 2; // Default assumption if no quote
                 if (activeQuote) {
                   const quoteItems = await storage.getQuoteItems(activeQuote.id);
-                  const subtotal = quoteItems.reduce((sum, item) => 
+                  const subtotal = quoteItems.reduce((sum, item) =>
                     sum + (parseFloat(item.unitPrice) * item.quantity), 0);
                   const taxRate = parseFloat(activeQuote.taxRate || "0") / 100;
                   const discountType = activeQuote.discountType || "percentage";
                   const discountValue = parseFloat(activeQuote.discountValue || "0");
-                  const discount = discountType === "percentage" 
-                    ? subtotal * (discountValue / 100) 
+                  const discount = discountType === "percentage"
+                    ? subtotal * (discountValue / 100)
                     : discountValue;
                   quoteTotal = (subtotal - discount) * (1 + taxRate);
                 }
@@ -2601,7 +2867,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
                 const cccMarginProportion = commissionValue / quoteTotal;
                 partnerDepositAmount = clientDeposit * (1 - cccMarginProportion);
               }
-              
+
               // Create partner deposit payment request
               await storage.createPaymentRequest({
                 jobId: req.params.jobId,
@@ -2616,35 +2882,35 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           }
         }
       }
-      
+
       // For hybrid jobs, auto-create partner balance payment when client balance is received
       if (type === "balance") {
         const job = await storage.getJob(req.params.jobId);
         if (job && job.deliveryType === "hybrid") {
           // Update job balancePaid flag
           await storage.updateJob(req.params.jobId, { balancePaid: true });
-          
+
           const jobPartners = await storage.getJobPartners(req.params.jobId);
-          
+
           for (const jp of jobPartners) {
             // Check if partner balance already exists
             const existingRequests = await storage.getJobPaymentRequests(req.params.jobId);
             const hasPartnerBalance = existingRequests.some(
               r => r.type === "partner_balance" && r.requestedById === jp.partnerId
             );
-            
+
             if (!hasPartnerBalance) {
               const partner = await storage.getTradePartner(jp.partnerId);
-              
+
               // Calculate partner's balance share
               // Total partner charge minus what was already paid as deposit
               const partnerTotal = parseFloat(job.partnerCharge || "0");
               const confirmedDeposits = existingRequests
                 .filter(r => r.type === "partner_deposit" && r.approvalStatus === "confirmed")
                 .reduce((sum, r) => sum + parseFloat(r.amount), 0);
-              
+
               const partnerBalanceAmount = partnerTotal - confirmedDeposits;
-              
+
               if (partnerBalanceAmount > 0) {
                 // Create partner balance payment request
                 await storage.createPaymentRequest({
@@ -2661,7 +2927,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           }
         }
       }
-      
+
       res.status(201).json(payment);
     } catch (error) {
       console.error("Create client payment error:", error);
@@ -2714,12 +2980,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.post("/api/jobs/:jobId/fund-allocations", async (req, res) => {
     try {
       const { partnerId, jobPartnerId, clientPaymentId, amount, purpose, notes } = req.body;
-      
+
       // Validate required fields
       if (!amount) {
         return res.status(400).json({ message: "Amount is required" });
       }
-      
+
       // Validate that partner exists if provided
       if (partnerId) {
         const partner = await storage.getTradePartner(partnerId);
@@ -2727,30 +2993,30 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           return res.status(404).json({ message: "Trade partner not found" });
         }
       }
-      
+
       // Get total client payments for this job
       const clientPayments = await storage.getJobClientPayments(req.params.jobId);
       const totalReceived = clientPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
-      
+
       // Get existing allocations
       const existingAllocations = await storage.getJobFundAllocations(req.params.jobId);
       const totalAllocated = existingAllocations.reduce((sum, a) => sum + parseFloat(a.amount), 0);
-      
+
       const requestAmount = parseFloat(amount);
       const remainingUnallocated = totalReceived - totalAllocated;
-      
+
       if (requestAmount > remainingUnallocated + 0.01) {
-        return res.status(400).json({ 
-          message: `Amount exceeds unallocated funds. Available: £${remainingUnallocated.toFixed(2)}` 
+        return res.status(400).json({
+          message: `Amount exceeds unallocated funds. Available: £${remainingUnallocated.toFixed(2)}`
         });
       }
-      
+
       // Get employee ID from session
       let allocatedBy = null;
       if ((req as any).employee) {
         allocatedBy = (req as any).employee.id;
       }
-      
+
       const allocation = await storage.createJobFundAllocation({
         jobId: req.params.jobId,
         partnerId: partnerId || null,
@@ -2762,7 +3028,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         status: "pending",
         allocatedBy,
       });
-      
+
       res.status(201).json(allocation);
     } catch (error) {
       console.error("Create fund allocation error:", error);
@@ -2808,11 +3074,11 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const clientPayments = await storage.getJobClientPayments(req.params.jobId);
       const allocations = await storage.getJobFundAllocations(req.params.jobId);
       const jobPartnersList = await storage.getJobPartners(req.params.jobId);
-      
+
       // Get partner details for commission calculation
       const partnersWithDetails = await Promise.all(
         jobPartnersList.map(async (jp) => {
@@ -2820,28 +3086,28 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           return { ...jp, partner };
         })
       );
-      
+
       // Get quote total for calculating commission
       const quotes = await storage.getQuotesByJob(req.params.jobId);
       const activeQuote = quotes.find(q => q.status === "accepted") || quotes[0];
       let quoteTotal = 0;
       if (activeQuote) {
         const quoteItems = await storage.getQuoteItems(activeQuote.id);
-        const subtotal = quoteItems.reduce((sum, item) => 
+        const subtotal = quoteItems.reduce((sum, item) =>
           sum + (parseFloat(item.unitPrice) * item.quantity), 0);
         const taxRate = parseFloat(activeQuote.taxRate || "0") / 100;
         const discountType = activeQuote.discountType || "percentage";
         const discountValue = parseFloat(activeQuote.discountValue || "0");
-        const discount = discountType === "percentage" 
-          ? subtotal * (discountValue / 100) 
+        const discount = discountType === "percentage"
+          ? subtotal * (discountValue / 100)
           : discountValue;
         quoteTotal = (subtotal - discount) * (1 + taxRate);
       }
-      
+
       // For partner-led jobs, auto-calculate client funds based on payments collected
       // For hybrid jobs, we use both manual payments AND auto-calculated from deposit status
       const manualPayments = clientPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
-      
+
       // Auto-calculate based on deposit status (deposit marked as received)
       let autoClientFundsReceived = 0;
       if (job.depositReceived && job.depositAmount) {
@@ -2851,28 +3117,28 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (job.balancePaid) {
         autoClientFundsReceived = quoteTotal;
       }
-      
+
       // For hybrid and partner-led jobs, use auto-calculated when deposit is marked as received
       // For in-house jobs OR when no deposit is marked received, use manual payments
       const totalReceived = (job.deliveryType === "partner" || job.deliveryType === "hybrid") && autoClientFundsReceived > 0
         ? autoClientFundsReceived  // Partner/Hybrid with deposit received: auto from deposit/balance status
         : manualPayments;  // In-house or no deposit: from manual client payment records
-      
+
       const totalAllocated = allocations.reduce((sum, a) => sum + parseFloat(a.amount), 0);
       const unallocated = totalReceived - totalAllocated;
-      
+
       // Calculate CCC commission for partner-led jobs
       let cccCommission = 0;
       let commissionRate = 0;
       let commissionType = "percentage";
-      
+
       if (job.deliveryType === "partner" && partnersWithDetails.length > 0) {
         // Use the first partner's commission settings
         const primaryPartner = partnersWithDetails[0];
         if (primaryPartner.partner) {
           commissionType = primaryPartner.partner.commissionType || "percentage";
           commissionRate = parseFloat(primaryPartner.partner.commissionValue || "10");
-          
+
           if (commissionType === "percentage") {
             cccCommission = quoteTotal * (commissionRate / 100);
           } else {
@@ -2880,7 +3146,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           }
         }
       }
-      
+
       // Group allocations by partner
       const allocationsByPartner: Record<string, { partnerId: string; total: number; allocations: any[] }> = {};
       for (const alloc of allocations) {
@@ -2891,28 +3157,28 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         allocationsByPartner[key].total += parseFloat(alloc.amount);
         allocationsByPartner[key].allocations.push(alloc);
       }
-      
+
       // Calculate available funds for partner payments
       // Available = totalReceived - confirmed partner payments (already paid out)
       const paymentRequests = await storage.getJobPaymentRequests(req.params.jobId);
       const confirmedPartnerPayments = paymentRequests
-        .filter(pr => 
+        .filter(pr =>
           (pr.type === "partner_deposit" || pr.type === "partner_balance" || pr.type === "partner_payout") &&
           pr.approvalStatus === "confirmed"
         )
         .reduce((sum, pr) => sum + parseFloat(pr.amount), 0);
-      
+
       const pendingPartnerPayments = paymentRequests
-        .filter(pr => 
+        .filter(pr =>
           (pr.type === "partner_deposit" || pr.type === "partner_balance" || pr.type === "partner_payout") &&
           (pr.approvalStatus === "pending" || pr.approvalStatus === "marked_paid")
         )
         .reduce((sum, pr) => sum + parseFloat(pr.amount), 0);
-      
+
       const availableFunds = totalReceived - confirmedPartnerPayments;
       const fundsNeededForPending = pendingPartnerPayments;
       const fundsShortfall = Math.max(0, pendingPartnerPayments - availableFunds);
-      
+
       res.json({
         totalReceived,
         totalAllocated,
@@ -3002,7 +3268,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (invite.acceptedAt) {
         return res.status(410).json({ message: "Invite already used" });
       }
-      
+
       const contact = await storage.getContact(invite.contactId);
       res.json({ invite, contact });
     } catch (error) {
@@ -3017,10 +3283,10 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!invite || invite.expiresAt < new Date() || invite.acceptedAt) {
         return res.status(400).json({ message: "Invalid or expired invite" });
       }
-      
+
       // Mark invite as accepted
       await storage.acceptClientInvite(req.params.token);
-      
+
       // Create portal access
       const accessToken = crypto.randomUUID();
       const access = await storage.createClientPortalAccess({
@@ -3029,7 +3295,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         tokenExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
         isActive: true,
       });
-      
+
       res.json({ access, token: accessToken });
     } catch (error) {
       console.error("Accept invite error:", error);
@@ -3044,14 +3310,14 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const jobs = await storage.getJobsByContact(access.contactId);
-      
+
       // Add change orders total to each job
       const jobsWithChangeOrders = await Promise.all(jobs.map(async (job) => {
         const changeOrders = await storage.getChangeOrdersByJob(job.id);
@@ -3065,7 +3331,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           hasChangeOrders: visibleChangeOrders.length > 0,
         };
       }));
-      
+
       res.json(jobsWithChangeOrders);
     } catch (error) {
       console.error("Portal jobs error:", error);
@@ -3079,22 +3345,22 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.contactId !== access.contactId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const paymentRequests = await storage.getPaymentRequestsByJob(req.params.jobId);
       const rawQuoteItems = await storage.getQuoteItemsByJob(req.params.jobId);
       const allInvoices = await storage.getInvoicesByJob(req.params.jobId);
       const invoices = allInvoices.filter(inv => inv.showInPortal);
-      
+
       // Get change orders visible in portal
       const allChangeOrders = await storage.getChangeOrdersByJob(req.params.jobId);
       const changeOrders = await Promise.all(
@@ -3103,7 +3369,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           return { ...co, items };
         })
       );
-      
+
       // Apply markup to quote items for client view
       let markupPercent = 0;
       if (job.useDefaultMarkup) {
@@ -3113,7 +3379,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       } else if (job.customMarkupPercent) {
         markupPercent = parseFloat(job.customMarkupPercent);
       }
-      
+
       // Apply markup to items for client view
       const quoteItems = rawQuoteItems.map(item => {
         if (markupPercent > 0) {
@@ -3128,7 +3394,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         }
         return item;
       });
-      
+
       // Calculate new quoted value with markup
       const subtotal = quoteItems.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0);
       let discountAmount = 0;
@@ -3142,14 +3408,14 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       const afterDiscount = subtotal - discountAmount;
       const taxAmount = job.taxEnabled ? afterDiscount * (parseFloat(job.taxRate || "0") / 100) : 0;
       const clientTotal = (afterDiscount + taxAmount).toFixed(2);
-      
+
       // Calculate total including change orders
       const changeOrdersTotal = changeOrders.reduce((sum, co) => sum + parseFloat(co.grandTotal), 0);
-      
-      res.json({ 
-        ...job, 
-        paymentRequests, 
-        quoteItems, 
+
+      res.json({
+        ...job,
+        paymentRequests,
+        quoteItems,
         invoices,
         changeOrders,
         quotedValue: clientTotal, // Override with marked-up total
@@ -3169,46 +3435,46 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.contactId !== access.contactId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const { response } = req.body;
       if (!['accepted', 'declined'].includes(response)) {
         return res.status(400).json({ message: "Invalid response. Must be 'accepted' or 'declined'" });
       }
-      
+
       // Prevent re-submission if already responded
       if (job.quoteResponse) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: "Quote has already been responded to",
-          currentResponse: job.quoteResponse 
+          currentResponse: job.quoteResponse
         });
       }
-      
+
       // Only allow response when quote has been sent
       if (job.status !== 'quote_sent') {
         return res.status(400).json({ message: "Quote is not available for response" });
       }
-      
+
       // Update job with quote response and optionally update status
       const updateData: any = {
         quoteResponse: response,
         quoteRespondedAt: new Date(),
       };
-      
+
       // If accepted, move to "Quote Accepted" stage
       if (response === 'accepted') {
         updateData.status = 'quote_accepted';
       }
-      
+
       const updatedJob = await storage.updateJob(req.params.jobId, updateData);
       res.json(updatedJob);
     } catch (error) {
@@ -3224,48 +3490,48 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const changeOrder = await storage.getChangeOrder(req.params.changeOrderId);
       if (!changeOrder) {
         return res.status(404).json({ message: "Change order not found" });
       }
-      
+
       // Verify the change order belongs to a job owned by this client
       const job = await storage.getJob(changeOrder.jobId);
       if (!job || job.contactId !== access.contactId) {
         return res.status(404).json({ message: "Change order not found" });
       }
-      
+
       // Only allow response to change orders visible in portal
       if (!changeOrder.showInPortal) {
         return res.status(400).json({ message: "Change order is not available for response" });
       }
-      
+
       const { response } = req.body;
       if (!['accepted', 'declined'].includes(response)) {
         return res.status(400).json({ message: "Invalid response. Must be 'accepted' or 'declined'" });
       }
-      
+
       // Prevent re-submission if already responded
       if (changeOrder.clientResponse) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: "Change order has already been responded to",
-          currentResponse: changeOrder.clientResponse 
+          currentResponse: changeOrder.clientResponse
         });
       }
-      
+
       // Update change order with client response
       const updatedChangeOrder = await storage.updateChangeOrder(req.params.changeOrderId, {
         clientResponse: response,
         clientRespondedAt: new Date(),
         status: response === 'accepted' ? 'accepted' : 'declined',
       });
-      
+
       res.json(updatedChangeOrder);
     } catch (error) {
       console.error("Portal change order response error:", error);
@@ -3280,12 +3546,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Not authenticated" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
         return res.status(401).json({ message: "Not authenticated" });
       }
-      
+
       const contact = await storage.getContact(access.contactId);
       res.json({ authenticated: true, contact });
     } catch (error) {
@@ -3300,12 +3566,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const contact = await storage.getContact(access.contactId);
       res.json(contact);
     } catch (error) {
@@ -3320,12 +3586,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const { name, email, phone, address, postcode } = req.body;
       const contact = await storage.updateContact(access.contactId, {
         name, email, phone, address, postcode
@@ -3344,19 +3610,19 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Get activities linked to this contact
       const allActivities = await storage.getDailyActivities();
       const contactActivities = allActivities
         .filter(a => a.contactId === access.contactId)
         .sort((a, b) => new Date(b.activityDate).getTime() - new Date(a.activityDate).getTime())
         .slice(0, 10); // Last 10 activities
-      
+
       // Format for client display (hide internal notes)
       const clientActivities = contactActivities.map(a => ({
         id: a.id,
@@ -3366,7 +3632,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         outcome: a.outcome,
         hasFollowUp: !!a.followUpDate,
       }));
-      
+
       res.json(clientActivities);
     } catch (error) {
       console.error("Portal activities error:", error);
@@ -3381,20 +3647,20 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const { password } = req.body;
       if (!password || password.length < 6) {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
       }
-      
+
       const passwordHash = await bcrypt.hash(password, 10);
       await storage.updateClientPortalAccessPassword(access.id, passwordHash);
-      
+
       res.json({ message: "Password set successfully" });
     } catch (error) {
       console.error("Client portal set password error:", error);
@@ -3407,11 +3673,11 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const { email, password } = req.body;
       console.log("[portal-login] Attempt for email:", email);
-      
+
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password required" });
       }
-      
+
       // Find contact by email
       const contacts = await storage.getContacts();
       const contact = contacts.find(c => c.email?.toLowerCase() === email.toLowerCase());
@@ -3420,7 +3686,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         return res.status(401).json({ message: "Invalid email or password" });
       }
       console.log("[portal-login] Found contact:", contact.id, contact.name);
-      
+
       // Get portal access for this contact
       const access = await storage.getClientPortalAccess(contact.id);
       if (!access) {
@@ -3431,25 +3697,25 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         console.log("[portal-login] Portal access inactive for contact:", contact.id);
         return res.status(401).json({ message: "Portal access is inactive. Please contact admin." });
       }
-      
+
       // Check if password is set
       if (!access.passwordHash) {
         console.log("[portal-login] No password set for contact:", contact.id);
         return res.status(400).json({ message: "No password set. Please use your access link or ask admin to reset password." });
       }
-      
+
       // Verify password
       const isValid = await bcrypt.compare(password, access.passwordHash);
       console.log("[portal-login] Password check result:", isValid);
       if (!isValid) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
-      
+
       // Update last login
       await storage.updateClientPortalAccessLastLogin(access.id);
       console.log("[portal-login] Login successful for:", email);
-      
-      res.json({ 
+
+      res.json({
         token: access.accessToken,
         contact: {
           id: contact.id,
@@ -3470,12 +3736,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       res.json({ hasPassword: !!access.passwordHash });
     } catch (error) {
       console.error("Client portal has-password check error:", error);
@@ -3524,25 +3790,25 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Get all jobs for this contact
       const jobs = await storage.getJobsByContact(access.contactId);
-      
+
       // Get surveys that need client response (pending_client status)
       const surveyPromises = jobs.map((job: any) => storage.getJobSurveysByJob(job.id));
       const surveysArrays = await Promise.all(surveyPromises);
       const allSurveys = surveysArrays.flat();
-      
-      const pendingSurveyCount = allSurveys.filter((s: any) => 
-        s.status === "accepted" && 
+
+      const pendingSurveyCount = allSurveys.filter((s: any) =>
+        s.status === "accepted" &&
         s.bookingStatus === "pending_client"
       ).length;
-      
+
       res.json({
         pendingSurveys: pendingSurveyCount,
       });
@@ -3559,35 +3825,35 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Get all jobs for this contact
       const jobs = await storage.getJobsByContact(access.contactId);
       console.log(`[portal/surveys] Contact ${access.contactId} has ${jobs.length} jobs`);
-      
+
       // Get surveys for those jobs that need client response
       const surveyPromises = jobs.map((job: any) => storage.getJobSurveysByJob(job.id));
       const surveysArrays = await Promise.all(surveyPromises);
       const allSurveys = surveysArrays.flat();
       console.log(`[portal/surveys] Found ${allSurveys.length} total surveys across all jobs`);
-      
+
       // Log each survey's status for debugging
       allSurveys.forEach((s: any) => {
         console.log(`[portal/surveys] Survey ${s.id}: status="${s.status}", bookingStatus="${s.bookingStatus}", proposedDate="${s.proposedDate}"`);
       });
-      
+
       // Filter to surveys that are relevant to the client (pending response, accepted, or confirmed)
-      const relevantSurveys = allSurveys.filter((s: any) => 
-        s.status === "accepted" && 
-        s.bookingStatus && 
+      const relevantSurveys = allSurveys.filter((s: any) =>
+        s.status === "accepted" &&
+        s.bookingStatus &&
         ["pending_client", "client_accepted", "client_counter", "confirmed"].includes(s.bookingStatus)
       );
       console.log(`[portal/surveys] ${relevantSurveys.length} surveys match filter (status=accepted AND bookingStatus in [pending_client, client_accepted, client_counter, confirmed])`);
-      
+
       // Add job and partner info to surveys
       const surveysWithDetails = await Promise.all(relevantSurveys.map(async (survey: any) => {
         const job = jobs.find((j: any) => j.id === survey.jobId);
@@ -3598,7 +3864,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           partner: partner ? { companyName: partner.businessName, tradeCategory: partner.tradeCategory } : null,
         };
       }));
-      
+
       res.json(surveysWithDetails);
     } catch (error) {
       console.error("Get client surveys error:", error);
@@ -3613,54 +3879,54 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const survey = await storage.getJobSurvey(req.params.id);
       if (!survey) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       // Verify this survey belongs to a job owned by this contact
       const job = await storage.getJob(survey.jobId);
       if (!job || job.contactId !== access.contactId) {
         return res.status(403).json({ message: "Access denied" });
       }
-      
+
       if (survey.bookingStatus !== "pending_client") {
         return res.status(400).json({ message: "Survey is not awaiting your response" });
       }
-      
+
       const { response, counterDate, counterTime, notes } = req.body;
-      
+
       if (!response || !["accept", "decline", "counter"].includes(response)) {
         return res.status(400).json({ message: "Invalid response type" });
       }
-      
+
       let updateData: any = {
         clientRespondedAt: new Date(),
         clientNotes: notes || null,
       };
-      
+
       if (response === "accept") {
         updateData.bookingStatus = "client_accepted";
-        
+
         // Create a calendar event for the partner to see in their diary
         if (survey.proposedDate && survey.partnerId) {
           // Check if a calendar event already exists for this job and partner on this date
           const existingEvents = await storage.getCalendarEventsByJob(job.id);
-          const eventExists = existingEvents.some((e: any) => 
-            e.partnerId === survey.partnerId && 
+          const eventExists = existingEvents.some((e: any) =>
+            e.partnerId === survey.partnerId &&
             e.eventType === "home_visit_partner" &&
             new Date(e.startDate).toDateString() === new Date(survey.proposedDate!).toDateString()
           );
-          
+
           if (!eventExists) {
             const contact = await storage.getContact(job.contactId);
-            
+
             // Parse time to create proper start/end dates
             const proposedTime = survey.proposedTime || "09:00";
             const [hours, minutes] = proposedTime.split(":").map(Number);
@@ -3668,7 +3934,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
             startDate.setHours(hours || 9, minutes || 0, 0, 0);
             const endDate = new Date(startDate);
             endDate.setHours(endDate.getHours() + 1); // 1 hour duration
-            
+
             await storage.createCalendarEvent({
               title: `Survey: ${job.jobNumber} - ${job.serviceType || 'Site Survey'}`,
               startDate,
@@ -3695,30 +3961,30 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         updateData.clientProposedDate = new Date(counterDate);
         updateData.clientProposedTime = counterTime || null;
       }
-      
+
       const updated = await storage.updateJobSurvey(req.params.id, updateData);
-      
+
       // Send email notification to partner (non-blocking)
       (async () => {
         try {
           const { sendGenericEmail, isEmailConfigured } = await import("./email");
           if (!isEmailConfigured() || !survey.partnerId) return;
-          
+
           const partner = await storage.getTradePartner(survey.partnerId);
           if (!partner?.email) return;
-          
+
           // Check if partner has portal access
           const portalAccess = await storage.getPartnerPortalAccess(survey.partnerId);
           if (!portalAccess?.isActive) return;
-          
+
           const contact = await storage.getContact(job.contactId);
-          const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+          const baseUrl = process.env.REPLIT_DEV_DOMAIN
             ? `https://${process.env.REPLIT_DEV_DOMAIN}`
             : process.env.REPLIT_DEPLOYMENT_URL || "http://localhost:5000";
-          
+
           let subject = "";
           let message = "";
-          
+
           if (response === "accept") {
             subject = `Survey Date Accepted - ${job.jobNumber}`;
             message = `Good news! The client${contact ? ` (${contact.name})` : ''} has accepted your proposed survey date for job ${job.jobNumber}.\n\n` +
@@ -3742,14 +4008,14 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
               `Please propose a new date in your partner portal.\n\n` +
               `View in portal: ${baseUrl}/partner-portal/surveys`;
           }
-          
+
           await sendGenericEmail(partner.email, subject, message);
           console.log(`[Survey] Partner notification sent to ${partner.email} for survey ${survey.id} (${response})`);
         } catch (emailError) {
           console.error("[Survey] Failed to send partner notification:", emailError);
         }
       })();
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Client respond to survey error:", error);
@@ -3770,6 +4036,15 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         return res.status(400).json({ message: "Partner has no email address" });
       }
 
+      // If partner is an applicant, activate them when sending invite
+      if (partner.status === 'applicant') {
+        await storage.updateTradePartner(req.params.id, {
+          status: 'active',
+          isActive: true
+        });
+        console.log(`[partner-onboarding] Activated applicant partner: ${partner.businessName}`);
+      }
+
       const inviteToken = crypto.randomUUID();
       const invite = await storage.createPartnerInvite({
         partnerId: req.params.id,
@@ -3780,7 +4055,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
 
       const inviteLink = `/partner-portal/invite/${inviteToken}`;
       const fullInviteUrl = `${req.protocol}://${req.get('host')}${inviteLink}`;
-      
+
       // Send email with invite link
       const { sendPartnerPortalAccess } = await import('./email');
       const emailResult = await sendPartnerPortalAccess(
@@ -3789,23 +4064,23 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         fullInviteUrl,
         inviteToken
       );
-      
+
       if (emailResult.success) {
         console.log(`[email] Partner invite sent to ${partner.email}`);
-        res.status(201).json({ 
-          invite, 
+        res.status(201).json({
+          invite,
           inviteLink,
           emailSent: true,
-          message: "Invite sent successfully" 
+          message: "Invite sent successfully"
         });
       } else {
         console.warn(`[email] Failed to send partner invite: ${emailResult.error}`);
-        res.status(201).json({ 
-          invite, 
+        res.status(201).json({
+          invite,
           inviteLink,
           emailSent: false,
           emailError: emailResult.error,
-          message: "Invite created but email could not be sent" 
+          message: "Invite created but email could not be sent"
         });
       }
     } catch (error) {
@@ -3820,7 +4095,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       const { partnerId } = req.params;
       const access = await storage.getPartnerPortalAccess(partnerId);
       const invite = await storage.getPartnerInviteByPartner(partnerId);
-      
+
       // Priority 1: Active portal access (partner has accepted invite)
       // Note: We use a separate portalToken for admin to open portal directly
       // This is the accessToken that allows authentication
@@ -3833,7 +4108,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           portalToken: access.accessToken, // This is safe - admin needs to open portal for partner
           createdAt: access.createdAt,
         });
-      // Priority 2: Pending invite (not yet accepted)
+        // Priority 2: Pending invite (not yet accepted)
       } else if (invite) {
         res.json({
           id: null,
@@ -3845,7 +4120,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           inviteSentAt: invite.createdAt,
           inviteExpiresAt: invite.expiresAt,
         });
-      // Priority 3: No active access or pending invite
+        // Priority 3: No active access or pending invite
       } else {
         res.json(null);
       }
@@ -3870,7 +4145,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (invite.acceptedAt) {
         return res.status(410).json({ message: "Invite already used" });
       }
-      
+
       const partner = await storage.getTradePartner(invite.partnerId);
       res.json({ invite, partner });
     } catch (error) {
@@ -3886,10 +4161,10 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!invite || invite.expiresAt < new Date() || invite.acceptedAt) {
         return res.status(400).json({ message: "Invalid or expired invite" });
       }
-      
+
       // Mark invite as accepted
       await storage.acceptPartnerInvite(req.params.token);
-      
+
       // Create portal access
       const accessToken = crypto.randomUUID();
       const access = await storage.createPartnerPortalAccess({
@@ -3898,7 +4173,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         tokenExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
         isActive: true,
       });
-      
+
       res.json({ access, token: accessToken });
     } catch (error) {
       console.error("Accept partner invite error:", error);
@@ -3917,7 +4192,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   function getLimitedContact(contact: any, isAccepted: boolean) {
     if (!contact) return null;
     if (isAccepted) return contact; // Full access after acceptance
-    
+
     // Before acceptance: only name and postcode area
     return {
       id: contact.id,
@@ -3938,17 +4213,17 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Update last login
       await storage.updatePartnerPortalAccessLastLogin(access.partnerId);
-      
+
       const jobs = await storage.getJobsByPartner(access.partnerId);
-      
+
       // Include contact info for each job - limited until accepted
       const jobsWithContacts = await Promise.all(
         jobs.map(async (job) => {
@@ -3957,7 +4232,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           return { ...job, contact: getLimitedContact(contact, isAccepted) };
         })
       );
-      
+
       res.json(jobsWithContacts);
     } catch (error) {
       console.error("Partner portal jobs error:", error);
@@ -3972,21 +4247,21 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const contact = await storage.getContact(job.contactId);
       const tasks = (await storage.getTasks()).filter(t => t.jobId === job.id);
       const isAccepted = job.partnerStatus === "accepted";
-      
+
       // Return limited contact info before acceptance
       res.json({ ...job, contact: getLimitedContact(contact, isAccepted), tasks });
     } catch (error) {
@@ -4002,24 +4277,24 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       // Update job with acceptance
       await storage.updateJob(job.id, {
         partnerStatus: "accepted",
         partnerRespondedAt: new Date(),
         partnerDeclineReason: null,
       });
-      
+
       res.json({ message: "Job accepted successfully" });
     } catch (error) {
       console.error("Partner portal accept job error:", error);
@@ -4034,21 +4309,21 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const { preferredDate, preferredTime, notes } = req.body;
       console.log(`[partner/request-survey] Partner ${access.partnerId} requesting survey for job ${job.id}`);
       console.log(`[partner/request-survey] preferredDate=${preferredDate}, preferredTime=${preferredTime}`);
-      
+
       // Create a survey request initiated by the partner
       // If partner provides dates, set bookingStatus to pending_client so client can respond
       const survey = await storage.createJobSurvey({
@@ -4061,15 +4336,15 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         partnerNotes: notes || null,
         adminNotes: `Partner-initiated survey request${notes ? `: ${notes}` : ''}`,
       });
-      
+
       console.log(`[partner/request-survey] Survey created: id=${survey.id}, status=${survey.status}, bookingStatus=${survey.bookingStatus}`);
-      
+
       // Update job status to survey_booked if not already past that stage
       const stageIndex = ["new_enquiry", "contacted"].indexOf(job.status);
       if (stageIndex >= 0) {
         await storage.updateJob(job.id, { status: "survey_booked" });
       }
-      
+
       res.json({ message: "Survey requested successfully", survey });
     } catch (error) {
       console.error("Partner portal request survey error:", error);
@@ -4078,32 +4353,80 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   });
 
   // Partner declines a job assignment
+  app.post("/api/partner-portal/jobs/:jobId/complete", async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      const { completionNotes } = req.body;
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const token = authHeader.substring(7);
+      const access = await storage.getPartnerPortalAccessByToken(token);
+
+      if (!access || !access.isActive) {
+        return res.status(401).json({ message: "Invalid or expired token" });
+      }
+
+      // Verify the job belongs to this partner
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (job.partnerId !== access.partnerId) {
+        return res.status(403).json({ message: "Not authorized for this job" });
+      }
+
+      // Update partner status to completed
+      await storage.updateJob(jobId, {
+        partnerStatus: "completed",
+        // Note: We don't automatically complete the main job status, that's for admin to review
+      });
+
+      // Add a system note about completion
+      const partner = await storage.getTradePartner(access.partnerId);
+      await storage.createJobNote({
+        jobId,
+        content: `JOB COMPLETED BY PARTNER: ${partner?.businessName || "Partner"} has marked this job as complete.${completionNotes ? `\n\nNotes: ${completionNotes}` : ""}`,
+        visibility: "internal",
+        authorName: partner?.paymentTerms ? `${partner.businessName} (Partner Portal)` : "Partner Portal",
+      });
+
+      res.json({ message: "Job marked as completed" });
+    } catch (error) {
+      console.error("Error completing job:", error);
+      res.status(500).json({ message: "Failed to complete job" });
+    }
+  });
+
   app.post("/api/partner-portal/jobs/:jobId/decline", async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const { reason } = req.body;
-      
+
       // Update job with decline
       await storage.updateJob(job.id, {
         partnerStatus: "declined",
         partnerRespondedAt: new Date(),
         partnerDeclineReason: reason || null,
       });
-      
+
       res.json({ message: "Job declined" });
     } catch (error) {
       console.error("Partner portal decline job error:", error);
@@ -4118,17 +4441,17 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       // Get active schedule proposal for this job (partner-relevant ones)
       const proposal = await storage.getActiveScheduleProposal(job.id);
       res.json(proposal);
@@ -4145,29 +4468,29 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const { proposedStartDate, proposedEndDate, notes } = req.body;
-      
+
       if (!proposedStartDate) {
         return res.status(400).json({ message: "Start date is required" });
       }
-      
+
       // Archive any existing proposal
       const existingProposal = await storage.getActiveScheduleProposal(job.id);
       if (existingProposal) {
         await storage.updateScheduleProposal(existingProposal.id, { isArchived: true });
       }
-      
+
       // Create new schedule proposal from partner
       const proposal = await storage.createScheduleProposal({
         jobId: job.id,
@@ -4178,7 +4501,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         proposedByPartnerId: access.partnerId,
         adminNotes: notes || null,
       });
-      
+
       res.json({ proposal });
     } catch (error) {
       console.error("Partner portal request start date error:", error);
@@ -4193,17 +4516,17 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const proposal = await storage.getActiveScheduleProposal(job.id);
       // Partner can respond when:
       // 1. Status is pending_partner (admin proposed to partner)
@@ -4215,13 +4538,13 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!proposal || !canPartnerRespond) {
         return res.status(400).json({ message: "No pending proposal to respond to" });
       }
-      
+
       const { response, counterDate, reason } = req.body;
-      
+
       if (response === "accepted") {
         // Partner accepts the proposed date - create calendar event
         const eventDate = proposal.proposedStartDate;
-        
+
         const calendarEvent = await storage.createCalendarEvent({
           title: `Project Start: ${job.jobNumber}`,
           jobId: job.id,
@@ -4284,12 +4607,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Not authenticated" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
         return res.status(401).json({ message: "Not authenticated" });
       }
-      
+
       const partner = await storage.getTradePartner(access.partnerId);
       res.json({ authenticated: true, partner });
     } catch (error) {
@@ -4305,12 +4628,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const partner = await storage.getTradePartner(access.partnerId);
       res.json(partner);
     } catch (error) {
@@ -4326,27 +4649,27 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Get surveys that need partner attention (client responded)
       const surveys = await storage.getJobSurveysByPartner(access.partnerId);
-      const surveysNeedingAction = surveys.filter(s => 
+      const surveysNeedingAction = surveys.filter(s =>
         s.status === "requested" || // New survey requests
         s.bookingStatus === "client_accepted" || // Client accepted, needs confirmation
         s.bookingStatus === "client_counter" || // Client proposed alternative
         s.bookingStatus === "client_declined" // Client declined, needs new proposal
       ).length;
-      
+
       // Get jobs pending acceptance
       const jobs = await storage.getJobsByPartner(access.partnerId);
-      const jobsNeedingAction = jobs.filter(j => 
+      const jobsNeedingAction = jobs.filter(j =>
         j.partnerStatus === "offered" // Job offered but not yet accepted
       ).length;
-      
+
       // Get unread messages
       const messages = await storage.getActivePortalMessagesForPartner(access.partnerId);
       let unreadMessages = 0;
@@ -4354,7 +4677,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         const isRead = await storage.isPortalMessageRead(msg.id);
         if (!isRead) unreadMessages++;
       }
-      
+
       // Get emergency callouts needing response
       const responses = await storage.getEmergencyCalloutResponsesByPartner(access.partnerId);
       let calloutsNeedingAction = 0;
@@ -4363,7 +4686,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           calloutsNeedingAction++;
         }
       }
-      
+
       res.json({
         surveys: surveysNeedingAction,
         jobs: jobsNeedingAction,
@@ -4386,12 +4709,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const surveys = await storage.getJobSurveysByPartner(access.partnerId);
       const surveysWithDetails = await Promise.all(
         surveys.map(async (survey) => {
@@ -4400,7 +4723,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           return { ...survey, job, contact };
         })
       );
-      
+
       res.json(surveysWithDetails);
     } catch (error) {
       console.error("Partner portal get surveys error:", error);
@@ -4415,20 +4738,20 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const survey = await storage.getJobSurvey(req.params.id);
       if (!survey || survey.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       const job = await storage.getJob(survey.jobId);
       const contact = job?.contactId ? await storage.getContact(job.contactId) : null;
-      
+
       res.json({ ...survey, job, contact });
     } catch (error) {
       console.error("Partner portal get survey error:", error);
@@ -4443,27 +4766,27 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const survey = await storage.getJobSurvey(req.params.id);
       if (!survey || survey.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       if (survey.status !== "requested") {
         return res.status(400).json({ message: "Survey cannot be accepted in current status" });
       }
-      
+
       const updated = await storage.updateJobSurvey(req.params.id, {
         status: "accepted",
         acceptedAt: new Date(),
         partnerNotes: req.body.notes,
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Partner portal accept survey error:", error);
@@ -4478,27 +4801,27 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const survey = await storage.getJobSurvey(req.params.id);
       if (!survey || survey.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       if (survey.status !== "requested") {
         return res.status(400).json({ message: "Survey cannot be declined in current status" });
       }
-      
+
       const updated = await storage.updateJobSurvey(req.params.id, {
         status: "declined",
         declinedAt: new Date(),
         declineReason: req.body.reason,
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Partner portal decline survey error:", error);
@@ -4513,27 +4836,27 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const survey = await storage.getJobSurvey(req.params.id);
       if (!survey || survey.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       if (survey.status !== "accepted" && survey.bookingStatus !== "client_counter") {
         return res.status(400).json({ message: "Survey must be accepted before proposing a date" });
       }
-      
+
       const { proposedDate, proposedTime, notes } = req.body;
-      
+
       if (!proposedDate) {
         return res.status(400).json({ message: "Proposed date is required" });
       }
-      
+
       const updated = await storage.updateJobSurvey(req.params.id, {
         proposedDate: new Date(proposedDate),
         proposedTime,
@@ -4545,28 +4868,28 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         clientNotes: null,
         clientRespondedAt: null,
       });
-      
+
       // Send email notification to client (non-blocking)
       (async () => {
         try {
           const { sendSurveyProposalNotification, isEmailConfigured } = await import("./email");
           if (!isEmailConfigured()) return;
-          
+
           const job = await storage.getJob(survey.jobId);
           if (!job) return;
-          
+
           const contact = await storage.getContact(job.contactId);
           if (!contact?.email) return;
-          
+
           // Check if client has portal access
           const portalAccess = await storage.getClientPortalAccess(contact.id);
           if (!portalAccess?.isActive || !portalAccess.accessToken) return;
-          
+
           const partner = await storage.getTradePartner(survey.partnerId!);
-          const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+          const baseUrl = process.env.REPLIT_DEV_DOMAIN
             ? `https://${process.env.REPLIT_DEV_DOMAIN}`
             : process.env.REPLIT_DEPLOYMENT_URL || "http://localhost:5000";
-          
+
           await sendSurveyProposalNotification(
             contact.email,
             contact.name,
@@ -4582,7 +4905,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           console.error("[Survey] Failed to send email notification:", emailError);
         }
       })();
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Partner portal propose survey date error:", error);
@@ -4597,28 +4920,28 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const survey = await storage.getJobSurvey(req.params.id);
       if (!survey || survey.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       if (survey.bookingStatus !== "client_accepted" && survey.bookingStatus !== "client_counter") {
         return res.status(400).json({ message: "Cannot confirm at this stage" });
       }
-      
-      const finalDate = survey.bookingStatus === "client_counter" && survey.clientProposedDate 
-        ? survey.clientProposedDate 
+
+      const finalDate = survey.bookingStatus === "client_counter" && survey.clientProposedDate
+        ? survey.clientProposedDate
         : survey.proposedDate;
       const finalTime = survey.bookingStatus === "client_counter" && survey.clientProposedTime
         ? survey.clientProposedTime
         : survey.proposedTime;
-      
+
       const updated = await storage.updateJobSurvey(req.params.id, {
         status: "scheduled",
         scheduledDate: finalDate,
@@ -4626,14 +4949,14 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         scheduledAt: new Date(),
         bookingStatus: "confirmed",
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Partner portal confirm survey error:", error);
       res.status(500).json({ message: "Failed to confirm survey" });
     }
   });
-  
+
   // Legacy schedule route (for direct scheduling without client approval - backwards compatibility)
   app.post("/api/partner-portal/surveys/:id/schedule", async (req, res) => {
     try {
@@ -4641,27 +4964,27 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const survey = await storage.getJobSurvey(req.params.id);
       if (!survey || survey.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       if (survey.status !== "accepted" && survey.status !== "scheduled") {
         return res.status(400).json({ message: "Survey must be accepted before scheduling" });
       }
-      
+
       const { scheduledDate, scheduledTime, notes } = req.body;
-      
+
       if (!scheduledDate) {
         return res.status(400).json({ message: "Scheduled date is required" });
       }
-      
+
       const updated = await storage.updateJobSurvey(req.params.id, {
         status: "scheduled",
         scheduledDate: new Date(scheduledDate),
@@ -4669,7 +4992,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         scheduledAt: new Date(),
         partnerNotes: notes || survey.partnerNotes,
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Partner portal schedule survey error:", error);
@@ -4684,30 +5007,30 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const survey = await storage.getJobSurvey(req.params.id);
       if (!survey || survey.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       if (survey.status !== "scheduled" && survey.status !== "accepted") {
         return res.status(400).json({ message: "Survey must be scheduled or accepted before completing" });
       }
-      
+
       const { surveyDetails, notes } = req.body;
-      
+
       const updated = await storage.updateJobSurvey(req.params.id, {
         status: "completed",
         completedAt: new Date(),
         surveyDetails: surveyDetails || "",
         partnerNotes: notes || survey.partnerNotes,
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Partner portal complete survey error:", error);
@@ -4724,15 +5047,15 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Get all responses for this partner
       const responses = await storage.getEmergencyCalloutResponsesByPartner(access.partnerId);
-      
+
       // Get callout and job details for each response
       const calloutsWithDetails = await Promise.all(
         responses.map(async (response) => {
@@ -4740,13 +5063,13 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           if (!callout || !callout.jobId) return null;
           const job = await storage.getJob(callout.jobId);
           const contact = job ? await storage.getContact(job.contactId) : null;
-          return { 
-            ...response, 
+          return {
+            ...response,
             callout: { ...callout, job, contact }
           };
         })
       );
-      
+
       res.json(calloutsWithDetails.filter(c => c !== null));
     } catch (error) {
       console.error("Partner portal get emergency callouts error:", error);
@@ -4761,22 +5084,22 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const response = await storage.getEmergencyCalloutResponse(req.params.id);
       if (!response || response.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Callout not found" });
       }
-      
+
       const updated = await storage.updateEmergencyCalloutResponse(req.params.id, {
         status: "acknowledged",
         acknowledgedAt: new Date(),
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Partner portal acknowledge callout error:", error);
@@ -4791,30 +5114,30 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const response = await storage.getEmergencyCalloutResponse(req.params.id);
       if (!response || response.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Callout not found" });
       }
-      
+
       const { proposedArrivalMinutes, responseNotes } = req.body;
-      
+
       if (!proposedArrivalMinutes) {
         return res.status(400).json({ message: "Proposed arrival time is required" });
       }
-      
+
       const updated = await storage.updateEmergencyCalloutResponse(req.params.id, {
         status: "responded",
         respondedAt: new Date(),
         proposedArrivalMinutes: parseInt(proposedArrivalMinutes),
         responseNotes,
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Partner portal respond to callout error:", error);
@@ -4829,25 +5152,25 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const response = await storage.getEmergencyCalloutResponse(req.params.id);
       if (!response || response.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Callout not found" });
       }
-      
+
       const { declineReason } = req.body;
-      
+
       const updated = await storage.updateEmergencyCalloutResponse(req.params.id, {
         status: "declined",
         declinedAt: new Date(),
         declineReason,
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Partner portal decline callout error:", error);
@@ -4863,37 +5186,37 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const callout = await storage.getEmergencyCallout(req.params.calloutId);
       if (!callout) {
         return res.status(404).json({ message: "Emergency callout not found" });
       }
-      
+
       // Verify this partner is assigned to this callout
       if (callout.assignedPartnerId !== access.partnerId) {
         return res.status(403).json({ message: "You are not assigned to this emergency callout" });
       }
-      
+
       // Verify callout is in assigned or in_progress status
       if (callout.status !== "assigned" && callout.status !== "in_progress") {
         return res.status(400).json({ message: "Callout cannot be completed in its current status" });
       }
-      
+
       const { totalCollected, completionNotes } = req.body;
-      
+
       if (!totalCollected || isNaN(parseFloat(totalCollected)) || parseFloat(totalCollected) <= 0) {
         return res.status(400).json({ message: "Total amount collected from client is required" });
       }
-      
+
       const totalAmount = parseFloat(totalCollected);
       const feePercent = parseFloat(String(callout.calloutFeePercent || "20.00"));
       const feeAmount = (totalAmount * feePercent) / 100;
-      
+
       // Update the callout - fee is now outstanding (not yet paid to CCC)
       // Finance transaction will be created when admin marks fee as paid
       const updated = await storage.updateEmergencyCallout(req.params.calloutId, {
@@ -4906,9 +5229,9 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         calloutFeeAmount: feeAmount.toFixed(2),
         feePaid: false, // Partner still owes this fee to CCC
       });
-      
-      res.json({ 
-        callout: updated, 
+
+      res.json({
+        callout: updated,
         feeAmount: feeAmount.toFixed(2),
         feePercent,
         message: `Emergency completed. You owe CCC £${feeAmount.toFixed(2)} (${feePercent}% callout fee surcharge).`
@@ -4928,12 +5251,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const quotes = await storage.getPartnerQuotesByPartner(access.partnerId);
       const quotesWithDetails = await Promise.all(
         quotes.map(async (quote) => {
@@ -4942,7 +5265,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           return { ...quote, items, job };
         })
       );
-      
+
       res.json(quotesWithDetails);
     } catch (error) {
       console.error("Partner portal get quotes error:", error);
@@ -4957,21 +5280,21 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const quote = await storage.getPartnerQuote(req.params.id);
       if (!quote || quote.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Quote not found" });
       }
-      
+
       const items = await storage.getPartnerQuoteItems(quote.id);
       const job = await storage.getJob(quote.jobId);
       const survey = quote.surveyId ? await storage.getJobSurvey(quote.surveyId) : null;
-      
+
       res.json({ ...quote, items, job, survey });
     } catch (error) {
       console.error("Partner portal get quote error:", error);
@@ -4986,27 +5309,27 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const { jobId, surveyId, items, notes, taxEnabled, taxRate } = req.body;
-      
+
       if (!jobId) {
         return res.status(400).json({ message: "Job ID is required" });
       }
-      
+
       // Calculate totals
       let subtotal = 0;
       if (items && items.length > 0) {
         subtotal = items.reduce((sum: number, item: any) => sum + (parseFloat(item.quantity) * parseFloat(item.unitPrice)), 0);
       }
-      
+
       const taxAmount = taxEnabled ? subtotal * (parseFloat(taxRate || 20) / 100) : 0;
       const total = subtotal + taxAmount;
-      
+
       const quote = await storage.createPartnerQuote({
         jobId,
         partnerId: access.partnerId,
@@ -5019,7 +5342,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         total: total.toFixed(2),
         notes,
       });
-      
+
       // Create line items
       if (items && items.length > 0) {
         for (let i = 0; i < items.length; i++) {
@@ -5035,7 +5358,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           });
         }
       }
-      
+
       const createdItems = await storage.getPartnerQuoteItems(quote.id);
       res.status(201).json({ ...quote, items: createdItems });
     } catch (error) {
@@ -5051,32 +5374,32 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const quote = await storage.getPartnerQuote(req.params.id);
       if (!quote || quote.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Quote not found" });
       }
-      
+
       if (quote.status !== "draft") {
         return res.status(400).json({ message: "Only draft quotes can be edited" });
       }
-      
+
       const { items, notes, taxEnabled, taxRate } = req.body;
-      
+
       // Calculate totals
       let subtotal = 0;
       if (items && items.length > 0) {
         subtotal = items.reduce((sum: number, item: any) => sum + (parseFloat(item.quantity) * parseFloat(item.unitPrice)), 0);
       }
-      
+
       const taxAmount = taxEnabled ? subtotal * (parseFloat(taxRate || 20) / 100) : 0;
       const total = subtotal + taxAmount;
-      
+
       const updated = await storage.updatePartnerQuote(req.params.id, {
         subtotal: subtotal.toFixed(2),
         taxEnabled: taxEnabled || false,
@@ -5085,10 +5408,10 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         total: total.toFixed(2),
         notes,
       });
-      
+
       // Delete existing items and recreate
       await storage.deletePartnerQuoteItemsByQuote(req.params.id);
-      
+
       if (items && items.length > 0) {
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
@@ -5103,7 +5426,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           });
         }
       }
-      
+
       const updatedItems = await storage.getPartnerQuoteItems(quote.id);
       res.json({ ...updated, items: updatedItems });
     } catch (error) {
@@ -5119,36 +5442,36 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const quote = await storage.getPartnerQuote(req.params.id);
       if (!quote || quote.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Quote not found" });
       }
-      
+
       if (quote.status !== "draft") {
         return res.status(400).json({ message: "Only draft quotes can be submitted" });
       }
-      
+
       const items = await storage.getPartnerQuoteItems(quote.id);
       if (items.length === 0) {
         return res.status(400).json({ message: "Quote must have at least one line item" });
       }
-      
+
       // Mark partner quote as submitted
       const updated = await storage.updatePartnerQuote(req.params.id, {
         status: "submitted",
         submittedAt: new Date(),
       });
-      
+
       // Sync partner quote to main quote system so client portal can see it
       // First, clear any existing quote items for this job
       await storage.deleteQuoteItemsByJob(quote.jobId);
-      
+
       // Copy partner quote items to main quote items table
       let grandTotal = 0;
       for (let i = 0; i < items.length; i++) {
@@ -5163,13 +5486,13 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         });
         grandTotal += parseFloat(item.lineTotal);
       }
-      
+
       // Update job with quoted value and set status to quote_sent
       await storage.updateJob(quote.jobId, {
         quotedValue: grandTotal.toFixed(2),
         status: "quote_sent",
       });
-      
+
       // Send email notification to client if they have portal access
       try {
         const job = await storage.getJob(quote.jobId);
@@ -5180,9 +5503,9 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
             const { sendQuoteNotification } = await import('./email');
             const portalUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://client-compass--ccCarpentry.replit.app'}/client-portal`;
             await sendQuoteNotification(
-              contact.email, 
-              contact.name, 
-              job.jobNumber || 'Job', 
+              contact.email,
+              contact.name,
+              job.jobNumber || 'Job',
               `£${grandTotal.toFixed(2)}`,
               portalUrl,
               portalAccess.accessToken
@@ -5193,7 +5516,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         console.error("Failed to send quote notification email:", emailError);
         // Continue - email is non-blocking
       }
-      
+
       res.json({ ...updated, items });
     } catch (error) {
       console.error("Partner portal submit quote error:", error);
@@ -5208,21 +5531,21 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const quote = await storage.getPartnerQuote(req.params.id);
       if (!quote || quote.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Quote not found" });
       }
-      
+
       if (quote.status !== "draft") {
         return res.status(400).json({ message: "Only draft quotes can be deleted" });
       }
-      
+
       await storage.deletePartnerQuote(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -5238,7 +5561,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
@@ -5270,20 +5593,20 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const { password } = req.body;
       if (!password || password.length < 6) {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
       }
-      
+
       const passwordHash = await bcrypt.hash(password, 10);
       await storage.updatePartnerPortalAccessPassword(access.id, passwordHash);
-      
+
       res.json({ message: "Password set successfully" });
     } catch (error) {
       console.error("Partner portal set password error:", error);
@@ -5296,11 +5619,11 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const { email, password } = req.body;
       console.log("[partner-login] Attempt for email:", email);
-      
+
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password required" });
       }
-      
+
       // Find partner by email
       const partners = await storage.getTradePartners();
       const partner = partners.find(p => p.email?.toLowerCase() === email.toLowerCase());
@@ -5309,7 +5632,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         return res.status(401).json({ message: "Invalid email or password" });
       }
       console.log("[partner-login] Found partner:", partner.id, partner.businessName);
-      
+
       // Get portal access for this partner
       const access = await storage.getPartnerPortalAccess(partner.id);
       if (!access) {
@@ -5320,25 +5643,25 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         console.log("[partner-login] Portal access inactive for partner:", partner.id);
         return res.status(401).json({ message: "Portal access is inactive. Please contact admin." });
       }
-      
+
       // Check if password is set
       if (!access.passwordHash) {
         console.log("[partner-login] No password set for partner:", partner.id);
         return res.status(400).json({ message: "No password set. Please use your invite link or ask admin to reset password." });
       }
-      
+
       // Verify password
       const isValid = await bcrypt.compare(password, access.passwordHash);
       console.log("[partner-login] Password check result:", isValid);
       if (!isValid) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
-      
+
       // Update last login
       await storage.updatePartnerPortalAccessLastLogin(access.id);
       console.log("[partner-login] Login successful for:", email);
-      
-      res.json({ 
+
+      res.json({
         token: access.accessToken,
         partner: {
           id: partner.id,
@@ -5360,12 +5683,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       res.json({ hasPassword: !!access.passwordHash });
     } catch (error) {
       console.error("Partner portal has-password check error:", error);
@@ -5416,18 +5739,18 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const { partnerId, adminNotes, scheduledDate, scheduledTime } = req.body;
-      
+
       if (!partnerId) {
         return res.status(400).json({ message: "Partner ID is required" });
       }
-      
+
       const partner = await storage.getTradePartner(partnerId);
       if (!partner) {
         return res.status(404).json({ message: "Partner not found" });
       }
-      
+
       const survey = await storage.createJobSurvey({
         jobId: req.params.jobId,
         partnerId,
@@ -5436,7 +5759,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
         scheduledTime,
       });
-      
+
       res.status(201).json(survey);
     } catch (error) {
       console.error("Create survey error:", error);
@@ -5451,7 +5774,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!survey) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       const updated = await storage.updateJobSurvey(req.params.id, req.body);
       res.json(updated);
     } catch (error) {
@@ -5467,11 +5790,11 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!survey) {
         return res.status(404).json({ message: "Survey not found" });
       }
-      
+
       const updated = await storage.updateJobSurvey(req.params.id, {
         status: "cancelled",
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Cancel survey error:", error);
@@ -5532,15 +5855,15 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!quote) {
         return res.status(404).json({ message: "Quote not found" });
       }
-      
+
       const { adminNotes } = req.body;
-      
+
       const updated = await storage.updatePartnerQuote(req.params.id, {
         status: "accepted",
         respondedAt: new Date(),
         adminNotes,
       });
-      
+
       // Update job with partner charge and create client-facing quote
       if (quote.jobId) {
         // Get the job to find the assigned partner
@@ -5548,7 +5871,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         if (!job) {
           return res.status(404).json({ message: "Job not found" });
         }
-        
+
         // Get the trade partner to get their commission settings
         let cccMarginAmount = 0;
         if (job.partnerId) {
@@ -5556,7 +5879,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           if (partner) {
             const partnerTotal = parseFloat(quote.total) || 0;
             const commissionValue = parseFloat(partner.commissionValue || "10") || 10;
-            
+
             if (partner.commissionType === "percentage") {
               // Commission is a percentage of partner charge - this is CCC's profit
               cccMarginAmount = partnerTotal * (commissionValue / 100);
@@ -5566,13 +5889,13 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
             }
           }
         }
-        
+
         // Get the partner quote items
         const partnerQuoteItems = await storage.getPartnerQuoteItems(req.params.id);
-        
+
         // Delete existing job quote items to replace with partner quote items
         await storage.deleteQuoteItemsByJob(quote.jobId);
-        
+
         // Create job quote items from partner quote items (same prices - client pays what partner charges)
         for (const item of partnerQuoteItems) {
           await storage.createQuoteItem({
@@ -5583,11 +5906,11 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
             lineTotal: item.lineTotal,
           });
         }
-        
+
         // Client pays the partner's total charge
         // CCC Margin is calculated from the partner's commission percentage
         const partnerTotal = parseFloat(quote.total) || 0;
-        
+
         // Update job with partner charge, quote value (same as partner charge), CCC margin, tax settings
         await storage.updateJob(quote.jobId, {
           partnerCharge: quote.total,
@@ -5601,7 +5924,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           quoteRespondedAt: null,
         });
       }
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Accept partner quote error:", error);
@@ -5616,13 +5939,13 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!quote) {
         return res.status(404).json({ message: "Quote not found" });
       }
-      
+
       const updated = await storage.updatePartnerQuote(req.params.id, {
         status: "declined",
         respondedAt: new Date(),
         adminNotes: req.body.adminNotes,
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Decline partner quote error:", error);
@@ -5661,7 +5984,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!callout) {
         return res.status(404).json({ message: "Emergency callout not found" });
       }
-      
+
       // Get responses with partner info
       const responses = await storage.getEmergencyCalloutResponses(req.params.id);
       const responsesWithPartners = await Promise.all(
@@ -5670,10 +5993,10 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           return { ...response, partner };
         })
       );
-      
+
       // Get job info if exists
       const job = callout.jobId ? await storage.getJob(callout.jobId) : null;
-      
+
       res.json({ ...callout, responses: responsesWithPartners, job });
     } catch (error) {
       console.error("Get emergency callout error:", error);
@@ -5685,22 +6008,22 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.post("/api/emergency-callouts", async (req, res) => {
     try {
       const { jobId, incidentType, priority, description, partnerIds, clientName, clientPhone, clientAddress, clientPostcode } = req.body;
-      
+
       if (!incidentType || typeof incidentType !== "string" || incidentType.trim() === "") {
         return res.status(400).json({ message: "incidentType is required" });
       }
-      
+
       // Require at least one partner to broadcast to
       const partnerIdsArray = Array.isArray(partnerIds) ? partnerIds : [];
       if (partnerIdsArray.length === 0) {
         return res.status(400).json({ message: "At least one partner must be selected for the emergency broadcast" });
       }
-      
+
       // For standalone emergencies, require client details
       if (!jobId && (!clientName || !clientPhone || !clientAddress)) {
         return res.status(400).json({ message: "Client name, phone, and address are required for standalone emergencies" });
       }
-      
+
       // Create the emergency callout
       const callout = await storage.createEmergencyCallout({
         jobId: jobId || null,
@@ -5714,7 +6037,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         clientAddress: clientAddress || null,
         clientPostcode: clientPostcode || null,
       });
-      
+
       // Create response records for each partner (broadcasting to them)
       for (const partnerId of partnerIdsArray) {
         await storage.createEmergencyCalloutResponse({
@@ -5723,7 +6046,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           status: "pending",
         });
       }
-      
+
       res.status(201).json(callout);
     } catch (error) {
       console.error("Create emergency callout error:", error);
@@ -5735,22 +6058,22 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.post("/api/emergency-callouts/:id/assign", async (req, res) => {
     try {
       const { responseId } = req.body;
-      
+
       if (!responseId) {
         return res.status(400).json({ message: "responseId is required" });
       }
-      
+
       const response = await storage.getEmergencyCalloutResponse(responseId);
       if (!response) {
         return res.status(404).json({ message: "Response not found" });
       }
-      
+
       // Update the selected response
       await storage.updateEmergencyCalloutResponse(responseId, {
         status: "selected",
         selectedAt: new Date(),
       });
-      
+
       // Update other responses to not_selected
       const allResponses = await storage.getEmergencyCalloutResponses(req.params.id);
       for (const r of allResponses) {
@@ -5758,23 +6081,23 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           await storage.updateEmergencyCalloutResponse(r.id, { status: "not_selected" });
         }
       }
-      
+
       // Get the current callout
       const existingCallout = await storage.getEmergencyCallout(req.params.id);
       if (!existingCallout) {
         return res.status(404).json({ message: "Callout not found" });
       }
-      
+
       let jobId = existingCallout.jobId;
-      
+
       // If this is a standalone emergency (no job), create contact and job now
       if (!jobId && existingCallout.clientName && existingCallout.clientPhone && existingCallout.clientAddress) {
         // Try to find existing contact by phone or create a new one
         const allContacts = await storage.getContacts();
-        let contact = allContacts.find(c => 
+        let contact = allContacts.find(c =>
           c.phone === existingCallout.clientPhone
         );
-        
+
         if (!contact) {
           contact = await storage.createContact({
             name: existingCallout.clientName,
@@ -5784,14 +6107,14 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
             notes: "Created from emergency callout",
           });
         }
-        
+
         // Use proper job number generation from storage
         const jobNumber = await storage.getNextJobNumber();
-        
+
         // Get incident type label for service type (safely handle null/empty incidentType)
         const incidentTypeStr = existingCallout.incidentType || "emergency";
         const incidentLabel = incidentTypeStr.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-        
+
         // Create job
         const job = await storage.createJob({
           jobNumber,
@@ -5805,9 +6128,9 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           status: "in_progress",
           partnerStatus: "accepted",
         });
-        
+
         jobId = job.id;
-        
+
         // Update the callout with the job ID
         await storage.updateEmergencyCallout(req.params.id, { jobId });
       } else if (jobId) {
@@ -5817,14 +6140,14 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           partnerStatus: "accepted",
         });
       }
-      
+
       // Update the callout status
       const callout = await storage.updateEmergencyCallout(req.params.id, {
         status: "assigned",
         assignedPartnerId: response.partnerId,
         assignedAt: new Date(),
       });
-      
+
       res.json(callout);
     } catch (error) {
       console.error("Assign emergency callout error:", error);
@@ -5836,13 +6159,13 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.post("/api/emergency-callouts/:id/resolve", async (req, res) => {
     try {
       const { status, resolutionNotes } = req.body;
-      
+
       const callout = await storage.updateEmergencyCallout(req.params.id, {
         status: status || "resolved",
         resolvedAt: new Date(),
         resolutionNotes,
       });
-      
+
       res.json(callout);
     } catch (error) {
       console.error("Resolve emergency callout error:", error);
@@ -5871,20 +6194,20 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const allCallouts = await storage.getEmergencyCallouts();
       // Filter to completed callouts with outstanding fees
-      const outstandingFees = allCallouts.filter(c => 
-        c.completedAt && 
-        c.calloutFeeAmount && 
+      const outstandingFees = allCallouts.filter(c =>
+        c.completedAt &&
+        c.calloutFeeAmount &&
         parseFloat(String(c.calloutFeeAmount)) > 0 &&
         !c.feePaid
       );
-      
+
       // Enrich with partner info
       const feesWithDetails = await Promise.all(
         outstandingFees.map(async (callout) => {
-          const partner = callout.assignedPartnerId 
+          const partner = callout.assignedPartnerId
             ? await storage.getTradePartner(callout.assignedPartnerId)
             : null;
-          const job = callout.jobId 
+          const job = callout.jobId
             ? await storage.getJob(callout.jobId)
             : null;
           return {
@@ -5894,7 +6217,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           };
         })
       );
-      
+
       res.json(feesWithDetails);
     } catch (error) {
       console.error("Get partner fees error:", error);
@@ -5907,31 +6230,31 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const allCallouts = await storage.getEmergencyCallouts();
       const allPartners = await storage.getTradePartners();
-      
+
       // Calculate outstanding fees per partner
       const balances = allPartners.map(partner => {
-        const partnerCallouts = allCallouts.filter(c => 
+        const partnerCallouts = allCallouts.filter(c =>
           c.assignedPartnerId === partner.id &&
-          c.completedAt && 
-          c.calloutFeeAmount && 
+          c.completedAt &&
+          c.calloutFeeAmount &&
           parseFloat(String(c.calloutFeeAmount)) > 0 &&
           !c.feePaid
         );
-        
-        const totalOutstanding = partnerCallouts.reduce((sum, c) => 
+
+        const totalOutstanding = partnerCallouts.reduce((sum, c) =>
           sum + parseFloat(String(c.calloutFeeAmount || "0")), 0
         );
-        
-        const paidCallouts = allCallouts.filter(c => 
+
+        const paidCallouts = allCallouts.filter(c =>
           c.assignedPartnerId === partner.id &&
-          c.completedAt && 
+          c.completedAt &&
           c.feePaid
         );
-        
-        const totalPaid = paidCallouts.reduce((sum, c) => 
+
+        const totalPaid = paidCallouts.reduce((sum, c) =>
           sum + parseFloat(String(c.calloutFeeAmount || "0")), 0
         );
-        
+
         return {
           partnerId: partner.id,
           partnerName: partner.businessName,
@@ -5941,7 +6264,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           totalPaid: totalPaid.toFixed(2),
         };
       }).filter(b => parseFloat(b.totalOutstanding) > 0 || parseFloat(b.totalPaid) > 0);
-      
+
       res.json(balances);
     } catch (error) {
       console.error("Get partner fee balances error:", error);
@@ -5956,22 +6279,22 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!callout) {
         return res.status(404).json({ message: "Emergency callout not found" });
       }
-      
+
       if (!callout.calloutFeeAmount || parseFloat(String(callout.calloutFeeAmount)) <= 0) {
         return res.status(400).json({ message: "No fee amount recorded for this callout" });
       }
-      
+
       if (callout.feePaid) {
         return res.status(400).json({ message: "Fee already marked as paid" });
       }
-      
+
       const { notes } = req.body;
-      
+
       // Get partner info for transaction description
-      const partner = callout.assignedPartnerId 
+      const partner = callout.assignedPartnerId
         ? await storage.getTradePartner(callout.assignedPartnerId)
         : null;
-      
+
       // Create finance transaction for the fee (now actually received)
       const feeTransaction = await storage.createFinancialTransaction({
         date: new Date(),
@@ -5986,16 +6309,16 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         profitAmount: String(callout.calloutFeeAmount),
         notes: notes || null,
       });
-      
+
       // Update the callout to mark fee as paid
       const updated = await storage.updateEmergencyCallout(req.params.calloutId, {
         feePaid: true,
         feePaidAt: new Date(),
         feeTransactionId: feeTransaction.id,
       });
-      
-      res.json({ 
-        callout: updated, 
+
+      res.json({
+        callout: updated,
         transaction: feeTransaction,
         message: `Fee of £${callout.calloutFeeAmount} marked as paid`
       });
@@ -6010,20 +6333,20 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const allCallouts = await storage.getEmergencyCallouts();
       // Filter to paid fees
-      const paidFees = allCallouts.filter(c => 
-        c.completedAt && 
-        c.calloutFeeAmount && 
+      const paidFees = allCallouts.filter(c =>
+        c.completedAt &&
+        c.calloutFeeAmount &&
         parseFloat(String(c.calloutFeeAmount)) > 0 &&
         c.feePaid
       );
-      
+
       // Enrich with partner info
       const feesWithDetails = await Promise.all(
         paidFees.map(async (callout) => {
-          const partner = callout.assignedPartnerId 
+          const partner = callout.assignedPartnerId
             ? await storage.getTradePartner(callout.assignedPartnerId)
             : null;
-          const job = callout.jobId 
+          const job = callout.jobId
             ? await storage.getJob(callout.jobId)
             : null;
           return {
@@ -6033,7 +6356,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           };
         })
       );
-      
+
       res.json(feesWithDetails);
     } catch (error) {
       console.error("Get paid partner fees error:", error);
@@ -6177,12 +6500,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
@@ -6192,7 +6515,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!job.shareNotesWithPartner) {
         return res.json([]);
       }
-      
+
       const notes = await storage.getJobNotesForPartner(req.params.jobId);
       // Get attachments for each note
       const notesWithAttachments = await Promise.all(
@@ -6215,12 +6538,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
@@ -6235,7 +6558,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!job.shareQuoteWithPartner) {
         return res.json([]);
       }
-      
+
       const quoteItems = await storage.getQuoteItemsByJob(req.params.jobId);
       res.json(quoteItems);
     } catch (error) {
@@ -6251,19 +6574,19 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Find emergency callout linked to this job where partner is assigned
       const callout = await storage.getEmergencyCalloutByJobAndPartner(req.params.jobId, access.partnerId);
-      
+
       if (!callout) {
         return res.status(404).json({ message: "No emergency callout found" });
       }
-      
+
       res.json(callout);
     } catch (error) {
       console.error("Partner portal emergency callout error:", error);
@@ -6278,21 +6601,21 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Get all jobs for this partner
       const jobs = await storage.getJobsByPartner(access.partnerId);
       const jobIds = jobs.map(j => j.id);
-      
+
       // Get payment requests for partner's jobs where audience is 'partner'
       const allRequests = await Promise.all(
         jobIds.map(jobId => storage.getPaymentRequestsByJob(jobId))
       );
-      
+
       const partnerRequests = allRequests
         .flat()
         .filter(req => req.audience === 'partner' || req.type === 'partner_payout' || req.type === 'partner_deposit' || req.type === 'partner_balance' || req.type === 'partner_commission')
@@ -6300,7 +6623,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           const job = jobs.find(j => j.id === req.jobId);
           return { ...req, job: job ? { id: job.id, jobNumber: job.jobNumber, serviceType: job.serviceType } : null };
         });
-      
+
       res.json(partnerRequests);
     } catch (error) {
       console.error("Partner portal payment requests error:", error);
@@ -6315,45 +6638,45 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       // Check job is accepted
       if (job.partnerStatus !== "accepted") {
         return res.status(400).json({ message: "Job must be accepted before requesting payment" });
       }
-      
+
       // Check if partner already has a pending payment request for this job
       const existingRequests = await storage.getPaymentRequestsByJob(job.id);
       const pendingPartnerRequest = existingRequests.find(
         r => r.audience === 'partner' && r.approvalStatus === 'pending'
       );
-      
+
       if (pendingPartnerRequest) {
         return res.status(400).json({ message: "A payment request is already pending for this job" });
       }
-      
+
       // Create payment request for partner payout
       const amount = req.body.amount || job.partnerCharge || "0";
       const description = req.body.description || `Payment request for completed work on ${job.jobNumber}`;
       // Use provided type (partner_deposit or partner_balance) or default to partner_payout for backwards compatibility
       const paymentType = req.body.type || "partner_payout";
-      
+
       // Validate the type
       // partner_deposit/partner_balance/partner_payout = CCC pays partner
       // partner_commission = Partner pays CCC (for partner-led jobs)
       if (!["partner_deposit", "partner_balance", "partner_payout", "partner_commission"].includes(paymentType)) {
         return res.status(400).json({ message: "Invalid payment type" });
       }
-      
+
       // For partner-led jobs (teamType === "partner"), only allow commission payments
       // For other team types, only allow deposit/balance/payout payments
       if (job.teamType === "partner" && paymentType !== "partner_commission") {
@@ -6362,7 +6685,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (job.teamType !== "partner" && paymentType === "partner_commission") {
         return res.status(400).json({ message: "Commission payments are only for partner-led jobs" });
       }
-      
+
       // Check if partner already has a pending deposit request (only one deposit allowed)
       if (paymentType === "partner_deposit") {
         const hasExistingDeposit = existingRequests.some(r => r.type === "partner_deposit");
@@ -6370,13 +6693,13 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           return res.status(400).json({ message: "A deposit has already been requested for this job" });
         }
       }
-      
+
       // Validate amount doesn't exceed what's owed
       // For partner-led jobs: partnerCharge is CCC's commission, count partner_commission payments
       // For CCC-led jobs: partnerCharge is what CCC owes partner, count deposit/balance/payout payments
       const partnerCharge = parseFloat(job.partnerCharge || "0");
       const requestAmount = parseFloat(amount);
-      
+
       let confirmedPayments: number;
       if (job.teamType === "partner") {
         // Partner-led: count only commission payments TO CCC
@@ -6390,12 +6713,12 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
           .reduce((sum, r) => sum + parseFloat(r.amount), 0);
       }
       const remainingBalance = partnerCharge - confirmedPayments;
-      
+
       if (requestAmount > remainingBalance + 0.01) { // Small tolerance for rounding
         const balanceLabel = job.teamType === "partner" ? "commission due" : "remaining balance";
         return res.status(400).json({ message: `Amount exceeds ${balanceLabel} of £${remainingBalance.toFixed(2)}` });
       }
-      
+
       const paymentRequest = await storage.createPaymentRequest({
         jobId: job.id,
         type: paymentType,
@@ -6408,7 +6731,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
         requestedById: access.partnerId,
         approvalStatus: "pending",
       });
-      
+
       res.status(201).json(paymentRequest);
     } catch (error) {
       console.error("Partner portal request payment error:", error);
@@ -6423,21 +6746,21 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getPartnerPortalAccessByToken(token);
       if (!access || !access.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const job = await storage.getJob(req.params.jobId);
       if (!job || job.partnerId !== access.partnerId) {
         return res.status(404).json({ message: "Job not found" });
       }
-      
+
       const requests = await storage.getPaymentRequestsByJob(req.params.jobId);
       // Only return partner-related payment requests
       const partnerRequests = requests.filter(r => r.audience === 'partner' || r.type === 'partner_payout' || r.type === 'partner_deposit' || r.type === 'partner_balance' || r.type === 'partner_commission');
-      
+
       res.json(partnerRequests);
     } catch (error) {
       console.error("Partner portal job payment requests error:", error);
@@ -6507,7 +6830,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
     try {
       const { year, month, jobId } = req.query;
       let transactions;
-      
+
       if (jobId && typeof jobId === "string") {
         transactions = await storage.getFinancialTransactionsByJob(jobId);
       } else if (year && month) {
@@ -6518,7 +6841,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
       } else {
         transactions = await storage.getFinancialTransactions();
       }
-      
+
       res.json(transactions);
     } catch (error) {
       console.error("Get financial transactions error:", error);
@@ -6584,7 +6907,7 @@ Remember: After generating code, remind the user to click "Send to Replit Agent"
   app.post("/api/scan-receipt", async (req, res) => {
     try {
       const { imageBase64 } = req.body;
-      
+
       if (!imageBase64) {
         return res.status(400).json({ message: "No image provided" });
       }
@@ -6628,7 +6951,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       });
 
       const content = response.choices[0]?.message?.content || "";
-      
+
       // Parse the JSON from the response
       let receiptData;
       try {
@@ -6641,7 +6964,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         }
       } catch (parseError) {
         console.error("Failed to parse receipt data:", parseError, content);
-        return res.status(422).json({ 
+        return res.status(422).json({
           message: "Could not extract data from receipt. Please try a clearer photo or enter manually.",
           raw: content
         });
@@ -6660,9 +6983,9 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       });
     } catch (error: any) {
       console.error("Receipt scan error:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: "Failed to scan receipt",
-        error: error.message 
+        error: error.message
       });
     }
   });
@@ -6672,7 +6995,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const { year, month } = req.query;
       let transactions;
-      
+
       if (year && month) {
         transactions = await storage.getFinancialTransactionsByMonth(
           parseInt(year as string),
@@ -6681,18 +7004,18 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       } else {
         transactions = await storage.getFinancialTransactions();
       }
-      
+
       const income = transactions
         .filter(t => t.type === "income")
         .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-      
+
       const expenses = transactions
         .filter(t => t.type === "expense")
         .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-      
+
       const profit = income - expenses;
       const margin = income > 0 ? (profit / income) * 100 : 0;
-      
+
       res.json({
         income,
         expenses,
@@ -6710,46 +7033,46 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.get("/api/financial-forecast", async (req, res) => {
     try {
       const jobs = await storage.getJobs();
-      
+
       // Stages that represent confirmed/expected income
       const confirmedStages = [
         "quote_accepted",
-        "deposit_requested", 
+        "deposit_requested",
         "deposit_paid",
         "scheduled",
         "in_progress",
         "completed",
         "invoice_sent"
       ];
-      
+
       const confirmedJobs = jobs.filter(j => confirmedStages.includes(j.status));
-      
+
       // Calculate forecast totals
       let totalForecast = 0;
       let depositsPending = 0;
       let balanceDue = 0;
-      
+
       const forecastJobs = confirmedJobs.map(job => {
         const quotedValue = parseFloat(job.quotedValue || "0");
-        const depositAmount = job.depositRequired 
-          ? (job.depositType === "percentage" 
-              ? quotedValue * (parseFloat(job.depositAmount || "0") / 100)
-              : parseFloat(job.depositAmount || "0"))
+        const depositAmount = job.depositRequired
+          ? (job.depositType === "percentage"
+            ? quotedValue * (parseFloat(job.depositAmount || "0") / 100)
+            : parseFloat(job.depositAmount || "0"))
           : 0;
-        
+
         const depositPaid = job.depositReceived;
         const isPaid = job.status === "paid" || job.status === "closed";
-        
+
         totalForecast += quotedValue;
-        
+
         if (!depositPaid && job.depositRequired) {
           depositsPending += depositAmount;
         }
-        
+
         if (!isPaid) {
           balanceDue += depositPaid ? (quotedValue - depositAmount) : quotedValue;
         }
-        
+
         return {
           id: job.id,
           jobNumber: job.jobNumber,
@@ -6760,7 +7083,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           depositPaid,
         };
       });
-      
+
       res.json({
         totalForecast,
         depositsPending,
@@ -6780,29 +7103,29 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       const { year, month } = req.query;
       const jobs = await storage.getJobs();
       const partners = await storage.getTradePartners();
-      
+
       // Filter for partner jobs only
       let partnerJobs = jobs.filter(j => j.deliveryType === "partner" && j.partnerId);
-      
+
       // Optionally filter by date (jobs that reached paid status in this month)
       // For now, we'll show all paid partner jobs for the selected month
       if (year && month) {
         const startDate = new Date(parseInt(year as string), parseInt(month as string) - 1, 1);
         const endDate = new Date(parseInt(year as string), parseInt(month as string), 0);
-        
+
         partnerJobs = partnerJobs.filter(j => {
           if (!j.updatedAt) return false;
           const jobDate = new Date(j.updatedAt);
           return jobDate >= startDate && jobDate <= endDate && j.status === "paid";
         });
       }
-      
+
       // Group by partner
       const partnerVolume: Record<string, { partnerId: string; businessName: string; totalValue: number; jobCount: number; cccMargin: number }> = {};
-      
+
       for (const job of partnerJobs) {
         if (!job.partnerId) continue;
-        
+
         if (!partnerVolume[job.partnerId]) {
           const partner = partners.find(p => p.id === job.partnerId);
           partnerVolume[job.partnerId] = {
@@ -6813,10 +7136,10 @@ If you cannot read certain fields, use null for that field. Always try to extrac
             cccMargin: 0,
           };
         }
-        
+
         const grossValue = parseFloat(job.quotedValue || "0");
         let margin = grossValue;
-        
+
         if (job.partnerCharge) {
           const charge = parseFloat(job.partnerCharge);
           if (job.partnerChargeType === "percentage") {
@@ -6825,17 +7148,17 @@ If you cannot read certain fields, use null for that field. Always try to extrac
             margin = charge;
           }
         }
-        
+
         partnerVolume[job.partnerId].totalValue += grossValue;
         partnerVolume[job.partnerId].jobCount += 1;
         partnerVolume[job.partnerId].cccMargin += margin;
       }
-      
+
       const partnerList = Object.values(partnerVolume);
       const totalVolume = partnerList.reduce((sum, p) => sum + p.totalValue, 0);
       const totalMargin = partnerList.reduce((sum, p) => sum + p.cccMargin, 0);
       const totalJobCount = partnerList.reduce((sum, p) => sum + p.jobCount, 0);
-      
+
       res.json({
         totalVolume,
         totalMargin,
@@ -6853,7 +7176,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const { startDate, endDate } = req.query;
       let events;
-      
+
       if (startDate && endDate) {
         events = await storage.getCalendarEventsByDateRange(
           new Date(startDate as string),
@@ -6862,19 +7185,19 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       } else {
         events = await storage.getCalendarEvents();
       }
-      
+
       // Enrich with job and partner data
       const [jobs, partners] = await Promise.all([
         storage.getJobs(),
         storage.getTradePartners()
       ]);
-      
+
       const enrichedEvents = events.map(event => ({
         ...event,
         job: event.jobId ? jobs.find(j => j.id === event.jobId) : null,
         partner: event.partnerId ? partners.find(p => p.id === event.partnerId) : null
       }));
-      
+
       res.json(enrichedEvents);
     } catch (error) {
       console.error("Get calendar events error:", error);
@@ -6903,16 +7226,16 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
         endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
       };
-      
+
       const data = insertCalendarEventSchema.parse(body);
-      
+
       // Validate partnerId is required for partner/hybrid events
       if ((data.teamType === "partner" || data.teamType === "hybrid") && !data.partnerId) {
-        return res.status(400).json({ 
-          message: "Partner is required for partner or hybrid events" 
+        return res.status(400).json({
+          message: "Partner is required for partner or hybrid events"
         });
       }
-      
+
       const event = await storage.createCalendarEvent(data);
       res.status(201).json(event);
     } catch (error) {
@@ -6932,7 +7255,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         ...(req.body.startDate && { startDate: new Date(req.body.startDate) }),
         ...(req.body.endDate && { endDate: new Date(req.body.endDate) }),
       };
-      
+
       const data = insertCalendarEventSchema.partial().parse(body);
       const event = await storage.updateCalendarEvent(req.params.id, data);
       if (!event) {
@@ -6965,23 +7288,23 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!event) {
         return res.status(404).json({ message: "Calendar event not found" });
       }
-      
+
       // For in-house events, admin confirmation is sufficient
       // For partner/hybrid events, both admin and partner must confirm
       const isInHouse = event.teamType === "in_house";
       const partnerConfirmed = event.confirmedByPartner;
       const fullyConfirmed = isInHouse || partnerConfirmed;
-      
+
       // Only set confirmedAt when fully confirmed, leave it untouched otherwise
       const updateData: Record<string, unknown> = {
         confirmedByAdmin: true,
         status: fullyConfirmed ? "confirmed" : "pending",
       };
-      
+
       if (fullyConfirmed) {
         updateData.confirmedAt = new Date();
       }
-      
+
       const updated = await storage.updateCalendarEvent(req.params.id, updateData);
       res.json(updated);
     } catch (error) {
@@ -6994,7 +7317,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.get("/api/partner-availability", async (req, res) => {
     try {
       const { partnerId, startDate, endDate } = req.query;
-      
+
       if (startDate && endDate) {
         if (partnerId) {
           const availability = await storage.getPartnerAvailabilityByDateRange(
@@ -7071,65 +7394,65 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const partnerAccess = await storage.getPartnerPortalAccessByToken(token);
       if (!partnerAccess || !partnerAccess.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const { startDate, endDate } = req.query;
       if (!startDate || !endDate) {
         return res.status(400).json({ message: "startDate and endDate required" });
       }
-      
+
       const start = new Date(startDate as string);
       const end = new Date(endDate as string);
-      
+
       // Get calendar events for this partner
       const calEvents = await storage.getCalendarEventsForPartnerPortal(
         partnerAccess.partnerId,
         start,
         end
       );
-      
+
       // Get all jobs and surveys for this partner
       const jobs = await storage.getJobs();
       const partnerJobs = jobs.filter(j => j.partnerId === partnerAccess.partnerId);
-      
+
       // Enrich calendar events with job data
       const enrichedEvents = calEvents.map(event => ({
         ...event,
         job: event.jobId ? jobs.find(j => j.id === event.jobId) : null,
         eventType: "calendar" as const
       }));
-      
+
       // Get confirmed/accepted survey appointments for this partner's jobs
       const surveyPromises = partnerJobs.map(job => storage.getJobSurveysByJob(job.id));
       const allSurveysArrays = await Promise.all(surveyPromises);
       const allSurveys = allSurveysArrays.flat();
-      
+
       // Filter surveys that have dates and are confirmed/accepted
-      const scheduledSurveys = allSurveys.filter(s => 
+      const scheduledSurveys = allSurveys.filter(s =>
         s.partnerId === partnerAccess.partnerId &&
-        s.status === "accepted" && 
+        s.status === "accepted" &&
         (s.bookingStatus === "confirmed" || s.bookingStatus === "client_accepted") &&
         (s.scheduledDate || s.proposedDate)
       );
-      
+
       // Convert surveys to calendar event format
       const surveyEvents = scheduledSurveys.map(survey => {
         const job = partnerJobs.find(j => j.id === survey.jobId);
         const surveyDate = survey.scheduledDate || survey.proposedDate;
         const surveyTime = survey.scheduledTime || survey.proposedTime || "09:00";
-        
+
         // Parse date and time
         const eventDate = new Date(surveyDate!);
         const [hours, mins] = surveyTime.split(":").map(Number);
         eventDate.setHours(hours || 9, mins || 0, 0, 0);
-        
+
         // Check if within date range
         if (eventDate < start || eventDate > end) return null;
-        
+
         return {
           id: `survey-${survey.id}`,
           title: `Survey: ${job?.jobNumber || 'Job'}`,
@@ -7146,10 +7469,10 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           surveyDetails: survey.surveyDetails,
         };
       }).filter(Boolean);
-      
+
       // Combine both sources
       const allEvents = [...enrichedEvents, ...surveyEvents];
-      
+
       res.json(allEvents);
     } catch (error) {
       console.error("Get partner portal calendar events error:", error);
@@ -7164,36 +7487,36 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const partnerAccess = await storage.getPartnerPortalAccessByToken(token);
       if (!partnerAccess || !partnerAccess.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const event = await storage.getCalendarEvent(req.params.id);
       if (!event) {
         return res.status(404).json({ message: "Calendar event not found" });
       }
-      
+
       // Verify this event belongs to this partner
       if (event.partnerId !== partnerAccess.partnerId) {
         return res.status(403).json({ message: "Not authorized to confirm this event" });
       }
-      
+
       // Both admin and partner must confirm for partner/hybrid events
       const adminConfirmed = event.confirmedByAdmin;
       const fullyConfirmed = adminConfirmed;
-      
+
       // Only set confirmedAt when both parties have confirmed, leave it untouched otherwise
       const updateData: Record<string, unknown> = {
         confirmedByPartner: true,
         status: fullyConfirmed ? "confirmed" : "pending",
       };
-      
+
       if (fullyConfirmed) {
         updateData.confirmedAt = new Date();
       }
-      
+
       const updated = await storage.updateCalendarEvent(req.params.id, updateData);
       res.json(updated);
     } catch (error) {
@@ -7209,12 +7532,12 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const partnerAccess = await storage.getPartnerPortalAccessByToken(token);
       if (!partnerAccess || !partnerAccess.isActive) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const { startDate, endDate } = req.query;
       if (startDate && endDate) {
         const availability = await storage.getPartnerAvailabilityByDateRange(
@@ -7240,7 +7563,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!partnerAccess) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const data = insertPartnerAvailabilitySchema.parse({
         ...req.body,
         partnerId: partnerAccess.partnerId
@@ -7263,7 +7586,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!partnerAccess) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       await storage.deletePartnerAvailability(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -7273,7 +7596,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   });
 
   // ==================== SCHEDULE PROPOSALS ====================
-  
+
   // Admin: Get schedule proposals for a job
   app.get("/api/jobs/:jobId/schedule-proposals", async (req, res) => {
     try {
@@ -7296,12 +7619,88 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     }
   });
 
+  // Get commission summary by employee
+  app.get("/api/sales-commissions/summary", async (req, res) => {
+    try {
+      const commissions = await storage.getSalesCommissions();
+      const employees = await storage.getEmployees();
+
+      const summary = employees.map(emp => {
+        const empCommissions = commissions.filter(c => c.employeeId === emp.id);
+        const unpaid = empCommissions.filter(c => c.status === 'pending' || c.status === 'approved');
+        const paid = empCommissions.filter(c => c.status === 'paid');
+
+        return {
+          employeeId: emp.id,
+          employeeName: `${emp.firstName} ${emp.lastName}`,
+          totalUnpaid: unpaid.reduce((sum, c) => sum + Number(c.amount), 0),
+          unpaidCount: unpaid.length,
+          totalPaid: paid.reduce((sum, c) => sum + Number(c.amount), 0),
+          lastPaymentDate: paid.length > 0
+            ? paid.sort((a, b) => new Date(b.paidAt!).getTime() - new Date(a.paidAt!).getTime())[0].paidAt
+            : null
+        };
+      }).filter(s => s.totalUnpaid > 0 || s.totalPaid > 0);
+
+      res.json(summary);
+    } catch (error) {
+      console.error("Commission summary error:", error);
+      res.status(500).json({ message: "Failed to get commission summary" });
+    }
+  });
+
+  // Bulk pay commissions for an employee
+  app.post("/api/sales-commissions/pay-bulk", async (req, res) => {
+    try {
+      const { employeeId } = req.body;
+      const commissions = await storage.getSalesCommissions();
+
+      // Find all unpaid for this employee
+      const unpaid = commissions.filter(c =>
+        c.employeeId === employeeId &&
+        (c.status === 'pending' || c.status === 'approved')
+      );
+
+      if (unpaid.length === 0) {
+        return res.status(400).json({ message: "No unpaid commissions found for this employee" });
+      }
+
+      // Mark all as paid
+      const updated = await Promise.all(unpaid.map(c =>
+        storage.updateSalesCommission(c.id, {
+          status: 'paid',
+          paidAt: new Date()
+        })
+      ));
+
+      // Create a financial transaction for the payout
+      const totalAmount = unpaid.reduce((sum, c) => sum + Number(c.amount), 0);
+      await storage.createFinancialTransaction({
+        type: 'expense',
+        amount: totalAmount.toString(),
+        description: `Commission Payout - ${updated.length} jobs`,
+        date: new Date(),
+        categoryId: null // Ideally linked to 'Payroll' category if exists
+      });
+
+      res.json({
+        message: "Payout processed successfully",
+        count: updated.length,
+        totalAmount
+      });
+
+    } catch (error) {
+      console.error("Bulk payout error:", error);
+      res.status(500).json({ message: "Failed to process payout" });
+    }
+  });
+
   // Admin: Create a new schedule proposal
   app.post("/api/jobs/:jobId/schedule-proposals", async (req, res) => {
     try {
       // Archive any existing active proposals for this job
       await storage.archiveScheduleProposals(req.params.jobId);
-      
+
       // Convert date strings to Date objects before validation
       const bodyWithDates = {
         ...req.body,
@@ -7311,27 +7710,27 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         proposedByRole: "admin",
         status: "pending_client",
       };
-      
+
       const data = insertJobScheduleProposalSchema.parse(bodyWithDates);
       const proposal = await storage.createScheduleProposal(data);
-      
+
       // Send email notification to client (non-blocking)
       (async () => {
         try {
           const { sendScheduleProposalNotification, isEmailConfigured } = await import("./email");
           if (!isEmailConfigured()) return;
-          
+
           const job = await storage.getJob(req.params.jobId);
           if (!job || !job.contactId) return;
-          
+
           const contact = await storage.getContact(job.contactId);
           if (!contact?.email || !contact.portalAccessEnabled || !contact.portalAccessToken) return;
-          
+
           const formattedDate = new Date(proposal.proposedStartDate).toLocaleDateString('en-GB', {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
           });
           const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
-          
+
           await sendScheduleProposalNotification(
             contact.email,
             contact.contactName,
@@ -7345,7 +7744,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           console.error("Failed to send schedule proposal notification:", emailError);
         }
       })();
-      
+
       res.status(201).json(proposal);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -7390,7 +7789,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       // Create calendar event
       const eventDate = proposal.counterProposedDate || proposal.proposedStartDate;
       const endDate = proposal.proposedEndDate || eventDate;
-      
+
       const calendarEvent = await storage.createCalendarEvent({
         title: `Project Start: ${job.jobNumber}`,
         jobId: job.id,
@@ -7421,17 +7820,17 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         try {
           const { sendScheduleConfirmationNotification, isEmailConfigured } = await import("./email");
           if (!isEmailConfigured()) return;
-          
+
           if (!job.contactId) return;
-          
+
           const contact = await storage.getContact(job.contactId);
           if (!contact?.email || !contact.portalAccessEnabled || !contact.portalAccessToken) return;
-          
+
           const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
           });
           const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
-          
+
           await sendScheduleConfirmationNotification(
             contact.email,
             contact.contactName,
@@ -7459,7 +7858,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
         return res.status(401).json({ message: "Unauthorized" });
@@ -7486,7 +7885,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
         return res.status(401).json({ message: "Unauthorized" });
@@ -7509,7 +7908,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         // Client accepted - create calendar event
         const eventDate = proposal.proposedStartDate;
         const endDate = proposal.proposedEndDate || eventDate;
-        
+
         const calendarEvent = await storage.createCalendarEvent({
           title: `Project Start: ${job.jobNumber}`,
           jobId: job.id,
@@ -7541,15 +7940,15 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           try {
             const { sendScheduleConfirmationNotification, isEmailConfigured } = await import("./email");
             if (!isEmailConfigured()) return;
-            
+
             const contact = await storage.getContact(access.contactId);
             if (!contact?.email || !contact.portalAccessToken) return;
-            
+
             const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', {
               weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
             });
             const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
-            
+
             await sendScheduleConfirmationNotification(
               contact.email,
               contact.contactName,
@@ -7562,6 +7961,38 @@ If you cannot read certain fields, use null for that field. Always try to extrac
             console.error("Failed to send schedule confirmation notification:", emailError);
           }
         })();
+
+        // Send notification to partner (non-blocking)
+        if (job.partnerId) {
+          (async () => {
+            try {
+              const { sendPartnerScheduleConfirmationNotification, isEmailConfigured } = await import("./email");
+              if (!isEmailConfigured()) return;
+
+              const partner = await storage.getTradePartner(job.partnerId!);
+              if (!partner?.email) return;
+
+              const partnerAccess = await storage.getPartnerPortalAccess(job.partnerId!);
+              if (!partnerAccess?.accessToken) return;
+
+              const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+              });
+              const partnerPortalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/partner-portal`;
+
+              await sendPartnerScheduleConfirmationNotification(
+                partner.email,
+                partner.businessName,
+                `${job.jobNumber}: ${job.title}`,
+                formattedDate,
+                partnerPortalUrl,
+                partnerAccess.accessToken
+              );
+            } catch (emailError) {
+              console.error("Failed to send partner schedule confirmation:", emailError);
+            }
+          })();
+        }
 
         res.json({ proposal: updatedProposal, calendarEvent });
       } else if (response === "countered") {
@@ -7605,7 +8036,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const access = await storage.getClientPortalAccessByToken(token);
       if (!access || !access.isActive || (access.tokenExpiry && access.tokenExpiry < new Date())) {
         return res.status(401).json({ message: "Unauthorized" });
@@ -7664,7 +8095,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (response === "accepted") {
         // Admin accepts client's requested date - create calendar event
         const eventDate = proposal.proposedStartDate;
-        
+
         const calendarEvent = await storage.createCalendarEvent({
           title: `Project Start: ${job.jobNumber}`,
           jobId: job.id,
@@ -7696,15 +8127,15 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           try {
             const { sendScheduleConfirmationNotification, isEmailConfigured } = await import("./email");
             if (!isEmailConfigured() || !job.contactId) return;
-            
+
             const contact = await storage.getContact(job.contactId);
             if (!contact?.email || !contact.portalAccessEnabled || !contact.portalAccessToken) return;
-            
+
             const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', {
               weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
             });
             const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
-            
+
             await sendScheduleConfirmationNotification(
               contact.email,
               contact.contactName,
@@ -7737,15 +8168,15 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           try {
             const { sendScheduleProposalNotification, isEmailConfigured } = await import("./email");
             if (!isEmailConfigured() || !job.contactId) return;
-            
+
             const contact = await storage.getContact(job.contactId);
             if (!contact?.email || !contact.portalAccessEnabled || !contact.portalAccessToken) return;
-            
+
             const formattedDate = new Date(counterDate).toLocaleDateString('en-GB', {
               weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
             });
             const portalUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/portal/job/${job.id}`;
-            
+
             await sendScheduleProposalNotification(
               contact.email,
               contact.contactName,
@@ -7863,7 +8294,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.get("/api/seo/media-library", async (req, res) => {
     try {
       const category = req.query.category as string | undefined;
-      const media = category 
+      const media = category
         ? await storage.getSeoMediaLibraryByCategory(category)
         : await storage.getSeoMediaLibrary();
       res.json(media);
@@ -8083,7 +8514,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const status = req.query.status as string | undefined;
       const weeklyFocusId = req.query.weeklyFocusId as string | undefined;
-      
+
       let posts;
       if (status) {
         posts = await storage.getSeoContentPostsByStatus(status);
@@ -8159,18 +8590,18 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       // Check for AI integration availability first
       if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
         console.error("AI Integration not configured: AI_INTEGRATIONS_OPENAI_API_KEY is missing");
-        return res.status(503).json({ 
+        return res.status(503).json({
           message: "AI service not available. Please ensure the OpenAI integration is set up.",
           errorType: "config"
         });
       }
-      
+
       const { platform, postType, service, location, tone, keywords, mediaContext, imageUrl, imageCaption } = req.body;
-      
+
       // Build prompt based on business profile and brand voice
       const businessProfile = await storage.getSeoBusinessProfile();
       const brandVoice = await storage.getSeoBrandVoice();
-      
+
       const prompt = buildContentPrompt({
         platform,
         postType,
@@ -8194,10 +8625,10 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
-      
+
       // Build messages - try multimodal with vision if image provided
       let usedImageSuccessfully = false;
-      
+
       // Construct absolute URL for the image if provided
       let absoluteImageUrl: string | null = null;
       if (imageUrl) {
@@ -8212,7 +8643,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           }
         }
       }
-      
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const messages: any[] = [
         { role: "system", content: "You are a social media content creator for a local trade business. Write engaging, professional posts that highlight quality work and build local community trust. When analyzing an image, describe the craftsmanship and quality you observe, and create content that showcases this work." }
@@ -8220,10 +8651,10 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
       if (absoluteImageUrl) {
         // Multimodal request with vision - GPT-4o can analyze images
-        const textPrompt = imageCaption 
+        const textPrompt = imageCaption
           ? `${prompt}\n\nThe uploaded image shows: ${imageCaption}. Please analyze the image and create compelling content that highlights this work.`
           : `${prompt}\n\nPlease analyze the uploaded image showing our craftsmanship and create content that highlights the quality of this work.`;
-        
+
         messages.push({
           role: "user",
           content: [
@@ -8240,7 +8671,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         // Text-only request
         messages.push({ role: "user", content: prompt });
       }
-      
+
       const completion = await client.chat.completions.create({
         model: usedImageSuccessfully ? "gpt-4o" : "gpt-4o-mini",
         messages,
@@ -8248,8 +8679,8 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       });
 
       const generatedContent = completion.choices[0]?.message?.content || "";
-      
-      res.json({ 
+
+      res.json({
         content: generatedContent,
         platform,
         postType,
@@ -8258,33 +8689,33 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       });
     } catch (error: unknown) {
       console.error("Generate content error:", error);
-      
+
       // Provide specific error messages based on error type
       if (error instanceof Error) {
         const errMsg = error.message.toLowerCase();
-        
+
         if (errMsg.includes("api key") || errMsg.includes("authentication") || errMsg.includes("unauthorized")) {
-          return res.status(503).json({ 
+          return res.status(503).json({
             message: "AI service authentication failed. Please check the OpenAI integration configuration.",
             errorType: "auth"
           });
         }
-        
+
         if (errMsg.includes("rate limit") || errMsg.includes("quota")) {
-          return res.status(429).json({ 
+          return res.status(429).json({
             message: "AI service is temporarily busy. Please try again in a few moments.",
             errorType: "rate_limit"
           });
         }
-        
+
         if (errMsg.includes("timeout") || errMsg.includes("network")) {
-          return res.status(504).json({ 
+          return res.status(504).json({
             message: "AI service timed out. Please try again.",
             errorType: "timeout"
           });
         }
       }
-      
+
       res.status(500).json({ message: "Failed to generate content. Please try again." });
     }
   });
@@ -8318,7 +8749,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const { startDate, endDate, status } = req.query;
       let slots;
-      
+
       if (startDate && endDate) {
         slots = await storage.getSeoAutopilotSlotsByDateRange(
           new Date(startDate as string),
@@ -8329,7 +8760,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       } else {
         slots = await storage.getSeoAutopilotSlots();
       }
-      
+
       res.json(slots);
     } catch (error) {
       console.error("Get autopilot slots error:", error);
@@ -8394,14 +8825,14 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!slot) {
         return res.status(404).json({ message: "Slot not found" });
       }
-      
+
       // Update slot status
       const updated = await storage.updateSeoAutopilotSlot(req.params.id, {
         status: "approved",
         approvedAt: new Date(),
         approvedBy: "admin",
       });
-      
+
       // If there's an associated content post, update its status too
       if (slot.contentPostId) {
         await storage.updateSeoContentPost(slot.contentPostId, {
@@ -8410,7 +8841,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           reviewedBy: "admin",
         });
       }
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Approve autopilot slot error:", error);
@@ -8423,7 +8854,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const { slotIds } = req.body;
       const results = [];
-      
+
       for (const slotId of slotIds) {
         const slot = await storage.getSeoAutopilotSlot(slotId);
         if (slot) {
@@ -8432,7 +8863,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
             approvedAt: new Date(),
             approvedBy: "admin",
           });
-          
+
           if (slot.contentPostId) {
             await storage.updateSeoContentPost(slot.contentPostId, {
               status: "approved",
@@ -8440,11 +8871,11 @@ If you cannot read certain fields, use null for that field. Always try to extrac
               reviewedBy: "admin",
             });
           }
-          
+
           results.push(updated);
         }
       }
-      
+
       res.json({ approved: results.length, slots: results });
     } catch (error) {
       console.error("Bulk approve slots error:", error);
@@ -8459,11 +8890,11 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         status: "posted",
         postedAt: new Date(),
       });
-      
+
       if (!updated) {
         return res.status(404).json({ message: "Slot not found" });
       }
-      
+
       // Update associated content post if exists
       const slot = await storage.getSeoAutopilotSlot(req.params.id);
       if (slot?.contentPostId) {
@@ -8472,7 +8903,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           publishedAt: new Date(),
         });
       }
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Mark slot posted error:", error);
@@ -8575,7 +9006,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           const checkDate = new Date(today);
           checkDate.setDate(checkDate.getDate() + dayOffset);
           const dayOfWeek = checkDate.getDay();
-          
+
           const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
           const currentDayName = dayNames[dayOfWeek];
 
@@ -8590,7 +9021,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
               new Date(scheduledFor.getTime() - 60000), // 1 minute before
               new Date(scheduledFor.getTime() + 60000)  // 1 minute after
             );
-            
+
             const hasExisting = existingSlots.some(s => s.platform === platform.name);
             if (hasExisting) continue;
 
@@ -8689,13 +9120,13 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       });
     } catch (error) {
       console.error("Autopilot generation error:", error);
-      
+
       // Log failed run
       await storage.createSeoAutopilotRun({
         status: "failed",
         errorMessage: error instanceof Error ? error.message : "Unknown error",
       });
-      
+
       res.status(500).json({ message: "Failed to generate autopilot content" });
     }
   });
@@ -8755,20 +9186,20 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       };
 
       const message = await storage.createPortalMessage(data);
-      
+
       // Auto-send email notification to client
       if (contact.email) {
         (async () => {
           try {
             const { sendPortalMessageNotification, isEmailConfigured } = await import("./email");
             if (!isEmailConfigured()) return;
-            
+
             const portalAccess = await storage.getClientPortalAccess(req.params.id);
             if (!portalAccess?.accessToken) return;
-            
+
             const portalUrl = `${req.protocol}://${req.get('host')}/portal`;
             const messagePreview = data.body.length > 150 ? data.body.substring(0, 150) + '...' : data.body;
-            
+
             await sendPortalMessageNotification(
               contact.email!,
               contact.name,
@@ -8784,7 +9215,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           }
         })();
       }
-      
+
       res.status(201).json(message);
     } catch (error) {
       console.error("Create client message error:", error);
@@ -8858,7 +9289,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       }
 
       const messages = await storage.getActivePortalMessagesForClient(access.contactId);
-      
+
       // Filter out read messages
       const unreadMessages = [];
       for (const msg of messages) {
@@ -8867,7 +9298,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           unreadMessages.push(msg);
         }
       }
-      
+
       res.json(unreadMessages);
     } catch (error) {
       console.error("Get client portal messages error:", error);
@@ -8915,7 +9346,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       }
 
       const messages = await storage.getActivePortalMessagesForPartner(access.partnerId);
-      
+
       // Filter out read messages
       const unreadMessages = [];
       for (const msg of messages) {
@@ -8924,7 +9355,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           unreadMessages.push(msg);
         }
       }
-      
+
       res.json(unreadMessages);
     } catch (error) {
       console.error("Get partner portal messages error:", error);
@@ -9121,12 +9552,12 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const allCallouts = await storage.getEmergencyCallouts();
       const jobs = await storage.getJobs();
-      
+
       // Get completed callouts for this partner with outstanding fees
-      const outstandingFees = allCallouts.filter(c => 
-        c.completedAt && 
-        !c.feePaid && 
-        c.calloutFeeAmount && 
+      const outstandingFees = allCallouts.filter(c =>
+        c.completedAt &&
+        !c.feePaid &&
+        c.calloutFeeAmount &&
         parseFloat(c.calloutFeeAmount) > 0 &&
         c.completedByPartnerId === partner.id
       );
@@ -9144,7 +9575,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       });
 
       // Calculate totals
-      const totalOutstanding = outstandingFees.reduce((sum, c) => 
+      const totalOutstanding = outstandingFees.reduce((sum, c) =>
         sum + parseFloat(c.calloutFeeAmount || "0"), 0
       );
 
@@ -9175,13 +9606,13 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       }
       const partners = await storage.getTradePartners();
       const jobs = await storage.getJobs();
-      
+
       const enrichedAccruals = accruals.map(a => ({
         ...a,
         partner: partners.find(p => p.id === a.partnerId),
         job: jobs.find(j => j.id === a.jobId),
       }));
-      
+
       res.json(enrichedAccruals);
     } catch (error) {
       console.error("Get partner fee accruals error:", error);
@@ -9194,12 +9625,12 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const accruals = await storage.getPendingAccrualsForPartner(req.params.partnerId);
       const jobs = await storage.getJobs();
-      
+
       const enrichedAccruals = accruals.map(a => ({
         ...a,
         job: jobs.find(j => j.id === a.jobId),
       }));
-      
+
       res.json(enrichedAccruals);
     } catch (error) {
       console.error("Get pending accruals error:", error);
@@ -9220,12 +9651,12 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         invoices = await storage.getPartnerInvoices();
       }
       const partners = await storage.getTradePartners();
-      
+
       const enrichedInvoices = invoices.map(inv => ({
         ...inv,
         partner: partners.find(p => p.id === inv.partnerId),
       }));
-      
+
       res.json(enrichedInvoices);
     } catch (error) {
       console.error("Get partner invoices error:", error);
@@ -9240,18 +9671,18 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
+
       const partner = await storage.getTradePartner(invoice.partnerId);
       const accruals = await storage.getPartnerFeeAccruals(invoice.partnerId);
       const invoiceAccruals = accruals.filter(a => a.invoiceId === invoice.id);
       const jobs = await storage.getJobs();
       const payments = await storage.getPartnerInvoicePayments(invoice.id);
-      
+
       const enrichedAccruals = invoiceAccruals.map(a => ({
         ...a,
         job: jobs.find(j => j.id === a.jobId),
       }));
-      
+
       res.json({
         ...invoice,
         partner,
@@ -9268,29 +9699,29 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.post("/api/partner-invoices/generate", async (req, res) => {
     try {
       const { partnerId, periodStart, periodEnd } = req.body;
-      
+
       if (!partnerId || !periodStart || !periodEnd) {
         return res.status(400).json({ message: "partnerId, periodStart, and periodEnd are required" });
       }
-      
+
       const partner = await storage.getTradePartner(partnerId);
       if (!partner) {
         return res.status(404).json({ message: "Partner not found" });
       }
-      
+
       // Get pending accruals for this partner
       const pendingAccruals = await storage.getPendingAccrualsForPartner(partnerId);
-      
+
       if (pendingAccruals.length === 0) {
         return res.status(400).json({ message: "No pending fees to invoice" });
       }
-      
+
       // Calculate totals
       const subtotal = pendingAccruals.reduce((sum, a) => sum + parseFloat(a.feeAmount), 0);
-      
+
       // Generate invoice number
       const invoiceNumber = await storage.getNextPartnerInvoiceNumber();
-      
+
       // Create invoice
       const invoice = await storage.createPartnerInvoice({
         invoiceNumber,
@@ -9304,7 +9735,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         status: "draft",
         notes: `Fees for period ${new Date(periodStart).toLocaleDateString()} - ${new Date(periodEnd).toLocaleDateString()}`,
       });
-      
+
       // Link accruals to invoice
       for (const accrual of pendingAccruals) {
         await storage.updatePartnerFeeAccrual(accrual.id, {
@@ -9312,7 +9743,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           status: "invoiced",
         });
       }
-      
+
       res.status(201).json(invoice);
     } catch (error) {
       console.error("Generate partner invoice error:", error);
@@ -9341,17 +9772,17 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
+
       const issueDate = new Date();
       const dueDate = new Date(issueDate);
       dueDate.setDate(dueDate.getDate() + 14); // 14 day payment terms
-      
+
       const updated = await storage.updatePartnerInvoice(req.params.id, {
         status: "issued",
         issueDate,
         dueDate,
       });
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Issue partner invoice error:", error);
@@ -9366,13 +9797,13 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
+
       const { amount, paymentMethod, paymentReference, notes, paymentDate } = req.body;
-      
+
       if (!amount || parseFloat(amount) <= 0) {
         return res.status(400).json({ message: "Valid payment amount required" });
       }
-      
+
       // Create payment record
       const payment = await storage.createPartnerInvoicePayment({
         invoiceId: invoice.id,
@@ -9383,19 +9814,19 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         notes,
         paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
       });
-      
+
       // Update invoice amounts
       const newAmountPaid = parseFloat(invoice.amountPaid || "0") + parseFloat(amount);
       const newAmountDue = parseFloat(invoice.totalAmount) - newAmountPaid;
       const newStatus = newAmountDue <= 0 ? "paid" : "partial";
-      
+
       await storage.updatePartnerInvoice(invoice.id, {
         amountPaid: newAmountPaid.toFixed(2),
         amountDue: Math.max(0, newAmountDue).toFixed(2),
         status: newStatus,
         paidDate: newAmountDue <= 0 ? new Date() : undefined,
       });
-      
+
       // Update accrual statuses to paid
       if (newAmountDue <= 0) {
         const accruals = await storage.getPartnerFeeAccruals(invoice.partnerId);
@@ -9404,12 +9835,12 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           await storage.updatePartnerFeeAccrual(accrual.id, { status: "paid" });
         }
       }
-      
+
       // Create income transaction in finance system
       try {
         const partner = await storage.getTradePartner(invoice.partnerId);
         const incomeCategory = await storage.getFinancialCategoryByName("Partner Fee Payments");
-        
+
         await storage.createFinancialTransaction({
           date: payment.paymentDate || new Date(),
           type: "income",
@@ -9423,7 +9854,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       } catch (financeError) {
         console.error("Failed to create finance transaction for partner payment:", financeError);
       }
-      
+
       res.status(201).json(payment);
     } catch (error) {
       console.error("Record partner invoice payment error:", error);
@@ -9449,11 +9880,11 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
+
       if (invoice.status !== "draft") {
         return res.status(400).json({ message: "Can only delete draft invoices" });
       }
-      
+
       // Unlink accruals from invoice
       const accruals = await storage.getPartnerFeeAccruals(invoice.partnerId);
       const invoiceAccruals = accruals.filter(a => a.invoiceId === invoice.id);
@@ -9463,7 +9894,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           status: "pending",
         });
       }
-      
+
       await storage.deletePartnerInvoice(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -9504,16 +9935,16 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!invoice || invoice.partnerId !== partner.id) {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
+
       if (invoice.status === "draft") {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
+
       const accruals = await storage.getPartnerFeeAccruals(partner.id);
       const invoiceAccruals = accruals.filter(a => a.invoiceId === invoice.id);
       const jobs = await storage.getJobs();
       const payments = await storage.getPartnerInvoicePayments(invoice.id);
-      
+
       const enrichedAccruals = invoiceAccruals.map(a => {
         const job = jobs.find(j => j.id === a.jobId);
         return {
@@ -9521,7 +9952,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           job: job ? { id: job.id, jobNumber: job.jobNumber, serviceType: job.serviceType } : null,
         };
       });
-      
+
       res.json({
         ...invoice,
         lineItems: enrichedAccruals,
@@ -9544,20 +9975,20 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const accruals = await storage.getPartnerFeeAccruals(partner.id);
       const invoices = await storage.getPartnerInvoices(partner.id);
-      
+
       // Pending accruals (not yet invoiced)
       const pendingAccruals = accruals.filter(a => a.status === "pending");
       const pendingTotal = pendingAccruals.reduce((sum, a) => sum + parseFloat(a.feeAmount), 0);
-      
+
       // Invoiced but unpaid
-      const unpaidInvoices = invoices.filter(inv => 
+      const unpaidInvoices = invoices.filter(inv =>
         inv.status !== "paid" && inv.status !== "draft"
       );
       const invoicedTotal = unpaidInvoices.reduce((sum, inv) => sum + parseFloat(inv.amountDue || "0"), 0);
-      
+
       // Total owed
       const totalOwed = pendingTotal + invoicedTotal;
-      
+
       res.json({
         pendingFees: pendingTotal.toFixed(2),
         pendingCount: pendingAccruals.length,
@@ -9577,7 +10008,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.post("/api/employee/login", async (req, res) => {
     try {
       const clientIp = req.ip || req.socket.remoteAddress || "unknown";
-      
+
       // Check rate limit
       if (!checkRateLimit(clientIp)) {
         console.log("[employee-login] Rate limited IP:", clientIp);
@@ -9586,7 +10017,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
       const { email, password } = req.body;
       console.log("[employee-login] Attempt for email:", email);
-      
+
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password required" });
       }
@@ -9619,7 +10050,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!isValid) {
         await storage.updateEmployeeCredential(employee.id, {
           failedLoginAttempts: (credential.failedLoginAttempts || 0) + 1,
-          lockedUntil: (credential.failedLoginAttempts || 0) >= 4 
+          lockedUntil: (credential.failedLoginAttempts || 0) >= 4
             ? new Date(Date.now() + 15 * 60 * 1000) : null
         });
         return res.status(401).json({ message: "Invalid credentials" });
@@ -9647,14 +10078,14 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       const isProduction = process.env.NODE_ENV === "production";
       res.cookie("employeeSession", sessionToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: isProduction ? "lax" : "none",
+        secure: isProduction,
+        sameSite: "lax",
         expires: expiresAt,
         path: "/",
       });
 
       console.log("[employee-login] Login successful for:", email);
-      
+
       res.json({
         employee: {
           id: employee.id,
@@ -9814,7 +10245,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const { password, ...employeeData } = req.body;
       const data = insertEmployeeSchema.parse(employeeData);
-      
+
       // Check for existing email
       const existing = await storage.getEmployeeByEmail(data.email);
       if (existing) {
@@ -9847,7 +10278,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const { password, ...updateData } = req.body;
       const employee = await storage.updateEmployee(req.params.id, updateData);
-      
+
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
@@ -9889,7 +10320,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const { newPassword } = req.body;
       const employee = await storage.getEmployee(req.params.id);
-      
+
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
@@ -9900,9 +10331,9 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
       const passwordHash = await bcrypt.hash(newPassword, 10);
       const existing = await storage.getEmployeeCredential(employee.id);
-      
+
       if (existing) {
-        await storage.updateEmployeeCredential(employee.id, { 
+        await storage.updateEmployeeCredential(employee.id, {
           passwordHash,
           mustChangePassword: true,
           failedLoginAttempts: 0,
@@ -9927,7 +10358,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.get("/api/time-entries", isAdminAuthenticated, async (req, res) => {
     try {
       const { employeeId, startDate, endDate } = req.query;
-      
+
       let entries;
       if (employeeId) {
         entries = await storage.getTimeEntriesByEmployee(employeeId as string);
@@ -9939,7 +10370,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       } else {
         entries = await storage.getTimeEntries();
       }
-      
+
       res.json(entries);
     } catch (error) {
       console.error("Get time entries error:", error);
@@ -10054,7 +10485,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       const clockOut = new Date();
       const clockIn = new Date(activeEntry.clockIn);
       const breakMinutes = req.body.breakMinutes || 0;
-      
+
       const totalMinutes = (clockOut.getTime() - clockIn.getTime()) / 60000 - breakMinutes;
       const totalHours = (totalMinutes / 60).toFixed(2);
 
@@ -10147,7 +10578,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.get("/api/payroll-runs", isAdminAuthenticated, async (req, res) => {
     try {
       const { periodId, employeeId } = req.query;
-      
+
       let runs;
       if (periodId) {
         runs = await storage.getPayrollRunsByPeriod(periodId as string);
@@ -10157,7 +10588,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         res.status(400).json({ message: "periodId or employeeId required" });
         return;
       }
-      
+
       res.json(runs);
     } catch (error) {
       console.error("Get payroll runs error:", error);
@@ -10171,7 +10602,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!run) {
         return res.status(404).json({ message: "Payroll run not found" });
       }
-      
+
       const adjustments = await storage.getPayrollAdjustments(run.id);
       res.json({ ...run, adjustments });
     } catch (error) {
@@ -10280,7 +10711,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
       const employees = await storage.getEmployees();
       const activeEmployees = employees.filter(e => e.isActive);
-      
+
       const runs = [];
       for (const employee of activeEmployees) {
         // Get time entries for this period
@@ -10303,7 +10734,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         // Check for existing run
         const existingRuns = await storage.getPayrollRunsByPeriod(period.id);
         const existingRun = existingRuns.find(r => r.employeeId === employee.id);
-        
+
         if (existingRun) {
           const updated = await storage.updatePayrollRun(existingRun.id, {
             regularHours: regularHours.toFixed(2),
@@ -10337,10 +10768,10 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
   // Email endpoints - functions are imported for use in manual email API endpoints
   // Note: Auto-notifications use dynamic imports inline to avoid module ordering issues
-  const { 
-    isEmailConfigured, 
-    sendEmployeeLoginCredentials, 
-    sendClientPortalAccess, 
+  const {
+    isEmailConfigured,
+    sendEmployeeLoginCredentials,
+    sendClientPortalAccess,
     sendPartnerPortalAccess,
     sendJobReminder,
     sendQuoteNotification,
@@ -10354,7 +10785,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.post("/api/email/send-employee-credentials", isAdminAuthenticated, async (req, res) => {
     try {
       const { employeeId, password } = req.body;
-      
+
       if (!employeeId || !password) {
         return res.status(400).json({ message: "Employee ID and password required" });
       }
@@ -10391,7 +10822,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.post("/api/email/send-client-access", isAdminAuthenticated, async (req, res) => {
     try {
       const { contactId } = req.body;
-      
+
       if (!contactId) {
         return res.status(400).json({ message: "Contact ID required" });
       }
@@ -10432,7 +10863,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.post("/api/email/send-partner-access", isAdminAuthenticated, async (req, res) => {
     try {
       const { partnerId } = req.body;
-      
+
       if (!partnerId) {
         return res.status(400).json({ message: "Partner ID required" });
       }
@@ -10473,7 +10904,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.post("/api/email/send-job-reminder", isAdminAuthenticated, async (req, res) => {
     try {
       const { email, recipientName, jobTitle, jobAddress, scheduledDate, scheduledTime, notes } = req.body;
-      
+
       if (!email || !recipientName || !jobTitle || !scheduledDate || !scheduledTime) {
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -10502,7 +10933,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.post("/api/email/send-quote-notification", isAdminAuthenticated, async (req, res) => {
     try {
       const { contactId, jobId, quoteAmount } = req.body;
-      
+
       if (!contactId || !jobId || !quoteAmount) {
         return res.status(400).json({ message: "Contact ID, Job ID, and quote amount required" });
       }
@@ -10550,7 +10981,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.post("/api/email/send-generic", isAdminAuthenticated, async (req, res) => {
     try {
       const { to, subject, message, recipientName } = req.body;
-      
+
       if (!to || !subject || !message) {
         return res.status(400).json({ message: "Recipient email, subject, and message required" });
       }
@@ -10831,7 +11262,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
     try {
       const { items, ...templateData } = req.body;
       const template = await storage.createQuoteTemplate(templateData);
-      
+
       // Create template items if provided
       if (items && Array.isArray(items)) {
         for (let i = 0; i < items.length; i++) {
@@ -10842,7 +11273,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           });
         }
       }
-      
+
       const createdItems = await storage.getQuoteTemplateItems(template.id);
       res.status(201).json({ ...template, items: createdItems });
     } catch (error) {
@@ -10858,7 +11289,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!template) {
         return res.status(404).json({ message: "Quote template not found" });
       }
-      
+
       // If items provided, replace all items
       if (items && Array.isArray(items)) {
         await storage.deleteQuoteTemplateItemsByTemplate(req.params.id);
@@ -10870,7 +11301,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           });
         }
       }
-      
+
       const updatedItems = await storage.getQuoteTemplateItems(template.id);
       res.json({ ...template, items: updatedItems });
     } catch (error) {
@@ -10896,13 +11327,13 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!template) {
         return res.status(404).json({ message: "Quote template not found" });
       }
-      
+
       const templateItems = await storage.getQuoteTemplateItems(req.params.templateId);
       const existingItems = await storage.getQuoteItemsByJob(req.params.jobId);
-      const maxSortOrder = existingItems.length > 0 
-        ? Math.max(...existingItems.map(i => i.sortOrder || 0)) + 1 
+      const maxSortOrder = existingItems.length > 0
+        ? Math.max(...existingItems.map(i => i.sortOrder || 0)) + 1
         : 0;
-      
+
       const createdItems = [];
       for (let i = 0; i < templateItems.length; i++) {
         const item = templateItems[i];
@@ -10918,7 +11349,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         });
         createdItems.push(created);
       }
-      
+
       res.status(201).json({ applied: createdItems.length, items: createdItems });
     } catch (error) {
       console.error("Apply template error:", error);
@@ -10933,16 +11364,16 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!catalogItem) {
         return res.status(404).json({ message: "Catalog item not found" });
       }
-      
+
       const existingItems = await storage.getQuoteItemsByJob(req.params.jobId);
-      const maxSortOrder = existingItems.length > 0 
-        ? Math.max(...existingItems.map(i => i.sortOrder || 0)) + 1 
+      const maxSortOrder = existingItems.length > 0
+        ? Math.max(...existingItems.map(i => i.sortOrder || 0)) + 1
         : 0;
-      
+
       const quantity = req.body.quantity || catalogItem.defaultQuantity || "1";
       const unitPrice = req.body.unitPrice || catalogItem.unitPrice;
       const lineTotal = parseFloat(String(quantity)) * parseFloat(String(unitPrice));
-      
+
       const created = await storage.createQuoteItem({
         jobId: req.params.jobId,
         catalogItemId: catalogItem.id,
@@ -10952,7 +11383,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         lineTotal: String(lineTotal),
         sortOrder: maxSortOrder,
       });
-      
+
       res.status(201).json(created);
     } catch (error) {
       console.error("Add catalog item error:", error);
@@ -11034,7 +11465,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (link.status === "revoked") {
         return res.status(410).json({ message: "This link has been revoked" });
       }
-      
+
       // Check expiration
       if (link.expiresAt && new Date(link.expiresAt) < new Date()) {
         return res.status(410).json({ message: "This link has expired" });
@@ -11205,8 +11636,8 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       }
 
       // Create a note with visibility based on party type
-      const visibility = link.partyType === "client" ? "client" : 
-                        link.partyType === "partner" ? "partner" : "internal";
+      const visibility = link.partyType === "client" ? "client" :
+        link.partyType === "partner" ? "partner" : "internal";
 
       const note = await storage.createJobNote({
         jobId: link.jobId,
@@ -11250,7 +11681,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       if (!asset) {
         return res.status(404).json({ message: "Asset not found" });
       }
-      
+
       // Include faults and reminders
       const [faults, reminders] = await Promise.all([
         storage.getAssetFaultsByAsset(req.params.id),
@@ -11275,9 +11706,9 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           assetData[field] = new Date(assetData[field]);
         }
       }
-      
+
       const asset = await storage.createAsset(assetData);
-      
+
       // Auto-create reminders for vehicles
       if (asset.type === 'vehicle') {
         const remindersToCreate = [];
@@ -11320,7 +11751,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           dueDate: asset.warrantyExpiry,
         });
       }
-      
+
       res.status(201).json(asset);
     } catch (error) {
       console.error("Create asset error:", error);
@@ -11339,7 +11770,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
           assetData[field] = new Date(assetData[field]);
         }
       }
-      
+
       const updated = await storage.updateAsset(req.params.id, assetData);
       if (!updated) {
         return res.status(404).json({ message: "Asset not found" });
@@ -11376,7 +11807,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       } else {
         faults = await storage.getAssetFaults();
       }
-      
+
       // Enrich with asset info
       const enriched = await Promise.all(faults.map(async (fault) => {
         const asset = await storage.getAsset(fault.assetId);
@@ -11384,7 +11815,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
         const assignedTo = fault.assignedToId ? await storage.getEmployee(fault.assignedToId) : null;
         return { ...fault, asset, reportedBy, assignedTo };
       }));
-      
+
       res.json(enriched);
     } catch (error) {
       console.error("Get asset faults error:", error);
@@ -11411,7 +11842,7 @@ If you cannot read certain fields, use null for that field. Always try to extrac
   app.post("/api/asset-faults", async (req, res) => {
     try {
       const { assetId, reportedById, title, description, priority } = req.body;
-      
+
       // Get asset info for task title
       const asset = await storage.getAsset(assetId);
       if (!asset) {
@@ -11465,9 +11896,9 @@ If you cannot read certain fields, use null for that field. Always try to extrac
 
       // Sync with linked task
       if (existing.taskId && req.body.status) {
-        const taskStatus = req.body.status === 'open' ? 'pending' : 
-                           req.body.status === 'in_progress' ? 'pending' :
-                           'completed';
+        const taskStatus = req.body.status === 'open' ? 'pending' :
+          req.body.status === 'in_progress' ? 'pending' :
+            'completed';
         await storage.updateTask(existing.taskId, { status: taskStatus });
       }
 
@@ -11507,13 +11938,13 @@ If you cannot read certain fields, use null for that field. Always try to extrac
       } else {
         reminders = await storage.getAssetReminders();
       }
-      
+
       // Enrich with asset info
       const enriched = await Promise.all(reminders.map(async (reminder) => {
         const asset = await storage.getAsset(reminder.assetId);
         return { ...reminder, asset };
       }));
-      
+
       res.json(enriched);
     } catch (error) {
       console.error("Get asset reminders error:", error);
@@ -11583,45 +12014,45 @@ function buildContentPrompt(params: {
   mediaContext?: string;
 }): string {
   let prompt = `Write a ${params.platform} post for ${params.businessName}, a ${params.tradeType} business.\n\n`;
-  
+
   prompt += `Post type: ${params.postType}\n`;
   prompt += `Service to highlight: ${params.service}\n`;
   prompt += `Location: ${params.location}\n`;
   prompt += `Tone: ${params.tone}\n`;
-  
+
   if (params.keywords.length > 0) {
     prompt += `Keywords to include: ${params.keywords.join(", ")}\n`;
   }
-  
+
   if (params.customPhrases.length > 0) {
     prompt += `Try to use these phrases: ${params.customPhrases.join(", ")}\n`;
   }
-  
+
   if (params.blacklistedPhrases.length > 0) {
     prompt += `Do NOT use these phrases: ${params.blacklistedPhrases.join(", ")}\n`;
   }
-  
+
   if (params.preferredCtas.length > 0) {
     prompt += `End with one of these calls-to-action: ${params.preferredCtas.join(" OR ")}\n`;
   }
-  
+
   if (params.hashtags.length > 0) {
     prompt += `Include relevant hashtags from: ${params.hashtags.join(", ")}\n`;
   }
-  
+
   if (params.locationKeywords.length > 0) {
     prompt += `Location keywords to potentially include: ${params.locationKeywords.join(", ")}\n`;
   }
-  
+
   if (params.mediaContext) {
     prompt += `This post will accompany an image of: ${params.mediaContext}\n`;
   }
-  
+
   prompt += `\nRequirements:\n`;
   prompt += `- Keep it concise and engaging\n`;
   prompt += `- Sound authentic and local, not corporate\n`;
   prompt += `- Focus on quality and trust\n`;
-  
+
   if (params.platform === "google_business") {
     prompt += `- Format for Google Business Profile (professional, informative)\n`;
     prompt += `- Include a clear call-to-action\n`;
@@ -11632,7 +12063,7 @@ function buildContentPrompt(params: {
     prompt += `- Format for Instagram (visual-first, lifestyle)\n`;
     prompt += `- Include relevant hashtags at the end\n`;
   }
-  
+
   return prompt;
 }
 
@@ -11640,7 +12071,7 @@ function buildContentPrompt(params: {
 // CHECKLIST MANAGEMENT ROUTES
 // =====================================
 
-export function registerChecklistRoutes(app: Express) {
+export function registerChecklistRoutes(app: Express, isAdminAuthenticated: any) {
   // Checklist Templates CRUD
   app.get("/api/checklist-templates", async (req, res) => {
     try {
@@ -11670,7 +12101,7 @@ export function registerChecklistRoutes(app: Express) {
     try {
       const { items, ...templateData } = req.body;
       const template = await storage.createChecklistTemplate(templateData);
-      
+
       // Create items if provided
       if (items && items.length > 0) {
         for (let i = 0; i < items.length; i++) {
@@ -11681,7 +12112,7 @@ export function registerChecklistRoutes(app: Express) {
           });
         }
       }
-      
+
       const createdItems = await storage.getChecklistItems(template.id);
       res.status(201).json({ ...template, items: createdItems });
     } catch (error) {
@@ -11697,7 +12128,7 @@ export function registerChecklistRoutes(app: Express) {
       if (!updated) {
         return res.status(404).json({ message: "Template not found" });
       }
-      
+
       // If items provided, replace all items
       if (items !== undefined) {
         await storage.deleteChecklistItemsByTemplate(req.params.id);
@@ -11709,7 +12140,7 @@ export function registerChecklistRoutes(app: Express) {
           });
         }
       }
-      
+
       const updatedItems = await storage.getChecklistItems(req.params.id);
       res.json({ ...updated, items: updatedItems });
     } catch (error) {
@@ -11777,7 +12208,7 @@ export function registerChecklistRoutes(app: Express) {
     try {
       const { targetType, targetId, status } = req.query;
       let instances;
-      
+
       if (targetType && targetId) {
         instances = await storage.getChecklistInstancesByTarget(targetType as string, targetId as string);
       } else if (status) {
@@ -11785,7 +12216,7 @@ export function registerChecklistRoutes(app: Express) {
       } else {
         instances = await storage.getChecklistInstances();
       }
-      
+
       res.json(instances);
     } catch (error) {
       console.error("Get checklist instances error:", error);
@@ -11799,15 +12230,15 @@ export function registerChecklistRoutes(app: Express) {
       if (!instance) {
         return res.status(404).json({ message: "Instance not found" });
       }
-      
+
       // Get template and items
       const template = await storage.getChecklistTemplate(instance.templateId);
       const items = template ? await storage.getChecklistItems(template.id) : [];
       const responses = await storage.getChecklistResponses(req.params.id);
       const auditEvents = await storage.getChecklistAuditEvents(req.params.id);
-      
-      res.json({ 
-        ...instance, 
+
+      res.json({
+        ...instance,
         template,
         items,
         responses,
@@ -11823,12 +12254,12 @@ export function registerChecklistRoutes(app: Express) {
   app.post("/api/checklist-instances", async (req, res) => {
     try {
       const { templateId, targetType, targetId, assignedToId, dueDate } = req.body;
-      
+
       const template = await storage.getChecklistTemplate(templateId);
       if (!template) {
         return res.status(404).json({ message: "Template not found" });
       }
-      
+
       const instance = await storage.createChecklistInstance({
         templateId,
         targetType: targetType || template.targetType,
@@ -11837,7 +12268,7 @@ export function registerChecklistRoutes(app: Express) {
         dueDate: dueDate ? new Date(dueDate) : undefined,
         status: 'pending',
       });
-      
+
       // Create audit event
       const employee = (req as any).employee;
       await storage.createChecklistAuditEvent({
@@ -11846,7 +12277,7 @@ export function registerChecklistRoutes(app: Express) {
         actorId: employee?.id,
         actorName: employee ? `${employee.firstName} ${employee.lastName}` : 'System',
       });
-      
+
       res.status(201).json(instance);
     } catch (error) {
       console.error("Create checklist instance error:", error);
@@ -11873,17 +12304,17 @@ export function registerChecklistRoutes(app: Express) {
     try {
       const { itemId, value, textValue, numberValue, signatureData, note, photoUrl } = req.body;
       const employee = (req as any).employee;
-      
+
       const instance = await storage.getChecklistInstance(req.params.id);
       if (!instance) {
         return res.status(404).json({ message: "Instance not found" });
       }
-      
+
       // Get the item to determine its type
       const template = await storage.getChecklistTemplate(instance.templateId);
       const items = template ? await storage.getChecklistItems(template.id) : [];
       const item = items.find(i => i.id === itemId);
-      
+
       // Determine if the item has a valid response based on its type
       const hasValidResponse = (itemType: string): boolean => {
         switch (itemType) {
@@ -11895,10 +12326,10 @@ export function registerChecklistRoutes(app: Express) {
           default: return value === true;
         }
       };
-      
+
       // Since we're using checkbox-style items, just check value
       const isComplete = value === true;
-      
+
       // Upsert response with all type-specific fields
       const response = await storage.upsertChecklistResponse({
         instanceId: req.params.id,
@@ -11912,7 +12343,7 @@ export function registerChecklistRoutes(app: Express) {
         completedById: employee?.id,
         completedAt: isComplete ? new Date() : undefined,
       });
-      
+
       // Create audit event
       await storage.createChecklistAuditEvent({
         instanceId: req.params.id,
@@ -11921,10 +12352,10 @@ export function registerChecklistRoutes(app: Express) {
         actorName: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown',
         metadata: JSON.stringify({ itemId }),
       });
-      
+
       // Check if all required items are completed
       const responses = await storage.getChecklistResponses(req.params.id);
-      
+
       // For each required item, check if its corresponding response has valid data
       const requiredItems = items.filter(i => i.isRequired);
       const isItemCompleted = (itemToCheck: typeof items[0]): boolean => {
@@ -11934,7 +12365,7 @@ export function registerChecklistRoutes(app: Express) {
         return resp.value === true;
       };
       const allRequiredCompleted = requiredItems.every(i => isItemCompleted(i));
-      
+
       // Update instance status
       if (allRequiredCompleted && instance.status !== 'completed') {
         await storage.updateChecklistInstance(req.params.id, {
@@ -11942,7 +12373,7 @@ export function registerChecklistRoutes(app: Express) {
           completedAt: new Date(),
           completedById: employee?.id,
         });
-        
+
         await storage.createChecklistAuditEvent({
           instanceId: req.params.id,
           action: 'completed',
@@ -11954,7 +12385,7 @@ export function registerChecklistRoutes(app: Express) {
           status: 'in_progress',
         });
       }
-      
+
       res.json(response);
     } catch (error) {
       console.error("Respond to checklist error:", error);
@@ -12333,20 +12764,20 @@ export function registerChecklistRoutes(app: Express) {
       if (!employee) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Validate request body using Zod schema
       const messageSchema = insertInternalMessageSchema.omit({ senderId: true }).extend({
         content: z.string().min(1, "content is required").max(10000, "content exceeds maximum length"),
       });
-      
+
       const validation = messageSchema.safeParse(req.body);
       if (!validation.success) {
-        return res.status(400).json({ 
-          message: "Validation failed", 
-          errors: validation.error.errors 
+        return res.status(400).json({
+          message: "Validation failed",
+          errors: validation.error.errors
         });
       }
-      
+
       const message = await storage.createInternalMessage({
         ...validation.data,
         senderId: employee.id,
@@ -12388,22 +12819,22 @@ export function registerChecklistRoutes(app: Express) {
       if (!employee) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       // Validate request body using Zod schema
       const chatSchema = insertJobChatMessageSchema
         .omit({ jobId: true, employeeId: true })
         .extend({
           content: z.string().min(1, "content is required").max(10000, "content exceeds maximum length"),
         });
-      
+
       const validation = chatSchema.safeParse(req.body);
       if (!validation.success) {
-        return res.status(400).json({ 
-          message: "Validation failed", 
-          errors: validation.error.errors 
+        return res.status(400).json({
+          message: "Validation failed",
+          errors: validation.error.errors
         });
       }
-      
+
       const message = await storage.createJobChatMessage({
         ...validation.data,
         jobId: req.params.jobId,
@@ -12487,8 +12918,8 @@ export function registerChecklistRoutes(app: Express) {
       }
 
       const [
-        messages, 
-        unreadCount, 
+        messages,
+        unreadCount,
         recentActivity,
         myTasks,
         myChecklists
@@ -12515,7 +12946,7 @@ export function registerChecklistRoutes(app: Express) {
   });
 
   // ==================== Captured Products (Supplier Product Finder) ====================
-  
+
   // Get captured products - optionally filter by employee
   app.get("/api/captured-products", async (req, res) => {
     try {
@@ -12587,7 +13018,7 @@ export function registerChecklistRoutes(app: Express) {
       if (!employee) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const { url } = req.body;
       if (!url || typeof url !== 'string') {
         return res.status(400).json({ message: "URL is required" });
@@ -12636,15 +13067,15 @@ export function registerChecklistRoutes(app: Express) {
       }
 
       if (!supplierName) {
-        return res.status(400).json({ 
-          message: "This supplier is not supported. Supported suppliers: Screwfix, B&Q, Toolstation, Wickes, Travis Perkins, Howdens, Selco, Jewson" 
+        return res.status(400).json({
+          message: "This supplier is not supported. Supported suppliers: Screwfix, B&Q, Toolstation, Wickes, Travis Perkins, Howdens, Selco, Jewson"
         });
       }
 
       // Fetch the page with timeout (10 seconds)
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
+
       let fetchResponse: globalThis.Response;
       try {
         fetchResponse = await globalThis.fetch(url, {
@@ -12674,7 +13105,7 @@ export function registerChecklistRoutes(app: Express) {
         .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/\s+/g, ' ')
         .trim();
-      
+
       // Truncate to ~15k chars to stay within token limits
       if (cleanedHtml.length > 15000) {
         cleanedHtml = cleanedHtml.substring(0, 15000);
@@ -12720,13 +13151,13 @@ ${cleanedHtml}`;
       let productTitle = '';
       let price = '';
       let sku = '';
-      
+
       try {
         const parsed = JSON.parse(aiResponse);
         productTitle = typeof parsed.title === 'string' ? parsed.title.trim() : '';
         price = parsed.price != null ? String(parsed.price).replace(/[£$,]/g, '').trim() : '';
         sku = typeof parsed.sku === 'string' ? parsed.sku.trim() : '';
-        
+
         // Validate we got at least a title
         if (!productTitle) {
           console.warn('[scrape] AI returned empty title, extraction may have failed');
@@ -12818,12 +13249,12 @@ ${cleanedHtml}`;
       if (!employee) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const capturedProduct = await storage.getCapturedProduct(req.params.id);
       if (!capturedProduct) {
         return res.status(404).json({ message: "Captured product not found" });
       }
-      
+
       const { jobId } = req.body;
       if (!jobId) {
         return res.status(400).json({ message: "Job ID is required" });
@@ -12834,13 +13265,13 @@ ${cleanedHtml}`;
       const markupPercent = parseFloat(capturedProduct.markupPercent || "20");
       const quantity = parseFloat(capturedProduct.quantity || "1");
       const unitPriceWithMarkup = basePrice * (1 + markupPercent / 100);
-      
+
       // Create quote item - include unit and supplier info in description
       const lineTotal = (unitPriceWithMarkup * quantity).toFixed(2);
-      const descWithDetails = capturedProduct.sku 
+      const descWithDetails = capturedProduct.sku
         ? `${capturedProduct.productTitle} (${capturedProduct.unit || 'each'}) - SKU: ${capturedProduct.sku} | From: ${capturedProduct.supplierName || 'Unknown Supplier'}`
         : `${capturedProduct.productTitle} (${capturedProduct.unit || 'each'}) - From: ${capturedProduct.supplierName || 'Unknown Supplier'}`;
-      
+
       const quoteItem = await storage.createQuoteItem({
         jobId,
         description: descWithDetails,
@@ -12848,13 +13279,13 @@ ${cleanedHtml}`;
         unitPrice: unitPriceWithMarkup.toFixed(2),
         lineTotal,
       });
-      
+
       // Update captured product status
       await storage.updateCapturedProduct(req.params.id, {
         status: "added_to_quote",
         jobId,
       });
-      
+
       res.json({ quoteItem, capturedProduct: await storage.getCapturedProduct(req.params.id) });
     } catch (error) {
       console.error("Add to quote error:", error);
@@ -12869,14 +13300,14 @@ ${cleanedHtml}`;
       if (!employee) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const capturedProduct = await storage.getCapturedProduct(req.params.id);
       if (!capturedProduct) {
         return res.status(404).json({ message: "Captured product not found" });
       }
-      
+
       const { categoryId } = req.body;
-      
+
       // Create catalog item
       const catalogItem = await storage.createCatalogItem({
         name: capturedProduct.productTitle,
@@ -12886,7 +13317,7 @@ ${cleanedHtml}`;
         unitPrice: capturedProduct.price || "0",
         categoryId: categoryId || undefined,
       });
-      
+
       // If we have a supplier, link it
       if (capturedProduct.supplierId) {
         await storage.createSupplierCatalogItem({
@@ -12897,13 +13328,13 @@ ${cleanedHtml}`;
           notes: capturedProduct.productUrl ? `Product URL: ${capturedProduct.productUrl}` : undefined,
         });
       }
-      
+
       // Update captured product status
       await storage.updateCapturedProduct(req.params.id, {
         status: "saved_to_catalog",
         catalogItemId: catalogItem.id,
       });
-      
+
       res.json({ catalogItem, capturedProduct: await storage.getCapturedProduct(req.params.id) });
     } catch (error) {
       console.error("Save to catalog error:", error);
@@ -12952,7 +13383,7 @@ ${cleanedHtml}`;
 
       const { getSearchSourceStatus } = await import('./suppliers');
       const sources = getSearchSourceStatus();
-      
+
       res.json({ sources });
     } catch (error) {
       console.error("Supplier status error:", error);
@@ -13326,7 +13757,7 @@ ${cleanedHtml}`;
           (a) =>
             a.followUpDate &&
             new Date(a.followUpDate).toDateString() ===
-              new Date(Date.now() + 24 * 60 * 60 * 1000).toDateString()
+            new Date(Date.now() + 24 * 60 * 60 * 1000).toDateString()
         ),
       });
     } catch (error) {
@@ -13341,25 +13772,25 @@ ${cleanedHtml}`;
   app.get("/api/checklist-analytics", async (req, res) => {
     try {
       const { dateFrom, dateTo } = req.query;
-      
+
       // Batch load all data upfront for efficiency
       const [allInstances, templates] = await Promise.all([
         storage.getChecklistInstances(),
         storage.getChecklistTemplates(),
       ]);
-      
+
       // Preload all items for all templates in parallel
       const allItemsMap: Record<string, Awaited<ReturnType<typeof storage.getChecklistItems>>> = {};
       await Promise.all(templates.map(async (t) => {
         allItemsMap[t.id] = await storage.getChecklistItems(t.id);
       }));
-      
+
       // Preload all responses for all instances in parallel
       const allResponsesMap: Record<string, Awaited<ReturnType<typeof storage.getChecklistResponses>>> = {};
       await Promise.all(allInstances.map(async (inst) => {
         allResponsesMap[inst.id] = await storage.getChecklistResponses(inst.id);
       }));
-      
+
       // Filter by date range if provided
       let instances = allInstances;
       if (dateFrom) {
@@ -13371,20 +13802,20 @@ ${cleanedHtml}`;
         to.setHours(23, 59, 59, 999);
         instances = instances.filter(i => i.createdAt && new Date(i.createdAt) <= to);
       }
-      
+
       // Overall completion metrics
       const totalInstances = instances.length;
       const completedInstances = instances.filter(i => i.status === 'completed');
       const pendingInstances = instances.filter(i => i.status === 'pending');
       const inProgressInstances = instances.filter(i => i.status === 'in_progress');
-      const overdueInstances = instances.filter(i => 
+      const overdueInstances = instances.filter(i =>
         i.status !== 'completed' && i.dueDate && new Date(i.dueDate) < new Date()
       );
-      
-      const overallCompletionRate = totalInstances > 0 
-        ? Math.round((completedInstances.length / totalInstances) * 100) 
+
+      const overallCompletionRate = totalInstances > 0
+        ? Math.round((completedInstances.length / totalInstances) * 100)
         : 0;
-      
+
       // Calculate average completion time (from creation to completion)
       const completionTimes = completedInstances
         .filter(i => i.completedAt && i.createdAt)
@@ -13396,24 +13827,24 @@ ${cleanedHtml}`;
       const avgCompletionTimeHours = completionTimes.length > 0
         ? Math.round(completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length * 10) / 10
         : 0;
-      
+
       // Per-template analytics (using preloaded data)
       const templateAnalytics = templates.map((template) => {
         const templateInstances = instances.filter(i => i.templateId === template.id);
         const templateCompleted = templateInstances.filter(i => i.status === 'completed');
-        const templateOverdue = templateInstances.filter(i => 
+        const templateOverdue = templateInstances.filter(i =>
           i.status !== 'completed' && i.dueDate && new Date(i.dueDate) < new Date()
         );
-        
+
         const items = allItemsMap[template.id] || [];
-        
+
         // Track completion counts per item
         // Count responses that exist for each item (not all instances, just those with responses)
         const itemCompletionCounts: Record<string, { completed: number; responded: number; label: string }> = {};
         for (const item of items) {
           itemCompletionCounts[item.id] = { completed: 0, responded: 0, label: item.label };
         }
-        
+
         // Count completions from preloaded responses
         for (const instance of templateInstances) {
           const responses = allResponsesMap[instance.id] || [];
@@ -13426,7 +13857,7 @@ ${cleanedHtml}`;
             }
           }
         }
-        
+
         // Find bottleneck items (lowest completion rates among items that have responses)
         const itemStats = Object.entries(itemCompletionCounts)
           .filter(([_, stats]) => stats.responded > 0)
@@ -13438,9 +13869,9 @@ ${cleanedHtml}`;
             total: stats.responded,
           }))
           .sort((a, b) => a.completionRate - b.completionRate);
-        
+
         const bottleneckItems = itemStats.slice(0, 3);
-        
+
         return {
           templateId: template.id,
           templateName: template.name,
@@ -13449,38 +13880,38 @@ ${cleanedHtml}`;
           totalInstances: templateInstances.length,
           completedInstances: templateCompleted.length,
           overdueInstances: templateOverdue.length,
-          completionRate: templateInstances.length > 0 
-            ? Math.round((templateCompleted.length / templateInstances.length) * 100) 
+          completionRate: templateInstances.length > 0
+            ? Math.round((templateCompleted.length / templateInstances.length) * 100)
             : 0,
           bottleneckItems,
         };
       });
-      
+
       // Completion trends (last 30 days) - use immutable dates
       const now = new Date();
       now.setHours(0, 0, 0, 0);
       const dailyTrends: { date: string; completed: number; created: number }[] = [];
-      
+
       for (let i = 30; i >= 0; i--) {
         const day = new Date(now);
         day.setDate(day.getDate() - i);
         const dateStr = day.toISOString().split('T')[0];
-        
+
         const created = instances.filter(i => {
           if (!i.createdAt) return false;
           const d = new Date(i.createdAt);
           return d.toISOString().split('T')[0] === dateStr;
         }).length;
-        
+
         const completed = instances.filter(i => {
           if (!i.completedAt) return false;
           const d = new Date(i.completedAt);
           return d.toISOString().split('T')[0] === dateStr;
         }).length;
-        
+
         dailyTrends.push({ date: dateStr, completed, created });
       }
-      
+
       // By target type breakdown
       const targetTypeBreakdown = ['job', 'job_emergency', 'asset_tool', 'asset_vehicle', 'payroll', 'team_paid', 'general'].map(targetType => {
         const typeInstances = instances.filter(i => i.targetType === targetType);
@@ -13489,12 +13920,12 @@ ${cleanedHtml}`;
           targetType,
           total: typeInstances.length,
           completed: typeCompleted.length,
-          completionRate: typeInstances.length > 0 
-            ? Math.round((typeCompleted.length / typeInstances.length) * 100) 
+          completionRate: typeInstances.length > 0
+            ? Math.round((typeCompleted.length / typeInstances.length) * 100)
             : 0,
         };
       }).filter(t => t.total > 0);
-      
+
       res.json({
         overview: {
           totalInstances,
@@ -13512,6 +13943,205 @@ ${cleanedHtml}`;
     } catch (error) {
       console.error("Checklist analytics error:", error);
       res.status(500).json({ message: "Failed to get checklist analytics" });
+    }
+  });
+
+
+  // ==================== PAYROLL ====================
+
+  app.get("/api/pay-periods", isAdminAuthenticated, async (req, res) => {
+    try {
+      const periods = await storage.getPayPeriods();
+      res.json(periods);
+    } catch (error) {
+      console.error("Get pay periods error:", error);
+      res.status(500).json({ message: "Failed to get pay periods" });
+    }
+  });
+
+  app.get("/api/pay-periods/:id", isAdminAuthenticated, async (req, res) => {
+    try {
+      const period = await storage.getPayPeriod(req.params.id);
+      if (!period) return res.status(404).json({ message: "Pay period not found" });
+      res.json(period);
+    } catch (error) {
+      console.error("Get pay period error:", error);
+      res.status(500).json({ message: "Failed to get pay period" });
+    }
+  });
+
+  app.post("/api/pay-periods", isAdminAuthenticated, async (req, res) => {
+    try {
+      const data = insertPayPeriodSchema.parse(req.body);
+      const period = await storage.createPayPeriod(data);
+      res.status(201).json(period);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create pay period error:", error);
+      res.status(500).json({ message: "Failed to create pay period" });
+    }
+  });
+
+  app.get("/api/payroll/runs", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { employeeId, periodId } = req.query;
+      let runs;
+
+      if (periodId && typeof periodId === 'string') {
+        runs = await storage.getPayrollRunsByPeriod(periodId);
+      } else if (employeeId && typeof employeeId === 'string') {
+        runs = await storage.getPayrollRunsByEmployee(employeeId);
+      } else {
+        runs = [];
+      }
+      res.json(runs);
+    } catch (error) {
+      console.error("Get payroll runs error:", error);
+      res.status(500).json({ message: "Failed to get payroll runs" });
+    }
+  });
+
+  app.get("/api/payroll/runs/:id", isAdminAuthenticated, async (req, res) => {
+    try {
+      const run = await storage.getPayrollRun(req.params.id);
+      if (!run) return res.status(404).json({ message: "Payroll run not found" });
+
+      // Hydrate with adjustments
+      const adjustments = await storage.getPayrollAdjustments(run.id);
+
+      res.json({ ...run, adjustments });
+    } catch (error) {
+      console.error("Get payroll run error:", error);
+      res.status(500).json({ message: "Failed to get payroll run" });
+    }
+  });
+
+  app.post("/api/payroll/runs", isAdminAuthenticated, async (req, res) => {
+    try {
+      const data = insertPayrollRunSchema.parse(req.body);
+
+      // 1. Create the payroll run
+      const run = await storage.createPayrollRun(data);
+
+      // 2. Find pending commissions for this employee
+      const pendingCommissions = await storage.getPendingSalesCommissions(data.employeeId);
+
+      let totalCommissionAmount = 0;
+      const createdAdjustments = [];
+
+      // 3. Process commissions
+      if (pendingCommissions.length > 0) {
+        console.log(`[payroll] Found ${pendingCommissions.length} pending commissions for employee ${data.employeeId}`);
+
+        for (const commission of pendingCommissions) {
+          // Update commission status
+          await storage.updateSalesCommission(commission.id, {
+            status: 'approved',
+            payrollRunId: run.id,
+            notes: (commission.notes || '') + ` (Proccessed in run ${run.id})`
+          });
+
+          // Create payroll adjustment
+          const adjustment = await storage.createPayrollAdjustment({
+            payrollRunId: run.id,
+            type: 'bonus',
+            category: 'sales_commission',
+            description: `Commission: ${commission.notes || 'Sales Commission'}`,
+            amount: commission.amount
+          });
+
+          createdAdjustments.push(adjustment);
+          totalCommissionAmount += Number(commission.amount);
+        }
+
+        // 4. Update payroll run totals with commissions
+        const currentBonuses = Number(run.totalBonuses || 0);
+        const currentGross = Number(run.grossPay);
+        const currentNet = Number(run.netPay);
+
+        const newTotalBonuses = currentBonuses + totalCommissionAmount;
+        const newGross = currentGross + totalCommissionAmount;
+        const newNet = currentNet + totalCommissionAmount; // Should ideally recalculate tax/deductions
+
+        await storage.updatePayrollRun(run.id, {
+          totalBonuses: newTotalBonuses.toFixed(2),
+          grossPay: newGross.toFixed(2),
+          netPay: newNet.toFixed(2)
+        });
+
+        // Refetch updated run
+        const updatedRun = await storage.getPayrollRun(run.id);
+        return res.status(201).json({ ...updatedRun, adjustments: createdAdjustments });
+      }
+
+      res.status(201).json(run);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create payroll run error:", error);
+      res.status(500).json({ message: "Failed to create payroll run" });
+    }
+  });
+
+
+  app.get("/api/sales-commissions", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { employeeId, status } = req.query;
+
+
+      let commissions = [];
+      if (employeeId && typeof employeeId === 'string') {
+        commissions = await storage.getSalesCommissionsByEmployee(employeeId);
+      } else {
+        commissions = await storage.getSalesCommissions();
+      }
+
+      if (status && typeof status === 'string') {
+        commissions = commissions.filter(c => c.status === status);
+      }
+
+      res.json(commissions);
+    } catch (error) {
+      console.error("Get commissions error:", error);
+      res.status(500).json({ message: "Failed to get commissions" });
+    }
+  });
+
+  app.patch("/api/sales-commissions/:id", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { status, notes } = req.body;
+      const updated = await storage.updateSalesCommission(req.params.id, { status, notes });
+      if (!updated) return res.status(404).json({ message: "Commission not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Update commission error:", error);
+      res.status(500).json({ message: "Failed to update commission" });
+    }
+  });
+
+  // ==================== PUBLIC PARTNER SIGNUP ====================
+  app.post("/api/public/partner-signup", async (req, res) => {
+    try {
+      // Set status to applicant and isActive to false by default for new signups
+      const data = insertTradePartnerSchema.parse({
+        ...req.body,
+        status: "applicant",
+        isActive: false,
+      });
+
+      const partner = await storage.createTradePartner(data);
+      console.log(`[partner-signup] New applicant created: ${partner.businessName} (${partner.id})`);
+
+      res.status(201).json(partner);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Partner signup error:", error);
+      res.status(500).json({ message: "Failed to process signup" });
     }
   });
 

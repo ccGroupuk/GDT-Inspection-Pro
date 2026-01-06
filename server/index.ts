@@ -84,15 +84,22 @@ app.use((req, res, next) => {
 (async () => {
   try {
     console.log("[startup] Beginning server initialization...");
-    
+
     // Seed production data (ensures admin account exists)
     console.log("[startup] Seeding production data...");
     await seedProductionData();
-    
+
+    // Verify AI config
+    if (process.env.GEMINI_API_KEY) {
+      console.log("[startup] ✅ Gemini API Key detected.");
+    } else {
+      console.warn("[startup] ⚠️ GEMINI_API_KEY not found in environment. AI features will be disabled.");
+    }
+
     // Seed Help Center articles
     console.log("[startup] Seeding help center...");
     await seedHelpCenter();
-    
+
     console.log("[startup] Registering routes...");
     await registerRoutes(httpServer, app);
 
@@ -121,12 +128,11 @@ app.use((req, res, next) => {
     // It is the only port that is not firewalled.
     const port = parseInt(process.env.PORT || "5000", 10);
     console.log(`[startup] Starting HTTP server on port ${port}...`);
-    
+
     httpServer.listen(
       {
         port,
         host: "0.0.0.0",
-        reusePort: true,
       },
       () => {
         log(`serving on port ${port}`);

@@ -1,0 +1,1 @@
+ALTER TABLE "trade_partners" ADD COLUMN "status" text DEFAULT 'active' NOT NULL;

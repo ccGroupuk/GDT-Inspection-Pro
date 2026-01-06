@@ -38,14 +38,14 @@ export default function Jobs() {
 
   const filteredJobs = jobs.filter(job => {
     const contact = getContact(job.contactId);
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       job.jobNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       contact?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.jobPostcode.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.serviceType.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesDelivery = deliveryFilter === "all" || job.deliveryType === deliveryFilter;
-    
+
     return matchesSearch && matchesDelivery;
   });
 
@@ -137,12 +137,11 @@ export default function Jobs() {
                   const stageJobs = filteredJobs.filter(j => j.status === stage.value);
                   return (
                     <div key={stage.value} className="flex flex-col w-64 sm:w-72 shrink-0">
-                      <div className="flex items-center justify-between gap-2 mb-3 px-1">
+                      <div className={`flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-lg shadow-sm ${stage.color} text-white`}>
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${stage.color}`} />
-                          <span className="text-sm font-medium truncate">{stage.label}</span>
+                          <span className="text-sm font-bold truncate">{stage.label}</span>
                         </div>
-                        <Badge variant="secondary" className="text-xs shrink-0">
+                        <Badge variant="secondary" className="text-xs shrink-0 bg-white/20 text-white hover:bg-white/30 border-0">
                           {stageJobs.length}
                         </Badge>
                       </div>

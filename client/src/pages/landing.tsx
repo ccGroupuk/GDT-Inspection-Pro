@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, Users, Briefcase, Clock } from "lucide-react";
+import { Building2, Users, Briefcase, Clock, Sparkles, Handshake } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Landing() {
@@ -87,6 +87,44 @@ export default function Landing() {
               <Link href="/partner-portal/login">
                 <Button className="w-full" variant="outline" data-testid="button-partner-login">
                   Partner Login
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card className="hover-elevate bg-primary/5 border-primary/20">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-6 w-6 text-primary" />
+                <CardTitle>New Client Inquiry</CardTitle>
+              </div>
+              <CardDescription>
+                Interested in working with us? Request a custom quote for your project.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/enquiry">
+                <Button className="w-full shadow-lg" data-testid="button-request-quote">
+                  Get a Quote
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card className="hover-elevate bg-primary/5 border-primary/20">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Handshake className="h-6 w-6 text-primary" />
+                <CardTitle>Join our Trade Network</CardTitle>
+              </div>
+              <CardDescription>
+                Are you a skilled tradesperson? Apply to join our network of trusted partners.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/partner-onboarding">
+                <Button className="w-full shadow-lg" variant="outline" data-testid="button-partner-onboarding">
+                  Apply Now
                 </Button>
               </Link>
             </CardContent>

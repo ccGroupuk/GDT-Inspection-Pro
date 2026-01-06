@@ -19,6 +19,9 @@ import Contacts from "@/pages/contacts";
 import Partners from "@/pages/partners";
 import Tasks from "@/pages/tasks";
 import Finance from "@/pages/finance";
+import Payroll from "@/pages/payroll";
+import PayrollDetail from "@/pages/payroll-detail";
+import Commissions from "@/pages/commissions";
 import CalendarPage from "@/pages/calendar";
 import Settings from "@/pages/settings";
 import SEOPowerHouse from "@/pages/seo";
@@ -67,6 +70,8 @@ import DailyActivities from "@/pages/daily-activities";
 import PartnerInvoicing from "@/pages/partner-invoicing";
 import AIBridge from "@/pages/ai-bridge";
 import AgentInbox from "@/pages/agent-inbox";
+import EnquiryPage from "@/pages/enquiry";
+import PartnerOnboardingPage from "@/pages/partner-onboarding";
 
 function AdminRouter() {
   return (
@@ -82,6 +87,9 @@ function AdminRouter() {
       <Route path="/tasks" component={Tasks} />
       <Route path="/calendar" component={CalendarPage} />
       <Route path="/finance" component={Finance} />
+      <Route path="/payroll" component={Payroll} />
+      <Route path="/payroll/:id" component={PayrollDetail} />
+      <Route path="/commissions" component={Commissions} />
       <Route path="/partner-invoicing" component={PartnerInvoicing} />
       <Route path="/employees" component={EmployeesAdmin} />
       <Route path="/employees/:employeeId/portal" component={EmployeePortalAdminView} />
@@ -242,6 +250,8 @@ function App() {
 
   const getContent = () => {
     if (isLandingPage) return <Landing />;
+    if (location === "/enquiry") return <EnquiryPage />;
+    if (location === "/partner-onboarding") return <PartnerOnboardingPage />;
     if (isClientPortalLogin) return <ClientPortalLogin />;
     if (isJobHubRoute) return <Route path="/job-hub/:token" component={JobHub} />;
     if (isPartnerPortalRoute) return <PartnerPortalRouter />;

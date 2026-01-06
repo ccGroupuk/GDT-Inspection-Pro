@@ -11,8 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { usePartnerPortalAuth } from "@/hooks/use-partner-portal-auth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
-import { 
-  Briefcase, MapPin, User, Phone, Mail, LogOut, Loader2, 
+import {
+  Briefcase, MapPin, User, Phone, Mail, LogOut, Loader2,
   ArrowLeft, CheckCircle2, Circle, FileText, MessageSquare, Image,
   Siren, AlertTriangle, CheckCircle, XCircle, Clock, Calendar, Banknote
 } from "lucide-react";
@@ -66,21 +66,23 @@ export default function PartnerPortalJobDetail() {
   const [, setLocation] = useLocation();
   const { jobId } = useParams<{ jobId: string }>();
   const { toast } = useToast();
-  
+
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [completeJobDialogOpen, setCompleteJobDialogOpen] = useState(false);
+  const [jobCompletionNotes, setJobCompletionNotes] = useState("");
   const [totalCollected, setTotalCollected] = useState<string>("");
   const [completionNotes, setCompletionNotes] = useState("");
-  
+
   // Accept/Decline job state
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
-  
+
   // Survey request state
   const [requestSurveyDialogOpen, setRequestSurveyDialogOpen] = useState(false);
   const [surveyPreferredDate, setSurveyPreferredDate] = useState("");
   const [surveyPreferredTime, setSurveyPreferredTime] = useState("");
   const [surveyNotes, setSurveyNotes] = useState("");
-  
+
   // Start date request state
   const [requestStartDateDialogOpen, setRequestStartDateDialogOpen] = useState(false);
   const [proposedStartDate, setProposedStartDate] = useState("");
@@ -186,7 +188,7 @@ export default function PartnerPortalJobDetail() {
     confirmedAt: string | null;
     createdAt: string | null;
   }
-  
+
   const { data: paymentRequests } = useQuery<PaymentRequest[]>({
     queryKey: ["/api/partner-portal/jobs", jobId, "payment-requests"],
     enabled: isAuthenticated && !!jobId,
@@ -276,8 +278,8 @@ export default function PartnerPortalJobDetail() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs", jobId, "emergency-callout"] });
       queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/emergency-callouts"] });
-      toast({ 
-        title: "Emergency Completed", 
+      toast({
+        title: "Emergency Completed",
         description: data.message || `You owe CCC £${data.feeAmount} (${data.feePercent}% callout fee).`
       });
       setCompleteDialogOpen(false);
@@ -343,6 +345,25 @@ export default function PartnerPortalJobDetail() {
     },
     onError: (error: Error) => {
       toast({ title: "Error declining job", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Complete job mutation
+  const completeJobMutation = useMutation({
+    mutationFn: async (notes: string) => {
+      const res = await partnerApiRequest("POST", `/api/partner-portal/jobs/${jobId}/complete`, { completionNotes: notes }, token);
+      if (!res.ok) throw new Error("Failed to complete job");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-portal/jobs"] });
+      toast({ title: "Job Completed", description: "You have marked this job as complete. It is now ready for payment processing." });
+      setCompleteJobDialogOpen(false);
+      setJobCompletionNotes("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error completing job", description: error.message, variant: "destructive" });
     },
   });
 
@@ -455,7 +476,46 @@ export default function PartnerPortalJobDetail() {
                     </div>
                   </CardContent>
                 </Card>
-                
+
+                {/* Job Completion Section */}
+                {job.partnerStatus === "in_progress" || job.partnerStatus === "accepted" ? (
+                  <Card className="border-green-500 border-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        Complete Job
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Is this job 100% complete and ready for sign off? Marking it as complete will notify CCC to process your payment.
+                      </p>
+                      <Button
+                        onClick={() => setCompleteJobDialogOpen(true)}
+                        className="w-full bg-green-600 hover:bg-green-700"
+                        data-testid="button-complete-job"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Sign Off & Complete Job
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : job.partnerStatus === "completed" ? (
+                  <Card className="border-green-500 border-2 bg-green-50 dark:bg-green-900/10">
+                    <CardContent className="py-6">
+                      <div className="flex flex-col items-center justify-center text-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-2">
+                          <CheckCircle className="w-6 h-6 text-green-600" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-green-800 dark:text-green-500">Job Completed</h3>
+                        <p className="text-sm text-green-700 dark:text-green-400">
+                          You have signed off on this job. It is now ready for payment processing.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">Quick Actions</CardTitle>
@@ -468,8 +528,8 @@ export default function PartnerPortalJobDetail() {
                           Create Quote
                         </Button>
                       </Link>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="w-full"
                         onClick={() => setRequestSurveyDialogOpen(true)}
                         data-testid="button-request-survey"
@@ -478,8 +538,8 @@ export default function PartnerPortalJobDetail() {
                         Book Survey
                       </Button>
                       {!scheduleProposal && (
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           className="w-full"
                           onClick={() => setRequestStartDateDialogOpen(true)}
                           data-testid="button-request-start-date"
@@ -508,17 +568,17 @@ export default function PartnerPortalJobDetail() {
                       <div className="p-4 rounded-lg bg-muted/50">
                         <div className="flex items-center justify-between gap-3 mb-3">
                           <span className="text-sm font-medium">
-                            {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" : 
-                             scheduleProposal.proposedByRole === "client" ? "Client Requested Date" : 
-                             "Admin Proposed Date"}
+                            {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" :
+                              scheduleProposal.proposedByRole === "client" ? "Client Requested Date" :
+                                "Admin Proposed Date"}
                           </span>
                           <Badge variant={
                             scheduleProposal.status === "scheduled" ? "default" :
-                            scheduleProposal.status === "pending_partner" ? "secondary" :
-                            scheduleProposal.status === "pending_admin" ? "outline" :
-                            scheduleProposal.status === "pending_client" ? "outline" :
-                            scheduleProposal.status === "partner_declined" || scheduleProposal.status === "admin_declined" ? "destructive" :
-                            "outline"
+                              scheduleProposal.status === "pending_partner" ? "secondary" :
+                                scheduleProposal.status === "pending_admin" ? "outline" :
+                                  scheduleProposal.status === "pending_client" ? "outline" :
+                                    scheduleProposal.status === "partner_declined" || scheduleProposal.status === "admin_declined" ? "destructive" :
+                                      "outline"
                           }>
                             {scheduleProposal.status === "pending_partner" && "Your Response Needed"}
                             {scheduleProposal.status === "pending_admin" && (scheduleProposal.proposedByRole === "partner" ? "Awaiting Admin Response" : "Being Reviewed by Admin")}
@@ -533,20 +593,20 @@ export default function PartnerPortalJobDetail() {
                             {scheduleProposal.status === "scheduled" && "Confirmed"}
                           </Badge>
                         </div>
-                        
+
                         {/* Info message when a client proposed and partner can also respond */}
                         {(scheduleProposal.status === "pending_admin" && scheduleProposal.proposedByRole === "client") && (
                           <p className="text-sm text-muted-foreground mb-3">
                             The client has requested this start date. You can accept, suggest a different date, or wait for the admin to respond.
                           </p>
                         )}
-                        
+
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
                             <p className="text-muted-foreground">
-                              {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" : 
-                               scheduleProposal.proposedByRole === "client" ? "Client's Requested Date" : 
-                               "Proposed Date"}
+                              {scheduleProposal.proposedByRole === "partner" ? "Your Requested Date" :
+                                scheduleProposal.proposedByRole === "client" ? "Client's Requested Date" :
+                                  "Proposed Date"}
                             </p>
                             <p className="font-medium">{new Date(scheduleProposal.proposedStartDate).toLocaleDateString()}</p>
                             {scheduleProposal.proposedEndDate && (
@@ -555,7 +615,7 @@ export default function PartnerPortalJobDetail() {
                               </p>
                             )}
                           </div>
-                          
+
                           {scheduleProposal.counterProposedDate && (
                             <div>
                               <p className="text-muted-foreground">Counter Date</p>
@@ -566,48 +626,48 @@ export default function PartnerPortalJobDetail() {
                             </div>
                           )}
                         </div>
-                        
+
                         {scheduleProposal.adminNotes && (
                           <div className="mt-3 pt-3 border-t">
                             <p className="text-xs text-muted-foreground">Admin Notes: {scheduleProposal.adminNotes}</p>
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Response buttons when admin proposes OR when client proposes (partner can also respond) */}
-                      {(scheduleProposal.status === "pending_partner" || 
+                      {(scheduleProposal.status === "pending_partner" ||
                         (scheduleProposal.status === "pending_admin" && scheduleProposal.proposedByRole === "client")) && (
-                        <div className="flex gap-2 flex-wrap">
-                          <Button
-                            size="sm"
-                            onClick={() => respondToProposalMutation.mutate({ response: "accepted" })}
-                            disabled={respondToProposalMutation.isPending}
-                            data-testid="button-accept-proposed-date"
-                          >
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Accept Date
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setRequestStartDateDialogOpen(true)}
-                            data-testid="button-counter-proposed-date"
-                          >
-                            Suggest Different Date
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => respondToProposalMutation.mutate({ response: "declined" })}
-                            disabled={respondToProposalMutation.isPending}
-                            data-testid="button-decline-proposed-date"
-                          >
-                            <XCircle className="w-3 h-3 mr-1" />
-                            Decline
-                          </Button>
-                        </div>
-                      )}
-                      
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              onClick={() => respondToProposalMutation.mutate({ response: "accepted" })}
+                              disabled={respondToProposalMutation.isPending}
+                              data-testid="button-accept-proposed-date"
+                            >
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Accept Date
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setRequestStartDateDialogOpen(true)}
+                              data-testid="button-counter-proposed-date"
+                            >
+                              Suggest Different Date
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => respondToProposalMutation.mutate({ response: "declined" })}
+                              disabled={respondToProposalMutation.isPending}
+                              data-testid="button-decline-proposed-date"
+                            >
+                              <XCircle className="w-3 h-3 mr-1" />
+                              Decline
+                            </Button>
+                          </div>
+                        )}
+
                       {/* Show request new date button for declined/countered states */}
                       {(scheduleProposal.status === "partner_declined" || scheduleProposal.status === "admin_declined") && (
                         <Button
@@ -619,7 +679,7 @@ export default function PartnerPortalJobDetail() {
                           Request New Date
                         </Button>
                       )}
-                      
+
                       {scheduleProposal.status === "scheduled" && (
                         <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
                           <CheckCircle className="w-4 h-4" />
@@ -652,9 +712,9 @@ export default function PartnerPortalJobDetail() {
                               </div>
                               <Badge variant={
                                 req.approvalStatus === "confirmed" ? "default" :
-                                req.approvalStatus === "marked_paid" ? "secondary" :
-                                req.approvalStatus === "rejected" ? "destructive" :
-                                "outline"
+                                  req.approvalStatus === "marked_paid" ? "secondary" :
+                                    req.approvalStatus === "rejected" ? "destructive" :
+                                      "outline"
                               }>
                                 {req.approvalStatus === "confirmed" && "Paid"}
                                 {req.approvalStatus === "marked_paid" && "Processing"}
@@ -681,40 +741,40 @@ export default function PartnerPortalJobDetail() {
                     ) : (
                       <p className="text-sm text-muted-foreground">No payment requests yet.</p>
                     )}
-                    
+
                     {/* Financial summary and payment request buttons */}
                     {(() => {
                       // Calculate financial summary
                       const partnerTotal = parseFloat(job.partnerCharge || "0");
-                      
+
                       // Determine payment flow based on team type FIRST
                       // partner = Partner collects from client, owes CCC commission
                       // hybrid/in_house = CCC collects, pays partner
                       const teamType = (job as Job & { teamType?: string }).teamType || "hybrid";
                       const isPartnerLed = teamType === "partner";
                       const isHybrid = teamType === "hybrid";
-                      
+
                       // For partner-led jobs: Sum commission payments (partner paying CCC)
                       // For CCC-led jobs: Sum payments TO partner (deposit/balance/payout)
                       const paidToDate = paymentRequests
                         ?.filter(r => r.approvalStatus === "confirmed")
-                        .filter(r => isPartnerLed 
-                          ? r.type === "partner_commission" 
+                        .filter(r => isPartnerLed
+                          ? r.type === "partner_commission"
                           : (r.type === "partner_deposit" || r.type === "partner_balance" || r.type === "partner_payout"))
                         .reduce((sum, r) => sum + parseFloat(r.amount), 0) || 0;
                       const remainingBalance = Math.max(partnerTotal - paidToDate, 0);
-                      
+
                       // Check if there's a pending request
-                      const hasPendingRequest = paymentRequests?.some(r => 
+                      const hasPendingRequest = paymentRequests?.some(r =>
                         r.approvalStatus === "pending" || r.approvalStatus === "marked_paid"
                       );
-                      
+
                       // Check if deposit has already been paid or requested (only for CCC-led jobs)
                       const hasDepositRequest = paymentRequests?.some(r => r.type === "partner_deposit");
-                      const depositPaid = paymentRequests?.some(r => 
+                      const depositPaid = paymentRequests?.some(r =>
                         r.type === "partner_deposit" && r.approvalStatus === "confirmed"
                       );
-                      
+
                       // For hybrid jobs, show if client deposit was received
                       const clientDepositReceived = job.depositReceived;
 
@@ -727,18 +787,18 @@ export default function PartnerPortalJobDetail() {
                               <div className="flex justify-between items-center pb-2 border-b">
                                 <span className="text-xs text-muted-foreground">Payment Flow:</span>
                                 <Badge variant="outline" className="text-xs">
-                                  {isPartnerLed ? "You collect from client" : 
-                                   isHybrid ? "Shared (CCC collects)" : "CCC collects"}
+                                  {isPartnerLed ? "You collect from client" :
+                                    isHybrid ? "Shared (CCC collects)" : "CCC collects"}
                                 </Badge>
                               </div>
-                              
+
                               <div className="flex justify-between items-center">
                                 <span className="text-sm text-muted-foreground">
                                   {isPartnerLed ? "Job Value:" : "Agreed Rate:"}
                                 </span>
                                 <span className="font-medium">£{partnerTotal.toFixed(2)}</span>
                               </div>
-                              
+
                               {/* Show client deposit status for hybrid jobs */}
                               {isHybrid && (
                                 <div className="flex justify-between items-center">
@@ -748,7 +808,7 @@ export default function PartnerPortalJobDetail() {
                                   </span>
                                 </div>
                               )}
-                              
+
                               <div className="flex justify-between items-center">
                                 <span className="text-sm text-muted-foreground">
                                   {isPartnerLed ? "Commission Paid to CCC:" : "Paid to You:"}
@@ -757,7 +817,7 @@ export default function PartnerPortalJobDetail() {
                                   £{paidToDate.toFixed(2)}
                                 </span>
                               </div>
-                              
+
                               <div className="border-t pt-2 flex justify-between items-center">
                                 <span className="text-sm font-medium">
                                   {isPartnerLed ? "Commission Due to CCC:" : "CCC Owes You:"}
@@ -768,13 +828,13 @@ export default function PartnerPortalJobDetail() {
                               </div>
                             </div>
                           )}
-                          
+
                           {/* Payment Request Buttons - Different based on team type */}
                           {!hasPendingRequest && remainingBalance > 0 && (
                             <div className="flex gap-2 flex-wrap">
                               {isPartnerLed ? (
                                 /* Partner-led: Partner pays CCC commission */
-                                <Button 
+                                <Button
                                   className="flex-1"
                                   onClick={() => {
                                     setPaymentAmount(remainingBalance.toFixed(2));
@@ -792,7 +852,7 @@ export default function PartnerPortalJobDetail() {
                                 <>
                                   {/* Request Deposit - only show if no deposit has been requested yet */}
                                   {!hasDepositRequest && (
-                                    <Button 
+                                    <Button
                                       variant="outline"
                                       className="flex-1"
                                       onClick={() => {
@@ -809,9 +869,9 @@ export default function PartnerPortalJobDetail() {
                                       Request Deposit
                                     </Button>
                                   )}
-                                  
+
                                   {/* Request Final Balance */}
-                                  <Button 
+                                  <Button
                                     className="flex-1"
                                     onClick={() => {
                                       setPaymentAmount(remainingBalance.toFixed(2));
@@ -828,26 +888,26 @@ export default function PartnerPortalJobDetail() {
                               )}
                             </div>
                           )}
-                          
+
                           {hasPendingRequest && (
                             <p className="text-sm text-amber-600 dark:text-amber-400 text-center">
                               {(() => {
                                 const processingRequest = paymentRequests?.find(r => r.approvalStatus === "marked_paid");
                                 if (processingRequest) {
-                                  return isPartnerLed 
+                                  return isPartnerLed
                                     ? "Your commission payment is being processed."
                                     : "Your payment request is being processed. Please wait for final confirmation.";
                                 }
-                                return isPartnerLed 
+                                return isPartnerLed
                                   ? "Your commission payment is pending review."
                                   : "You have a pending payment request. Please wait for admin approval.";
                               })()}
                             </p>
                           )}
-                          
+
                           {remainingBalance === 0 && paidToDate > 0 && (
                             <p className="text-sm text-green-600 dark:text-green-400 text-center">
-                              {isPartnerLed 
+                              {isPartnerLed
                                 ? "Commission fully paid. Thank you!"
                                 : "All payments received. Thank you!"}
                             </p>
@@ -890,16 +950,16 @@ export default function PartnerPortalJobDetail() {
                       const isCompleted = index < currentStageIndex;
                       const isCurrent = index === currentStageIndex;
                       return (
-                        <div 
-                          key={stage} 
+                        <div
+                          key={stage}
                           className="flex flex-col items-center flex-1"
                           title={stage}
                         >
                           <div className={`
                             w-4 h-4 md:w-6 md:h-6 rounded-full flex items-center justify-center
-                            ${isCompleted ? 'bg-green-500 text-white' : 
-                              isCurrent ? 'bg-primary text-white' : 
-                              'bg-muted text-muted-foreground'}
+                            ${isCompleted ? 'bg-green-500 text-white' :
+                              isCurrent ? 'bg-primary text-white' :
+                                'bg-muted text-muted-foreground'}
                           `}>
                             {isCompleted ? (
                               <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4" />
@@ -912,7 +972,7 @@ export default function PartnerPortalJobDetail() {
                     })}
                   </div>
                   <div className="h-1 bg-muted rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-primary transition-all duration-300"
                       style={{ width: `${(currentStageIndex / (PIPELINE_STAGES.length - 1)) * 100}%` }}
                     />
@@ -1087,33 +1147,33 @@ export default function PartnerPortalJobDetail() {
                 <CardContent>
                   <div className="space-y-4">
                     {jobNotes.map((note) => (
-                        <div 
-                          key={note.id} 
-                          className="p-3 rounded-lg bg-muted/50"
-                          data-testid={`partner-note-${note.id}`}
-                        >
-                          <p className="text-sm whitespace-pre-wrap">{note.content}</p>
-                          {note.attachments && note.attachments.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {note.attachments.map((att) => (
-                                <a 
-                                  key={att.id}
-                                  href={att.fileUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-1 text-xs text-primary hover:underline p-1 rounded bg-background"
-                                  data-testid={`partner-attachment-${att.id}`}
-                                >
-                                  <Image className="w-3 h-3" />
-                                  {att.fileName}
-                                </a>
-                              ))}
-                            </div>
-                          )}
-                          <div className="mt-2 text-xs text-muted-foreground">
-                            {note.createdAt && new Date(note.createdAt).toLocaleString()}
+                      <div
+                        key={note.id}
+                        className="p-3 rounded-lg bg-muted/50"
+                        data-testid={`partner-note-${note.id}`}
+                      >
+                        <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                        {note.attachments && note.attachments.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {note.attachments.map((att) => (
+                              <a
+                                key={att.id}
+                                href={att.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-primary hover:underline p-1 rounded bg-background"
+                                data-testid={`partner-attachment-${att.id}`}
+                              >
+                                <Image className="w-3 h-3" />
+                                {att.fileName}
+                              </a>
+                            ))}
                           </div>
+                        )}
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          {note.createdAt && new Date(note.createdAt).toLocaleString()}
                         </div>
+                      </div>
                     ))}
                   </div>
                 </CardContent>
@@ -1128,8 +1188,8 @@ export default function PartnerPortalJobDetail() {
                 <CardContent>
                   <div className="space-y-2">
                     {job.tasks.map((task) => (
-                      <div 
-                        key={task.id} 
+                      <div
+                        key={task.id}
                         className="flex items-center gap-3 p-2 rounded-md bg-muted/50"
                       >
                         {task.status === "completed" ? (
@@ -1168,7 +1228,7 @@ export default function PartnerPortalJobDetail() {
               <div className="p-3 rounded-md bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm">
                 <strong>Payment Reminder:</strong> You should have collected the full payment from the client before completing this callout.
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Total Amount Collected from Client (£)</Label>
                 <Input
@@ -1185,7 +1245,7 @@ export default function PartnerPortalJobDetail() {
                   data-testid="input-total-collected"
                 />
               </div>
-              
+
               {totalCollected && parseFloat(totalCollected) > 0 && (
                 <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-sm space-y-1">
                   <div className="flex justify-between">
@@ -1202,7 +1262,7 @@ export default function PartnerPortalJobDetail() {
                   </div>
                 </div>
               )}
-              
+
               <div className="space-y-2">
                 <Label>Completion Notes (Optional)</Label>
                 <Textarea
@@ -1377,7 +1437,7 @@ export default function PartnerPortalJobDetail() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <p className="text-sm text-muted-foreground">
-                {scheduleProposal?.status === "pending_partner" 
+                {scheduleProposal?.status === "pending_partner"
                   ? "Propose an alternative start date that works better for your schedule."
                   : "Request your preferred start date for this job. The admin will review and confirm."
                 }
@@ -1448,9 +1508,9 @@ export default function PartnerPortalJobDetail() {
                 disabled={requestStartDateMutation.isPending || respondToProposalMutation.isPending}
                 data-testid="button-confirm-start-date"
               >
-                {(requestStartDateMutation.isPending || respondToProposalMutation.isPending) 
-                  ? "Sending..." 
-                  : scheduleProposal?.status === "pending_partner" 
+                {(requestStartDateMutation.isPending || respondToProposalMutation.isPending)
+                  ? "Sending..."
+                  : scheduleProposal?.status === "pending_partner"
                     ? "Send Alternative Date"
                     : "Request Start Date"
                 }
@@ -1473,10 +1533,10 @@ export default function PartnerPortalJobDetail() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Banknote className="w-5 h-5 text-primary" />
-                {isPartnerPayingCCC 
+                {isPartnerPayingCCC
                   ? "Pay CCC Commission"
-                  : paymentType === "partner_deposit" 
-                    ? "Request Deposit" 
+                  : paymentType === "partner_deposit"
+                    ? "Request Deposit"
                     : "Request Final Balance"}
               </DialogTitle>
             </DialogHeader>
@@ -1484,7 +1544,7 @@ export default function PartnerPortalJobDetail() {
               <p className="text-sm text-muted-foreground">
                 {isPartnerPayingCCC
                   ? "Submit your commission payment to CCC for this job. You collected payment directly from the client."
-                  : paymentType === "partner_deposit" 
+                  : paymentType === "partner_deposit"
                     ? "Request an upfront deposit payment before starting work on this job."
                     : "Request the remaining balance for your completed work on this job."
                 }
@@ -1506,7 +1566,7 @@ export default function PartnerPortalJobDetail() {
                 <Textarea
                   placeholder={isPartnerPayingCCC
                     ? "Any notes about this commission payment..."
-                    : paymentType === "partner_deposit" 
+                    : paymentType === "partner_deposit"
                       ? "Any notes about the deposit request..."
                       : "Brief description of completed work..."
                   }
@@ -1518,8 +1578,8 @@ export default function PartnerPortalJobDetail() {
               </div>
             </div>
             <DialogFooter>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setRequestPaymentDialogOpen(false)}
                 data-testid="button-cancel-payment-request"
               >
@@ -1541,11 +1601,57 @@ export default function PartnerPortalJobDetail() {
                 disabled={requestPaymentMutation.isPending}
                 data-testid="button-confirm-payment-request"
               >
-                {requestPaymentMutation.isPending 
-                  ? "Submitting..." 
-                  : isPartnerPayingCCC 
-                    ? "Submit Commission" 
+                {requestPaymentMutation.isPending
+                  ? "Submitting..."
+                  : isPartnerPayingCCC
+                    ? "Submit Commission"
                     : "Submit Request"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Complete Job Dialog */}
+        <Dialog open={completeJobDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            setCompleteJobDialogOpen(false);
+            setJobCompletionNotes("");
+          }
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                Sign Off & Complete Job
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="p-3 rounded-md bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-sm">
+                <strong>Confirm Completion:</strong> You are marking this job as 100% complete. This will update the job status and signal that you are ready for payment.
+              </div>
+
+              <div className="space-y-2">
+                <Label>Completion Notes (Optional)</Label>
+                <Textarea
+                  placeholder="Any final notes about the job..."
+                  value={jobCompletionNotes}
+                  onChange={(e) => setJobCompletionNotes(e.target.value)}
+                  className="min-h-[100px]"
+                  data-testid="textarea-job-completion-notes"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCompleteJobDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => completeJobMutation.mutate(jobCompletionNotes)}
+                disabled={completeJobMutation.isPending}
+                className="bg-green-600 hover:bg-green-700"
+                data-testid="button-confirm-complete-job"
+              >
+                {completeJobMutation.isPending ? "Completing..." : "Complete Job"}
               </Button>
             </DialogFooter>
           </DialogContent>

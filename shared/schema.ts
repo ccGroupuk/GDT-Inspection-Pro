@@ -44,10 +44,17 @@ export const tradePartners = pgTable("trade_partners", {
   rating: integer("rating").default(5), // 1-5
   notes: text("notes"),
   isActive: boolean("is_active").default(true),
+  status: text("status").notNull().default("active"), // active, inactive, applicant
   // Emergency callout availability
   emergencyAvailable: boolean("emergency_available").default(false), // Available for emergency callouts
   emergencyNote: text("emergency_note"), // Notes about availability
   emergencyCalloutFee: decimal("emergency_callout_fee", { precision: 10, scale: 2 }), // First hour labour fee for emergencies
+
+  // Bank Details
+  bankName: text("bank_name"),
+  bankAccountName: text("bank_account_name"),
+  bankSortCode: text("bank_sort_code"),
+  bankAccountNumber: text("bank_account_number"),
 });
 
 export const insertTradePartnerSchema = createInsertSchema(tradePartners).omit({ id: true });
@@ -59,7 +66,7 @@ export const jobs = pgTable("jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobNumber: text("job_number").notNull().unique(),
   contactId: varchar("contact_id").notNull().references(() => contacts.id),
-  
+
   // Job Details
   serviceType: text("service_type").notNull(),
   description: text("description"),
@@ -68,15 +75,16 @@ export const jobs = pgTable("jobs", {
   jobAddress: text("job_address").notNull(),
   jobPostcode: text("job_postcode").notNull(),
   leadSource: text("lead_source"),
-  
+
   // Classification
   deliveryType: text("delivery_type").notNull().default("in_house"), // in_house, partner, hybrid
   tradeCategory: text("trade_category"), // if partner/hybrid
   partnerId: varchar("partner_id").references(() => tradePartners.id),
-  
+  salesRepId: varchar("sales_rep_id").references(() => employees.id),
+
   // Pipeline Status
   status: text("status").notNull().default("new_enquiry"),
-  
+
   // Pricing
   quoteType: text("quote_type").default("fixed"), // fixed or estimate
   quotedValue: decimal("quoted_value", { precision: 10, scale: 2 }),
@@ -84,42 +92,42 @@ export const jobs = pgTable("jobs", {
   depositType: text("deposit_type").default("fixed"), // percentage or fixed
   depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }),
   depositReceived: boolean("deposit_received").default(false),
-  
+
   // Partner financials
   partnerChargeType: text("partner_charge_type").default("fixed"), // percentage or fixed
   partnerCharge: decimal("partner_charge", { precision: 10, scale: 2 }),
   cccMargin: decimal("ccc_margin", { precision: 10, scale: 2 }),
   partnerInvoiceReceived: boolean("partner_invoice_received").default(false),
   partnerPaid: boolean("partner_paid").default(false),
-  
+
   // Partner status
   partnerStatus: text("partner_status"), // offered, accepted, declined, in_progress, completed, invoiced, paid
   partnerRespondedAt: timestamp("partner_responded_at"), // When partner accepted/declined
   partnerDeclineReason: text("partner_decline_reason"), // Reason if declined
   partnerAcceptanceAcknowledged: boolean("partner_acceptance_acknowledged").default(false), // Admin acknowledged the acceptance
-  
+
   // Partner portal sharing
   shareQuoteWithPartner: boolean("share_quote_with_partner").default(false),
   shareNotesWithPartner: boolean("share_notes_with_partner").default(false),
-  
+
   // Quote details
   taxEnabled: boolean("tax_enabled").default(false),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("20"), // Default 20% VAT
   discountType: text("discount_type"), // percentage or fixed
   discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
-  
+
   // Client quote response
   quoteResponse: text("quote_response"), // pending, accepted, declined
   quoteRespondedAt: timestamp("quote_responded_at"),
-  
+
   // Client-facing quote visibility settings
   useDefaultMarkup: boolean("use_default_markup").default(true), // Apply system default markup
   customMarkupPercent: decimal("custom_markup_percent", { precision: 5, scale: 2 }), // Override markup %
   hideClientCostBreakdown: boolean("hide_client_cost_breakdown").default(true), // Hide profit margins from client
-  
+
   // CAD Drawing
   cadDrawingLink: text("cad_drawing_link"), // Link to 3D CAD drawing for client review
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -136,9 +144,19 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
   tasks: many(tasks),
   quoteItems: many(quoteItems),
   jobPartners: many(jobPartners),
+  commissions: many(salesCommissions),
 }));
 
-export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, createdAt: true, updatedAt: true, jobNumber: true });
+export const insertJobSchema = createInsertSchema(jobs)
+  .omit({ id: true, createdAt: true, updatedAt: true, jobNumber: true })
+  .extend({
+    quoteRespondedAt: z.coerce.date().nullable().optional(),
+    partnerRespondedAt: z.coerce.date().nullable().optional(),
+    quotedValue: z.string().or(z.number()).transform(v => String(v)).nullable().optional(),
+    depositAmount: z.string().or(z.number()).transform(v => String(v)).nullable().optional(),
+    partnerCharge: z.string().or(z.number()).transform(v => String(v)).nullable().optional(),
+    cccMargin: z.string().or(z.number()).transform(v => String(v)).nullable().optional(),
+  });
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Job = typeof jobs.$inferSelect;
 
@@ -147,26 +165,26 @@ export const jobPartners = pgTable("job_partners", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
   partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
-  
+
   // Partner-specific charge settings
   chargeType: text("charge_type").default("fixed"), // percentage or fixed
   chargeAmount: decimal("charge_amount", { precision: 10, scale: 2 }),
-  
+
   // Subcontract agreement fields
   subcontractFeeType: text("subcontract_fee_type"), // percentage, fixed, or null (use default)
   subcontractFeeValue: decimal("subcontract_fee_value", { precision: 10, scale: 2 }),
   subcontractAgreed: boolean("subcontract_agreed").default(false), // Whether fee has been agreed
-  
+
   // Material deposit requirement
   depositRequired: boolean("deposit_required").default(false),
   depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }),
-  
+
   // What this partner is handling
   notes: text("notes"),
-  
+
   // Status tracking
   status: text("status").default("assigned"), // assigned, in_progress, completed
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -240,7 +258,7 @@ export const invoices = pgTable("invoices", {
   referenceNumber: text("reference_number").notNull().unique(),
   type: text("type").notNull().default("quote"), // quote, invoice
   status: text("status").notNull().default("draft"), // draft, sent, viewed, paid, cancelled
-  
+
   // Snapshot of totals at time of creation
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
   discountType: text("discount_type"),
@@ -250,24 +268,24 @@ export const invoices = pgTable("invoices", {
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }),
   taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }),
   grandTotal: decimal("grand_total", { precision: 10, scale: 2 }).notNull(),
-  
+
   // Deposit info snapshot
   depositRequired: boolean("deposit_required").default(false),
   depositType: text("deposit_type"),
   depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }),
   depositCalculated: decimal("deposit_calculated", { precision: 10, scale: 2 }),
-  
+
   // Payment info
   dueDate: timestamp("due_date"),
   paymentTerms: text("payment_terms"),
   notes: text("notes"),
-  
+
   // Visibility
   showInPortal: boolean("show_in_portal").default(false),
   sentAt: timestamp("sent_at"),
   viewedAt: timestamp("viewed_at"),
   paidAt: timestamp("paid_at"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -313,22 +331,22 @@ export const changeOrders = pgTable("change_orders", {
   referenceNumber: text("reference_number").notNull().unique(), // e.g., CCC-25-0005-CO-01
   status: text("status").notNull().default("draft"), // draft, sent, accepted, declined
   reason: text("reason"), // Brief description of why extra costs needed
-  
+
   // Totals
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   taxEnabled: boolean("tax_enabled").default(false),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("20"),
   taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).default("0"),
   grandTotal: decimal("grand_total", { precision: 10, scale: 2 }).notNull().default("0"),
-  
+
   // Client response
   clientResponse: text("client_response"), // pending, accepted, declined
   clientRespondedAt: timestamp("client_responded_at"),
-  
+
   // Visibility
   showInPortal: boolean("show_in_portal").default(false),
   sentAt: timestamp("sent_at"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -413,12 +431,14 @@ export const SERVICE_TYPES = [
 ] as const;
 
 export const TRADE_CATEGORIES = [
+  "Carpenter",
   "Plumbing",
   "Electrical",
   "Heating",
   "Plastering",
   "Tiling",
   "Fire Installs",
+  "Carpenter",
   "Decorating",
   "Other",
 ] as const;
@@ -441,7 +461,7 @@ export const DELIVERY_TYPES = [
 
 export const PARTNER_STATUSES = [
   "offered",
-  "accepted", 
+  "accepted",
   "declined",
   "in_progress",
   "completed",
@@ -707,24 +727,24 @@ export const financialTransactions = pgTable("financial_transactions", {
   categoryId: varchar("category_id").references(() => financialCategories.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description").notNull(),
-  
+
   // Links to other entities (optional)
   jobId: varchar("job_id").references(() => jobs.id),
   partnerId: varchar("partner_id").references(() => tradePartners.id),
   invoiceId: varchar("invoice_id").references(() => invoices.id),
-  
+
   // Source tracking
   sourceType: text("source_type").notNull(), // job_payment, partner_payment, manual, adjustment
-  
+
   // For partner jobs - track the profit/margin
   grossAmount: decimal("gross_amount", { precision: 10, scale: 2 }), // What client paid
   partnerCost: decimal("partner_cost", { precision: 10, scale: 2 }), // What we paid partner
   profitAmount: decimal("profit_amount", { precision: 10, scale: 2 }), // Our margin
-  
+
   // Receipt scanning
   receiptUrl: text("receipt_url"), // URL to receipt image in object storage
   vendor: text("vendor"), // Extracted vendor name from receipt
-  
+
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -780,30 +800,30 @@ export const calendarEvents = pgTable("calendar_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").references(() => jobs.id),
   partnerId: varchar("partner_id").references(() => tradePartners.id),
-  
+
   // Event details
   title: text("title").notNull(),
   description: text("description"),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
   allDay: boolean("all_day").default(true),
-  
+
   // Event type - general, home_visit_ccc, home_visit_partner, project_start
   eventType: text("event_type").notNull().default("general"),
-  
+
   // Team type determines visibility
   teamType: text("team_type").notNull().default("in_house"), // in_house, partner, hybrid
-  
+
   // Confirmation status
   status: text("status").notNull().default("pending"), // pending, confirmed, cancelled
   confirmedByAdmin: boolean("confirmed_by_admin").default(false),
   confirmedByPartner: boolean("confirmed_by_partner").default(false),
   confirmedAt: timestamp("confirmed_at"),
-  
+
   // Client confirmation (for project_start events proposed to clients)
   confirmedByClient: boolean("confirmed_by_client").default(false),
   clientConfirmedAt: timestamp("client_confirmed_at"),
-  
+
   // Metadata
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -829,18 +849,18 @@ export type CalendarEvent = typeof calendarEvents.$inferSelect;
 export const partnerAvailability = pgTable("partner_availability", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
-  
+
   // Date range
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
-  
+
   // Status - available means they're free, unavailable means they're blocked
   status: text("status").notNull().default("unavailable"), // available, unavailable
-  
+
   // Reason for unavailability (holiday, sick, other job, etc.)
   reason: text("reason"),
   notes: text("notes"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -883,35 +903,35 @@ export const CALENDAR_EVENT_TYPES = [
 export const jobScheduleProposals = pgTable("job_schedule_proposals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
-  
+
   // Proposed dates
   proposedStartDate: timestamp("proposed_start_date").notNull(),
   proposedEndDate: timestamp("proposed_end_date"),
-  
+
   // Status: pending_client, client_accepted, client_declined, client_countered, admin_confirmed, scheduled
   status: text("status").notNull().default("pending_client"),
-  
+
   // Who proposed this date
   proposedByRole: text("proposed_by_role").notNull().default("admin"), // admin, client, partner
-  
+
   // Partner who proposed (if proposedByRole === "partner")
   proposedByPartnerId: varchar("proposed_by_partner_id").references(() => tradePartners.id),
-  
+
   // Client response
   clientResponse: text("client_response"), // accepted, declined
   counterProposedDate: timestamp("counter_proposed_date"), // If client suggests alternative
   counterReason: text("counter_reason"), // Why client declined/countered
   respondedAt: timestamp("responded_at"),
-  
+
   // Linked calendar event (created when proposal is confirmed/scheduled)
   linkedCalendarEventId: varchar("linked_calendar_event_id").references(() => calendarEvents.id),
-  
+
   // Notes
   adminNotes: text("admin_notes"),
-  
+
   // Archive old proposals
   isArchived: boolean("is_archived").default(false),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1057,36 +1077,36 @@ export const seoContentPosts = pgTable("seo_content_posts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   weeklyFocusId: varchar("weekly_focus_id").references(() => seoWeeklyFocus.id),
   jobId: varchar("job_id").references(() => jobs.id),
-  
+
   // Platform targeting
   platform: text("platform").notNull(), // google_business, facebook, instagram
   postType: text("post_type").notNull().default("update"), // update, offer, before_after, seasonal
   targetLocationId: varchar("target_location_id").references(() => seoGoogleBusinessLocations.id), // For Google Business posts
-  
+
   // Content
   content: text("content").notNull(),
   hashtags: text("hashtags"),
   callToAction: text("call_to_action"),
   mediaUrls: text("media_urls").array(),
-  
+
   // Status workflow
   status: text("status").notNull().default("draft"), // draft, pending_review, approved, scheduled, published, rejected
   source: text("source").default("manual"), // manual, autopilot
-  
+
   // Scheduling
   scheduledFor: timestamp("scheduled_for"),
   publishedAt: timestamp("published_at"),
-  
+
   // Review
   reviewedBy: text("reviewed_by"),
   reviewedAt: timestamp("reviewed_at"),
   reviewNotes: text("review_notes"),
-  
+
   // Metrics (for Phase 2)
   views: integer("views").default(0),
   clicks: integer("clicks").default(0),
   engagement: integer("engagement").default(0),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1113,43 +1133,43 @@ export type SeoContentPost = typeof seoContentPosts.$inferSelect;
 // SEO Autopilot Settings
 export const seoAutopilotSettings = pgTable("seo_autopilot_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
+
   // Global toggle
   enabled: boolean("enabled").default(false),
-  
+
   // Platform-specific settings
   facebookEnabled: boolean("facebook_enabled").default(true),
   facebookPostsPerWeek: integer("facebook_posts_per_week").default(3),
   facebookPreferredDays: text("facebook_preferred_days").array(), // ['monday', 'wednesday', 'friday']
   facebookPreferredTime: text("facebook_preferred_time").default("09:00"), // 24hr format
-  
+
   instagramEnabled: boolean("instagram_enabled").default(true),
   instagramPostsPerWeek: integer("instagram_posts_per_week").default(3),
   instagramPreferredDays: text("instagram_preferred_days").array(), // ['tuesday', 'thursday', 'saturday']
   instagramPreferredTime: text("instagram_preferred_time").default("18:00"),
-  
+
   googleEnabled: boolean("google_enabled").default(true),
   googlePostsPerWeek: integer("google_posts_per_week").default(2),
   googlePreferredDays: text("google_preferred_days").array(), // ['monday', 'thursday']
   googlePreferredTime: text("google_preferred_time").default("12:00"),
-  
+
   // Content mix weights (percentage allocation)
   projectShowcaseWeight: integer("project_showcase_weight").default(40),
   beforeAfterWeight: integer("before_after_weight").default(20),
   tipsWeight: integer("tips_weight").default(15),
   testimonialWeight: integer("testimonial_weight").default(15),
   seasonalWeight: integer("seasonal_weight").default(10),
-  
+
   // Auto-generation preferences
   autoGenerateAhead: integer("auto_generate_ahead").default(7), // days ahead to generate
   requireApproval: boolean("require_approval").default(true),
   useWeeklyFocusImages: boolean("use_weekly_focus_images").default(true),
-  
+
   // Notification preferences
   notifyOnGeneration: boolean("notify_on_generation").default(true),
   notifyBeforePost: boolean("notify_before_post").default(true),
   notifyBeforePostHours: integer("notify_before_post_hours").default(2),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1179,29 +1199,29 @@ export type SeoAutopilotSettings = typeof seoAutopilotSettings.$inferSelect;
 // SEO Autopilot Scheduled Slots
 export const seoAutopilotSlots = pgTable("seo_autopilot_slots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
+
   // Scheduling info
   platform: text("platform").notNull(), // facebook, instagram, google_business
   scheduledFor: timestamp("scheduled_for").notNull(),
   contentType: text("content_type").notNull(), // project_showcase, before_after, tip, testimonial, seasonal
-  
+
   // Status
   status: text("status").notNull().default("pending"), // pending, generated, approved, posted, skipped
-  
+
   // Link to generated post
   contentPostId: varchar("content_post_id").references(() => seoContentPosts.id),
-  
+
   // Weekly focus to use (if any)
   weeklyFocusId: varchar("weekly_focus_id").references(() => seoWeeklyFocus.id),
-  
+
   // Approval
   approvedAt: timestamp("approved_at"),
   approvedBy: text("approved_by"),
-  
+
   // Posted info
   postedAt: timestamp("posted_at"),
   postError: text("post_error"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1223,16 +1243,16 @@ export type SeoAutopilotSlot = typeof seoAutopilotSlots.$inferSelect;
 // SEO Autopilot Generation Runs (audit log)
 export const seoAutopilotRuns = pgTable("seo_autopilot_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
+
   // Run info
   ranAt: timestamp("ran_at").defaultNow(),
   slotsGenerated: integer("slots_generated").default(0),
   postsCreated: integer("posts_created").default(0),
-  
+
   // Status
   status: text("status").notNull().default("success"), // success, partial, failed
   errorMessage: text("error_message"),
-  
+
   // Details
   details: text("details"), // JSON string with generation details
 });
@@ -1246,21 +1266,21 @@ export type SeoAutopilotRun = typeof seoAutopilotRuns.$inferSelect;
 // Portal Messages (admin sends to clients or partners)
 export const portalMessages = pgTable("portal_messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
+
   // Audience targeting
   audienceType: text("audience_type").notNull(), // 'client' or 'partner'
   audienceId: varchar("audience_id").notNull(), // contactId or partnerId
-  
+
   // Message content
   title: text("title").notNull(),
   body: text("body").notNull(),
   messageType: text("message_type").notNull().default("announcement"), // warning, announcement, birthday, sales, custom
   urgency: text("urgency").notNull().default("normal"), // low, normal, high
-  
+
   // Visibility and scheduling
   isActive: boolean("is_active").default(true),
   expiresAt: timestamp("expires_at"),
-  
+
   // Metadata
   createdBy: text("created_by"), // admin username
   createdAt: timestamp("created_at").defaultNow(),
@@ -1402,7 +1422,7 @@ export const HELP_AUDIENCES = [
 // Employees
 export const employees = pgTable("employees", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
+
   // Personal info
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
@@ -1411,13 +1431,13 @@ export const employees = pgTable("employees", {
   address: text("address"),
   postcode: text("postcode"),
   dateOfBirth: timestamp("date_of_birth"),
-  
+
   // Employment details
   role: text("role").notNull().default("fitting"), // admin, accounting, fitting, sales
   employmentType: text("employment_type").default("full_time"), // full_time, part_time, contractor
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"), // If terminated
-  
+
   // Pay information
   hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }).notNull().default("0"),
   paySchedule: text("pay_schedule").default("weekly"), // weekly, monthly
@@ -1426,16 +1446,19 @@ export const employees = pgTable("employees", {
   bankAccountName: text("bank_account_name"),
   bankSortCode: text("bank_sort_code"),
   bankAccountNumber: text("bank_account_number"),
-  
+
+  // Commission settings
+  defaultCommissionRate: decimal("default_commission_rate", { precision: 5, scale: 2 }).default("0"),
+
   // Access control
   isActive: boolean("is_active").default(true),
   accessLevel: text("access_level").notNull().default("standard"), // standard, full_access, owner
   accessAreas: text("access_areas").array(), // Array of areas they can access
-  
+
   // Emergency contact
   emergencyContactName: text("emergency_contact_name"),
   emergencyContactPhone: text("emergency_contact_phone"),
-  
+
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1446,6 +1469,7 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   sessions: many(employeeSessions),
   timeEntries: many(timeEntries),
   documents: many(employeeDocuments),
+  commissions: many(salesCommissions),
 }));
 
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1503,30 +1527,30 @@ export type EmployeeSession = typeof employeeSessions.$inferSelect;
 export const timeEntries = pgTable("time_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
-  
+
   // Time tracking
   clockIn: timestamp("clock_in").notNull(),
   clockOut: timestamp("clock_out"),
   breakMinutes: integer("break_minutes").default(0),
-  
+
   // Work type
   entryType: text("entry_type").notNull().default("work"), // work, project, quoting, fitting, training, admin
-  
+
   // Optional job link
   jobId: varchar("job_id").references(() => jobs.id, { onDelete: "set null" }),
-  
+
   // Location/notes
   location: text("location"),
   notes: text("notes"),
-  
+
   // Calculated hours (stored for reporting)
   totalHours: decimal("total_hours", { precision: 10, scale: 2 }),
-  
+
   // Approval
   status: text("status").default("pending"), // pending, approved, rejected
   approvedBy: varchar("approved_by"),
   approvedAt: timestamp("approved_at"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1570,28 +1594,28 @@ export const payrollRuns = pgTable("payroll_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   payPeriodId: varchar("pay_period_id").notNull().references(() => payPeriods.id, { onDelete: "cascade" }),
   employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
-  
+
   // Hours worked
   regularHours: decimal("regular_hours", { precision: 10, scale: 2 }).default("0"),
   overtimeHours: decimal("overtime_hours", { precision: 10, scale: 2 }).default("0"),
-  
+
   // Rates at time of payroll
   hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }).notNull(),
   overtimeRate: decimal("overtime_rate", { precision: 10, scale: 2 }),
-  
+
   // Calculations
   grossPay: decimal("gross_pay", { precision: 10, scale: 2 }).notNull(),
   totalBonuses: decimal("total_bonuses", { precision: 10, scale: 2 }).default("0"),
   totalDeductions: decimal("total_deductions", { precision: 10, scale: 2 }).default("0"),
   netPay: decimal("net_pay", { precision: 10, scale: 2 }).notNull(),
-  
+
   // Status
   status: text("status").default("draft"), // draft, approved, paid
   paidAt: timestamp("paid_at"),
-  
+
   // Notes
   notes: text("notes"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1616,12 +1640,12 @@ export type PayrollRun = typeof payrollRuns.$inferSelect;
 export const payrollAdjustments = pgTable("payroll_adjustments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   payrollRunId: varchar("payroll_run_id").notNull().references(() => payrollRuns.id, { onDelete: "cascade" }),
-  
+
   type: text("type").notNull(), // bonus, deduction
   category: text("category").notNull(), // performance_bonus, overtime_bonus, advance, tax, insurance, equipment, etc.
   description: text("description").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1636,21 +1660,73 @@ export const insertPayrollAdjustmentSchema = createInsertSchema(payrollAdjustmen
 export type InsertPayrollAdjustment = z.infer<typeof insertPayrollAdjustmentSchema>;
 export type PayrollAdjustment = typeof payrollAdjustments.$inferSelect;
 
+// Sales Commissions
+export const salesCommissions = pgTable("sales_commissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+
+  commissionType: text("commission_type").notNull().default("sales_onboarding"), // sales_onboarding, performance_bonus
+  rate: decimal("rate", { precision: 5, scale: 2 }).notNull(), // rate at time of creation
+  jobValueSnapshot: decimal("job_value_snapshot", { precision: 10, scale: 2 }).notNull(), // quoted value
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(), // calculated commission
+
+  status: text("status").notNull().default("pending"), // pending, approved, paid, voided, cancelled
+
+  payrollRunId: varchar("payroll_run_id").references(() => payrollRuns.id), // Link when paid via payroll
+  financialTransactionId: varchar("financial_transaction_id").references(() => financialTransactions.id), // Link to finance expense
+
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const salesCommissionsRelations = relations(salesCommissions, ({ one }) => ({
+  job: one(jobs, {
+    fields: [salesCommissions.jobId],
+    references: [jobs.id],
+  }),
+  employee: one(employees, {
+    fields: [salesCommissions.employeeId],
+    references: [employees.id],
+  }),
+  payrollRun: one(payrollRuns, {
+    fields: [salesCommissions.payrollRunId],
+    references: [payrollRuns.id],
+  }),
+  financialTransaction: one(financialTransactions, {
+    fields: [salesCommissions.financialTransactionId],
+    references: [financialTransactions.id],
+  }),
+}));
+
+export const insertSalesCommissionSchema = createInsertSchema(salesCommissions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSalesCommission = z.infer<typeof insertSalesCommissionSchema>;
+export type SalesCommission = typeof salesCommissions.$inferSelect;
+
+export const COMMISSION_STATUSES = [
+  { value: "pending", label: "Pending", color: "bg-yellow-500" },
+  { value: "approved", label: "Approved", color: "bg-blue-500" },
+  { value: "paid", label: "Paid", color: "bg-green-500" },
+  { value: "voided", label: "Voided", color: "bg-gray-500" },
+  { value: "cancelled", label: "Cancelled", color: "bg-red-500" },
+] as const;
+
 // Employee Documents
 export const employeeDocuments = pgTable("employee_documents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
-  
+
   documentType: text("document_type").notNull(), // contract, id, certification, other
   title: text("title").notNull(),
   fileName: text("file_name").notNull(),
   fileUrl: text("file_url").notNull(),
   mimeType: text("mime_type"),
   fileSize: integer("file_size"),
-  
+
   // Expiry tracking for certifications
   expiryDate: timestamp("expiry_date"),
-  
+
   notes: text("notes"),
   uploadedBy: text("uploaded_by"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1672,34 +1748,34 @@ export const jobSurveys = pgTable("job_surveys", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
   partnerId: varchar("partner_id").references(() => tradePartners.id),
-  
+
   // Survey assignment and status
   status: text("status").notNull().default("requested"), // requested, accepted, declined, scheduled, completed, cancelled
   assignedBy: varchar("assigned_by"), // Employee ID who assigned
-  
+
   // Partner proposed scheduling (for client approval)
   proposedDate: timestamp("proposed_date"), // Date partner proposes for site visit
   proposedTime: text("proposed_time"), // Time partner proposes e.g., "10:00 AM"
   bookingStatus: text("booking_status"), // pending_client, client_accepted, client_declined, client_counter, confirmed
-  
+
   // Client response to proposed date
   clientProposedDate: timestamp("client_proposed_date"), // Alternative date client proposes
   clientProposedTime: text("client_proposed_time"), // Alternative time client proposes
   clientNotes: text("client_notes"), // Notes from client when responding
   clientRespondedAt: timestamp("client_responded_at"), // When client responded
-  
+
   // Confirmed scheduling (after client approval)
   scheduledDate: timestamp("scheduled_date"),
   scheduledTime: text("scheduled_time"), // e.g., "10:00 AM"
-  
+
   // Notes
   adminNotes: text("admin_notes"), // Notes from admin when assigning
   partnerNotes: text("partner_notes"), // Notes from partner during survey
   surveyDetails: text("survey_details"), // Detailed survey findings
-  
+
   // Decline reason (if declined)
   declineReason: text("decline_reason"),
-  
+
   // Timestamps
   requestedAt: timestamp("requested_at").defaultNow(),
   acceptedAt: timestamp("accepted_at"),
@@ -1707,7 +1783,7 @@ export const jobSurveys = pgTable("job_surveys", {
   proposedAt: timestamp("proposed_at"), // When partner proposed date
   scheduledAt: timestamp("scheduled_at"),
   completedAt: timestamp("completed_at"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1733,26 +1809,26 @@ export const partnerQuotes = pgTable("partner_quotes", {
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
   partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
   surveyId: varchar("survey_id").references(() => jobSurveys.id),
-  
+
   // Quote status
   status: text("status").notNull().default("draft"), // draft, submitted, accepted, declined
-  
+
   // Quote totals
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   taxEnabled: boolean("tax_enabled").default(false),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("20"),
   taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).default("0"),
   total: decimal("total", { precision: 10, scale: 2 }).notNull().default("0"),
-  
+
   // Additional info
   notes: text("notes"),
   validUntil: timestamp("valid_until"),
-  
+
   // Admin response
   adminNotes: text("admin_notes"),
   respondedAt: timestamp("responded_at"),
   respondedBy: varchar("responded_by"),
-  
+
   submittedAt: timestamp("submitted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1782,13 +1858,13 @@ export type PartnerQuote = typeof partnerQuotes.$inferSelect;
 export const partnerQuoteItems = pgTable("partner_quote_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   quoteId: varchar("quote_id").notNull().references(() => partnerQuotes.id, { onDelete: "cascade" }),
-  
+
   description: text("description").notNull(),
   quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
   lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
   sortOrder: integer("sort_order").default(0),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1873,32 +1949,32 @@ export const ACCESS_AREAS = [
 export const emergencyCallouts = pgTable("emergency_callouts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").references(() => jobs.id, { onDelete: "cascade" }), // Optional - can be created later when partner is assigned
-  
+
   // Client details (for standalone emergencies without a job)
   clientName: text("client_name"),
   clientPhone: text("client_phone"),
   clientAddress: text("client_address"),
   clientPostcode: text("client_postcode"),
-  
+
   // Emergency details
   incidentType: text("incident_type").notNull(), // leak, flood, fire_damage, security, electrical, gas, structural, other
   priority: text("priority").notNull().default("high"), // high, critical
   description: text("description"),
-  
+
   // Status tracking
   status: text("status").notNull().default("open"), // open, assigned, in_progress, resolved, cancelled
-  
+
   // Broadcast info
   broadcastAt: timestamp("broadcast_at"),
-  
+
   // Assignment
   assignedPartnerId: varchar("assigned_partner_id").references(() => tradePartners.id),
   assignedAt: timestamp("assigned_at"),
-  
+
   // Resolution
   resolvedAt: timestamp("resolved_at"),
   resolutionNotes: text("resolution_notes"),
-  
+
   // Completion payment tracking (partner collects from client, owes fee to CCC)
   completedAt: timestamp("completed_at"),
   completedByPartnerId: varchar("completed_by_partner_id").references(() => tradePartners.id),
@@ -1908,7 +1984,7 @@ export const emergencyCallouts = pgTable("emergency_callouts", {
   feePaid: boolean("fee_paid").default(false), // Has partner paid the fee to CCC?
   feePaidAt: timestamp("fee_paid_at"),
   feeTransactionId: varchar("fee_transaction_id").references(() => financialTransactions.id), // Link to finance entry
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   createdBy: varchar("created_by"),
 });
@@ -1934,24 +2010,24 @@ export const emergencyCalloutResponses = pgTable("emergency_callout_responses", 
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   calloutId: varchar("callout_id").notNull().references(() => emergencyCallouts.id, { onDelete: "cascade" }),
   partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
-  
+
   // Response status
   status: text("status").notNull().default("pending"), // pending, acknowledged, responded, declined, selected, not_selected
-  
+
   // Partner response
   acknowledgedAt: timestamp("acknowledged_at"),
   respondedAt: timestamp("responded_at"),
   proposedArrivalMinutes: integer("proposed_arrival_minutes"), // ETA in minutes
   proposedArrivalTime: timestamp("proposed_arrival_time"), // or specific time
   responseNotes: text("response_notes"),
-  
+
   // Decline reason
   declinedAt: timestamp("declined_at"),
   declineReason: text("decline_reason"),
-  
+
   // Selection
   selectedAt: timestamp("selected_at"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -2211,36 +2287,36 @@ export const assets = pgTable("assets", {
   type: text("type").notNull(), // tool, vehicle, equipment
   description: text("description"),
   serialNumber: text("serial_number"),
-  
+
   // Ownership
   owner: text("owner").notNull().default("company"), // company, individual
   assignedToId: varchar("assigned_to_id").references(() => employees.id), // Assigned team member
-  
+
   // Purchase info
   purchaseDate: timestamp("purchase_date"),
   purchasePrice: decimal("purchase_price", { precision: 10, scale: 2 }),
   supplier: text("supplier"),
-  
+
   // Warranty
   warrantyExpiry: timestamp("warranty_expiry"),
   warrantyNotes: text("warranty_notes"),
-  
+
   // Service
   lastServiceDate: timestamp("last_service_date"),
   nextServiceDate: timestamp("next_service_date"),
   serviceIntervalDays: integer("service_interval_days"), // Days between services
-  
+
   // Vehicle-specific fields (stored for type=vehicle)
   motDate: timestamp("mot_date"), // MOT expiry date
   insuranceExpiry: timestamp("insurance_expiry"),
   currentMileage: integer("current_mileage"),
   registrationNumber: text("registration_number"),
-  
+
   // Status
   status: text("status").notNull().default("active"), // active, in_repair, retired, disposed
   location: text("location"), // Where the asset is stored/based
   notes: text("notes"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -2264,26 +2340,26 @@ export const assetFaults = pgTable("asset_faults", {
   assetId: varchar("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
   reportedById: varchar("reported_by_id").notNull().references(() => employees.id),
   assignedToId: varchar("assigned_to_id").references(() => employees.id),
-  
+
   // Fault details
   title: text("title").notNull(),
   description: text("description"),
   priority: text("priority").notNull().default("medium"), // low, medium, high, critical
   status: text("status").notNull().default("open"), // open, in_progress, completed, cleared
-  
+
   // Linked task (auto-created in Task Manager)
   taskId: varchar("task_id").references(() => tasks.id),
-  
+
   // Resolution
   resolution: text("resolution"),
   resolvedAt: timestamp("resolved_at"),
   resolvedById: varchar("resolved_by_id").references(() => employees.id),
   clearedAt: timestamp("cleared_at"),
   clearedById: varchar("cleared_by_id").references(() => employees.id),
-  
+
   // Cost tracking
   repairCost: decimal("repair_cost", { precision: 10, scale: 2 }),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -2317,24 +2393,24 @@ export type AssetFault = typeof assetFaults.$inferSelect;
 export const assetReminders = pgTable("asset_reminders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   assetId: varchar("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
-  
+
   reminderType: text("reminder_type").notNull(), // mot_due, service_due, warranty_expiring, insurance_expiring
   dueDate: timestamp("due_date").notNull(),
-  
+
   // Notification tracking
   notified: boolean("notified").default(false),
   notifiedAt: timestamp("notified_at"),
-  
+
   // Who to notify
   notifyOwner: boolean("notify_owner").default(true),
   notifyAdmin: boolean("notify_admin").default(true),
   notifyAssignee: boolean("notify_assignee").default(true),
-  
+
   // Status
   acknowledged: boolean("acknowledged").default(false),
   acknowledgedById: varchar("acknowledged_by_id").references(() => employees.id),
   acknowledgedAt: timestamp("acknowledged_at"),
-  
+
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -2555,34 +2631,34 @@ export const DEFAULT_CHECKLIST_CODES = [
 export const ownerWellbeingSettings = pgTable("owner_wellbeing_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull().references(() => employees.id).unique(),
-  
+
   // Water/Hydration reminders
   waterReminderEnabled: boolean("water_reminder_enabled").default(true),
   waterReminderIntervalMinutes: integer("water_reminder_interval_minutes").default(60),
-  
+
   // Stretch/Movement reminders
   stretchReminderEnabled: boolean("stretch_reminder_enabled").default(true),
   stretchReminderIntervalMinutes: integer("stretch_reminder_interval_minutes").default(90),
-  
+
   // Meal reminders
   mealReminderEnabled: boolean("meal_reminder_enabled").default(true),
   mealReminderTimes: text("meal_reminder_times").default("12:00,18:00"), // Comma-separated times
-  
+
   // Work cutoff time
   workCutoffEnabled: boolean("work_cutoff_enabled").default(true),
   workCutoffTime: text("work_cutoff_time").default("18:30"), // HH:MM format
   workCutoffMessage: text("work_cutoff_message").default("Time to switch to family mode!"),
-  
+
   // Session time tracking
   sessionTrackingEnabled: boolean("session_tracking_enabled").default(true),
   sessionWarningMinutes: integer("session_warning_minutes").default(120), // Warn after X mins online
-  
+
   // Daily Top 3 work focus
   dailyTop3Enabled: boolean("daily_top3_enabled").default(true),
-  
+
   // Personal tasks morning routine
   morningRoutineEnabled: boolean("morning_routine_enabled").default(true),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -2836,7 +2912,7 @@ export const ACTIVITY_TYPES = [
 // Captured products - products captured from supplier websites before adding to catalog/quote
 export const capturedProducts = pgTable("captured_products", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
+
   // Captured from supplier
   supplierId: varchar("supplier_id").references(() => suppliers.id),
   supplierName: text("supplier_name"),
@@ -2846,20 +2922,20 @@ export const capturedProducts = pgTable("captured_products", {
   unit: text("unit").default("each"),
   productUrl: text("product_url"),
   imageUrl: text("image_url"),
-  
+
   // Capture metadata
   capturedAt: timestamp("captured_at").defaultNow(),
   capturedBy: varchar("captured_by").references(() => employees.id),
-  
+
   // Status: pending, added_to_quote, saved_to_catalog, discarded
   status: text("status").default("pending"),
-  
+
   // If added to a job's quote items
   jobId: varchar("job_id").references(() => jobs.id),
-  
+
   // If saved to catalog
   catalogItemId: varchar("catalog_item_id").references(() => catalogItems.id),
-  
+
   // Markup applied
   markupPercent: decimal("markup_percent", { precision: 5, scale: 2 }).default("20"),
   quantity: decimal("quantity", { precision: 10, scale: 2 }).default("1"),
@@ -2905,29 +2981,29 @@ export const DEFAULT_TRADE_SUPPLIERS = [
 
 export const products = pgTable("products", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
+
   // Product info
   productName: text("product_name").notNull(),
   brand: text("brand"),
   storeName: text("store_name").notNull(),
-  
+
   // Pricing
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   currency: text("currency").default("GBP"),
-  
+
   // Size info
   sizeValue: integer("size_value"),
   sizeUnit: text("size_unit"),
   sizeLabel: text("size_label"), // e.g. "290ml"
-  
+
   // Source info
   productUrl: text("product_url"),
   externalSku: text("external_sku"),
   priceSource: text("price_source"), // e.g. "diy.com"
-  
+
   // Stock status
   inStock: boolean("in_stock"),
-  
+
   // Timestamps
   lastCheckedAt: timestamp("last_checked_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -2961,35 +3037,35 @@ export type ProductPriceHistory = typeof productPriceHistory.$inferSelect;
 // Daily Activity Tracking - for logging calls, messages, interactions
 export const dailyActivities = pgTable("daily_activities", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
+
   // Type of interaction
   activityType: text("activity_type").notNull(), // call_inbound, call_outbound, facebook_message, whatsapp, email, walk_in, website_enquiry, other
   direction: text("direction").default("outbound"), // inbound, outbound
-  
+
   // Link to contact/job (optional)
   contactId: varchar("contact_id").references(() => contacts.id),
   jobId: varchar("job_id").references(() => jobs.id),
-  
+
   // Activity details
   contactName: text("contact_name"), // For quick logging without creating contact
   contactPhone: text("contact_phone"),
   notes: text("notes"),
-  
+
   // Outcome tracking
   outcome: text("outcome"), // new_lead, follow_up_scheduled, quote_requested, booking_made, no_answer, not_interested, information_only
   followUpDate: timestamp("follow_up_date"),
   followUpNotes: text("follow_up_notes"),
-  
+
   // Duration for calls
   durationMinutes: integer("duration_minutes"),
-  
+
   // Lead tracking
   linkedLead: boolean("linked_lead").default(false),
   leadSource: text("lead_source"),
-  
+
   // Who logged this
   employeeId: varchar("employee_id").references(() => employees.id),
-  
+
   // Timestamps
   activityDate: timestamp("activity_date").notNull().defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -3017,18 +3093,18 @@ export type DailyActivity = typeof dailyActivities.$inferSelect;
 // Activity Report Snapshots - for caching daily/weekly/monthly summaries
 export const activityReportSnapshots = pgTable("activity_report_snapshots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
+
   // Report period
   periodType: text("period_type").notNull(), // daily, weekly, monthly
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
-  
+
   // Aggregated metrics (stored as JSON for flexibility)
   metrics: text("metrics").notNull(), // JSON string with activity counts, outcomes, etc.
-  
+
   // Generated highlights
   highlights: text("highlights"), // JSON string with key achievements
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -3041,22 +3117,22 @@ export const partnerFeeAccruals = pgTable("partner_fee_accruals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
   jobId: varchar("job_id").notNull().references(() => jobs.id),
-  
+
   // Fee calculation
   feeType: text("fee_type").notNull().default("percentage"), // percentage or fixed
   feeValue: decimal("fee_value", { precision: 10, scale: 2 }).notNull(), // The % or fixed amount used
   jobValue: decimal("job_value", { precision: 10, scale: 2 }).notNull(), // Value of the job for calculation
   feeAmount: decimal("fee_amount", { precision: 10, scale: 2 }).notNull(), // Calculated fee owed
-  
+
   // Description for invoice
   description: text("description"), // e.g., "Job #J-2025-001 - Kitchen Renovation (10%)"
-  
+
   // Status tracking
   status: text("status").notNull().default("pending"), // pending, invoiced, paid, written_off
-  
+
   // Link to invoice when invoiced
   invoiceId: varchar("invoice_id").references(() => partnerInvoices.id),
-  
+
   // Timestamps
   accrualDate: timestamp("accrual_date").notNull().defaultNow(), // When the fee was accrued
   createdAt: timestamp("created_at").defaultNow(),
@@ -3086,28 +3162,28 @@ export const partnerInvoices = pgTable("partner_invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceNumber: text("invoice_number").notNull().unique(), // e.g., "PI-2025-001"
   partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
-  
+
   // Invoice period
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
-  
+
   // Totals
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }).notNull().default("0"),
   amountDue: decimal("amount_due", { precision: 10, scale: 2 }).notNull().default("0"),
-  
+
   // Status
   status: text("status").notNull().default("draft"), // draft, sent, partially_paid, paid, overdue, cancelled
-  
+
   // Dates
   issueDate: timestamp("issue_date"),
   dueDate: timestamp("due_date"),
   paidDate: timestamp("paid_date"),
-  
+
   // Notes
   notes: text("notes"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -3130,18 +3206,18 @@ export const partnerInvoicePayments = pgTable("partner_invoice_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceId: varchar("invoice_id").notNull().references(() => partnerInvoices.id),
   partnerId: varchar("partner_id").notNull().references(() => tradePartners.id),
-  
+
   // Payment details
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   paymentMethod: text("payment_method"), // bank_transfer, cash, card, cheque
   paymentReference: text("payment_reference"), // Bank reference, cheque number, etc.
-  
+
   // Link to finance system
   financialTransactionId: varchar("financial_transaction_id").references(() => financialTransactions.id),
-  
+
   // Notes
   notes: text("notes"),
-  
+
   paymentDate: timestamp("payment_date").notNull().defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -3269,18 +3345,18 @@ export const REPO_KNOWLEDGE_TYPES = [
 export const jobClientPayments = pgTable("job_client_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
-  
+
   // Payment details
   type: text("type").notNull(), // deposit, balance, partial
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   paymentMethod: text("payment_method"), // cash, bank_transfer, card, cheque
   reference: text("reference"), // Bank reference, cheque number, etc.
-  
+
   // Status
   receivedAt: timestamp("received_at").defaultNow(),
   recordedBy: varchar("recorded_by").references(() => employees.id),
   notes: text("notes"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -3303,27 +3379,27 @@ export type JobClientPayment = typeof jobClientPayments.$inferSelect;
 export const jobFundAllocations = pgTable("job_fund_allocations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
-  
+
   // Source of funds (optional - can be linked to a specific client payment)
   clientPaymentId: varchar("client_payment_id").references(() => jobClientPayments.id),
-  
+
   // Recipient
   partnerId: varchar("partner_id").references(() => tradePartners.id), // null if funds stay with CCC
   jobPartnerId: varchar("job_partner_id").references(() => jobPartners.id), // link to specific job-partner assignment
-  
+
   // Allocation details
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   purpose: text("purpose"), // materials, deposit, labor, equipment, etc.
-  
+
   // Status tracking
   status: text("status").default("pending"), // pending, paid, confirmed
   paidAt: timestamp("paid_at"),
   confirmedAt: timestamp("confirmed_at"),
-  
+
   // Audit
   allocatedBy: varchar("allocated_by").references(() => employees.id),
   notes: text("notes"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 

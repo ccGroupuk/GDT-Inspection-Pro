@@ -31,6 +31,7 @@ export default function EmployeesAdmin() {
     role: "fitting",
     accessLevel: "standard",
     hourlyRate: "",
+    defaultCommissionRate: "",
     password: "",
     emergencyContactName: "",
     emergencyContactPhone: ""
@@ -94,9 +95,9 @@ export default function EmployeesAdmin() {
       setResetPasswordEmployee(null);
       setNewPassword("");
       setShowNewPassword(false);
-      toast({ 
-        title: "Password Reset", 
-        description: "Password has been reset. Employee must change it on next login." 
+      toast({
+        title: "Password Reset",
+        description: "Password has been reset. Employee must change it on next login."
       });
     },
     onError: (error: Error) => {
@@ -113,6 +114,7 @@ export default function EmployeesAdmin() {
       role: "fitting",
       accessLevel: "standard",
       hourlyRate: "",
+      defaultCommissionRate: "",
       password: "",
       emergencyContactName: "",
       emergencyContactPhone: ""
@@ -129,6 +131,7 @@ export default function EmployeesAdmin() {
       role: employee.role,
       accessLevel: employee.accessLevel || "standard",
       hourlyRate: employee.hourlyRate || "",
+      defaultCommissionRate: employee.defaultCommissionRate || "",
       password: "",
       emergencyContactName: employee.emergencyContactName || "",
       emergencyContactPhone: employee.emergencyContactPhone || ""
@@ -144,6 +147,7 @@ export default function EmployeesAdmin() {
       role: formData.role,
       accessLevel: formData.accessLevel,
       hourlyRate: formData.hourlyRate || null,
+      defaultCommissionRate: formData.defaultCommissionRate || null,
       emergencyContactName: formData.emergencyContactName || null,
       emergencyContactPhone: formData.emergencyContactPhone || null,
       ...(formData.password && { password: formData.password })
@@ -247,17 +251,31 @@ export default function EmployeesAdmin() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hourlyRate">Hourly Rate</Label>
-                  <Input
-                    id="hourlyRate"
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={formData.hourlyRate}
-                    onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
-                    data-testid="input-hourly-rate"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="hourlyRate">Hourly Rate (£/hr)</Label>
+                    <Input
+                      id="hourlyRate"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.hourlyRate}
+                      onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
+                      data-testid="input-hourly-rate"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="defaultCommissionRate">Commission Rate (%)</Label>
+                    <Input
+                      id="defaultCommissionRate"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.defaultCommissionRate}
+                      onChange={(e) => setFormData({ ...formData, defaultCommissionRate: e.target.value })}
+                      data-testid="input-commission-rate"
+                    />
+                  </div>
                 </div>
               </div>
               <div className="space-y-2">
@@ -313,8 +331,8 @@ export default function EmployeesAdmin() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-              <Button 
-                onClick={handleSubmit} 
+              <Button
+                onClick={handleSubmit}
                 disabled={createMutation.isPending || !formData.firstName || !formData.lastName || !formData.email}
                 data-testid="button-submit-employee"
               >
@@ -418,7 +436,12 @@ export default function EmployeesAdmin() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {employee.hourlyRate ? `£${employee.hourlyRate}/hr` : "-"}
+                      <div>
+                        {employee.hourlyRate ? `£${employee.hourlyRate}/hr` : ""}
+                        {employee.hourlyRate && employee.defaultCommissionRate ? " | " : ""}
+                        {employee.defaultCommissionRate ? `${employee.defaultCommissionRate}% Comm.` : ""}
+                        {!employee.hourlyRate && !employee.defaultCommissionRate ? "-" : ""}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={employee.isActive ? "default" : "secondary"}>
@@ -428,8 +451,8 @@ export default function EmployeesAdmin() {
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Link href={`/employees/${employee.id}/portal`}>
-                          <Button 
-                            variant="ghost" 
+                          <Button
+                            variant="ghost"
                             size="icon"
                             title="View Portal"
                             data-testid={`button-view-portal-${employee.id}`}
@@ -439,9 +462,9 @@ export default function EmployeesAdmin() {
                         </Link>
                         <Dialog open={editingEmployee?.id === employee.id} onOpenChange={(open) => !open && setEditingEmployee(null)}>
                           <DialogTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => handleEdit(employee)}
                               data-testid={`button-edit-${employee.id}`}
                             >
@@ -500,14 +523,25 @@ export default function EmployeesAdmin() {
                                     </SelectContent>
                                   </Select>
                                 </div>
-                                <div className="space-y-2">
-                                  <Label>Hourly Rate</Label>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={formData.hourlyRate}
-                                    onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
-                                  />
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label>Hourly Rate (£/hr)</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={formData.hourlyRate}
+                                      onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Commission Rate (%)</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={formData.defaultCommissionRate}
+                                      onChange={(e) => setFormData({ ...formData, defaultCommissionRate: e.target.value })}
+                                    />
+                                  </div>
                                 </div>
                               </div>
                               <div className="space-y-2">
@@ -535,8 +569,8 @@ export default function EmployeesAdmin() {
                             </div>
                             <DialogFooter>
                               <Button variant="outline" onClick={() => setEditingEmployee(null)}>Cancel</Button>
-                              <Button 
-                                onClick={handleSubmit} 
+                              <Button
+                                onClick={handleSubmit}
                                 disabled={updateMutation.isPending}
                               >
                                 {updateMutation.isPending ? "Saving..." : "Save Changes"}
@@ -544,8 +578,8 @@ export default function EmployeesAdmin() {
                             </DialogFooter>
                           </DialogContent>
                         </Dialog>
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           size="icon"
                           onClick={() => {
                             setResetPasswordEmployee(employee);
@@ -557,8 +591,8 @@ export default function EmployeesAdmin() {
                         >
                           <KeyRound className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           size="icon"
                           onClick={() => {
                             if (confirm("Are you sure you want to delete this employee?")) {
@@ -617,7 +651,7 @@ export default function EmployeesAdmin() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResetPasswordEmployee(null)}>Cancel</Button>
-            <Button 
+            <Button
               onClick={() => {
                 if (resetPasswordEmployee && newPassword.length >= 6) {
                   resetPasswordMutation.mutate({ id: resetPasswordEmployee.id, newPassword });

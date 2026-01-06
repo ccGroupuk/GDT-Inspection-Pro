@@ -11,6 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -20,7 +26,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, Handshake, Phone, Mail, Star, Edit, Trash2, CheckCircle, UserPlus, Copy, ExternalLink, MessageSquare, KeyRound, Eye, EyeOff } from "lucide-react";
+import { Plus, Search, Handshake, Phone, Mail, Star, Edit, Trash2, CheckCircle, UserPlus, Copy, ExternalLink, MessageSquare, KeyRound, Eye, EyeOff, Landmark } from "lucide-react";
 import { SendMessageDialog } from "@/components/send-message-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TradePartner, InsertTradePartner } from "@shared/schema";
@@ -49,6 +55,7 @@ export default function Partners() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPartner, setEditingPartner] = useState<TradePartner | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [resetPasswordPartner, setResetPasswordPartner] = useState<TradePartner | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -76,6 +83,12 @@ export default function Partners() {
       isActive: true,
       emergencyAvailable: false,
       emergencyCalloutFee: "",
+
+      // Bank details
+      bankName: "",
+      bankAccountName: "",
+      bankSortCode: "",
+      bankAccountNumber: "",
     },
   });
 
@@ -208,14 +221,23 @@ export default function Partners() {
   });
 
   const filteredPartners = partners.filter(partner => {
-    if (!searchQuery) return true;
+    // Search filter
     const query = searchQuery.toLowerCase();
-    return (
+    const matchesSearch = !searchQuery ||
       partner.businessName.toLowerCase().includes(query) ||
       partner.contactName.toLowerCase().includes(query) ||
       partner.tradeCategory.toLowerCase().includes(query) ||
-      partner.coverageAreas?.toLowerCase().includes(query)
-    );
+      partner.coverageAreas?.toLowerCase().includes(query);
+
+    if (!matchesSearch) return false;
+
+    // Status filter
+    if (statusFilter === "all") return true;
+    if (statusFilter === "applicants") return partner.status === "applicant";
+    if (statusFilter === "active") return partner.status === "active" && partner.isActive;
+    if (statusFilter === "inactive") return !partner.isActive || partner.status === "inactive";
+
+    return true;
   });
 
   const openEditDialog = (partner: TradePartner) => {
@@ -236,6 +258,10 @@ export default function Partners() {
       isActive: partner.isActive ?? true,
       emergencyAvailable: partner.emergencyAvailable || false,
       emergencyCalloutFee: partner.emergencyCalloutFee || "",
+      bankName: partner.bankName || "",
+      bankAccountName: partner.bankAccountName || "",
+      bankSortCode: partner.bankSortCode || "",
+      bankAccountNumber: partner.bankAccountNumber || "",
     });
     setIsDialogOpen(true);
   };
@@ -258,6 +284,10 @@ export default function Partners() {
       isActive: true,
       emergencyAvailable: false,
       emergencyCalloutFee: "",
+      bankName: "",
+      bankAccountName: "",
+      bankSortCode: "",
+      bankAccountNumber: "",
     });
     setIsDialogOpen(true);
   };
@@ -265,7 +295,22 @@ export default function Partners() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
-        <h1 className="text-2xl font-semibold">Trade Partners</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-semibold">Trade Partners</h1>
+          <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-auto">
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="applicants" className="relative">
+                Applicants
+                {partners.filter(p => p.status === "applicant").length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="inactive">Inactive</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2" onClick={openCreateDialog} data-testid="button-add-partner">
@@ -437,6 +482,47 @@ export default function Partners() {
                 </div>
               </div>
 
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Landmark className="w-4 h-4" />
+                  Bank Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bankName">Bank Name</Label>
+                    <Input
+                      {...form.register("bankName")}
+                      placeholder="e.g. Barclays"
+                      data-testid="input-bank-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bankAccountName">Account Name</Label>
+                    <Input
+                      {...form.register("bankAccountName")}
+                      placeholder="Account holder name"
+                      data-testid="input-bank-account-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bankSortCode">Sort Code</Label>
+                    <Input
+                      {...form.register("bankSortCode")}
+                      placeholder="XX-XX-XX"
+                      data-testid="input-bank-sort-code"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bankAccountNumber">Account Number</Label>
+                    <Input
+                      {...form.register("bankAccountNumber")}
+                      placeholder="12345678"
+                      data-testid="input-bank-account-number"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="notes">Notes</Label>
                 <Textarea
@@ -559,6 +645,9 @@ export default function Partners() {
                       Insured
                     </Badge>
                   )}
+                  {partner.status === "applicant" && (
+                    <Badge variant="default" className="bg-primary hover:bg-primary/90">Applicant</Badge>
+                  )}
                   {!partner.isActive && (
                     <Badge variant="outline" className="text-muted-foreground">Inactive</Badge>
                   )}
@@ -593,7 +682,7 @@ export default function Partners() {
                     ))}
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {partner.commissionType === "percentage" 
+                    {partner.commissionType === "percentage"
                       ? `${partner.commissionValue}% commission`
                       : `£${partner.commissionValue} fixed`
                     }
@@ -693,7 +782,7 @@ export default function Partners() {
           <div className="space-y-4 py-4">
             <p className="text-sm text-muted-foreground">
               Set a new password for <strong>{resetPasswordPartner?.businessName}</strong>.
-              {partnerPortalAccessMap[resetPasswordPartner?.id || ""]?.inviteStatus === "pending" 
+              {partnerPortalAccessMap[resetPasswordPartner?.id || ""]?.inviteStatus === "pending"
                 ? " Once they accept the invite, they can log in with this password."
                 : " They can use this password to log in to the partner portal."
               }
