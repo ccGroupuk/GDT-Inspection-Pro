@@ -20,11 +20,11 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Search, CheckSquare, Calendar, Trash2, AlertCircle, Clock, CalendarIcon } from "lucide-react";
+import { Plus, Search, CheckSquare, Calendar, Trash2, AlertCircle, Clock, CalendarIcon, User, Briefcase } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import type { Task, Job, InsertTask } from "@shared/schema";
+import type { Task, Job, InsertTask, Employee, Contact } from "@shared/schema";
 import { insertTaskSchema } from "@shared/schema";
 import { z } from "zod";
 import { Link } from "wouter";
@@ -45,6 +45,14 @@ export default function Tasks() {
   const [filterStatus, setFilterStatus] = useState<string>("pending");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
+
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees"],
+  });
+
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+  });
 
   const { data, isLoading } = useQuery<TasksData>({
     queryKey: ["/api/tasks"],
@@ -110,16 +118,26 @@ export default function Tasks() {
   });
 
   const filteredTasks = tasks.filter(task => {
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesStatus = filterStatus === "all" || task.status === filterStatus;
-    
+
     return matchesSearch && matchesStatus;
   });
 
   const getJob = (jobId: string | null) => jobId ? jobs.find(j => j.id === jobId) : null;
+  const getEmployeeName = (empId: string | null) => {
+    if (!empId) return null;
+    const emp = employees.find(e => e.id === empId);
+    return emp ? `${emp.firstName} ${emp.lastName}` : "Unknown";
+  };
+  const getJobClientName = (job: Job) => {
+    if (!job.contactId) return "";
+    const contact = contacts.find(c => c.id === job.contactId);
+    return contact ? ` - ${contact.name}` : "";
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -182,7 +200,7 @@ export default function Tasks() {
                       data-testid="button-task-due-date"
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {form.watch("dueDate") 
+                      {form.watch("dueDate")
                         ? format(new Date(form.watch("dueDate")!), "PPP")
                         : "No due date"}
                     </Button>
@@ -196,9 +214,9 @@ export default function Tasks() {
                     />
                     {form.watch("dueDate") && (
                       <div className="p-2 border-t">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="w-full"
                           onClick={() => form.setValue("dueDate", null)}
                         >
@@ -208,6 +226,26 @@ export default function Tasks() {
                     )}
                   </PopoverContent>
                 </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="assignedTo">Assign To</Label>
+                <Select
+                  value={form.watch("assignedTo") || "unassigned"}
+                  onValueChange={(value) => form.setValue("assignedTo", value === "unassigned" ? null : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Unassigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {employees.map(emp => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.firstName} {emp.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -241,7 +279,7 @@ export default function Tasks() {
                       <SelectItem value="none">No job</SelectItem>
                       {jobs.map(job => (
                         <SelectItem key={job.id} value={job.id}>
-                          {job.jobNumber}
+                          {job.jobNumber}{getJobClientName(job)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -299,13 +337,13 @@ export default function Tasks() {
         <EmptyState
           icon={CheckSquare}
           title="No tasks found"
-          description={searchQuery || filterStatus !== "all" 
-            ? "Try adjusting your filters" 
+          description={searchQuery || filterStatus !== "all"
+            ? "Try adjusting your filters"
             : "Create your first task to get started"
           }
-          action={!searchQuery && filterStatus === "all" ? { 
-            label: "Add Task", 
-            onClick: () => setIsDialogOpen(true) 
+          action={!searchQuery && filterStatus === "all" ? {
+            label: "Add Task",
+            onClick: () => setIsDialogOpen(true)
           } : undefined}
         />
       ) : (
@@ -315,7 +353,7 @@ export default function Tasks() {
               {filteredTasks.map(task => {
                 const job = getJob(task.jobId);
                 const overdue = task.status === "pending" && isOverdue(task.dueDate);
-                
+
                 return (
                   <div
                     key={task.id}
@@ -332,7 +370,7 @@ export default function Tasks() {
                       }}
                       data-testid={`checkbox-task-${task.id}`}
                     />
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-medium text-sm ${task.status === "completed" ? "line-through" : ""}`}>
@@ -354,8 +392,16 @@ export default function Tasks() {
                         </p>
                       )}
                       <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                        {task.assignedTo && (
+                          <div className="flex items-center gap-1 text-primary">
+                            <User className="w-3 h-3" />
+                            Assigned to: {getEmployeeName(task.assignedTo)}
+                          </div>
+                        )}
+
                         {job && (
-                          <Link href={`/jobs/${job.id}`} className="hover:underline">
+                          <Link href={`/jobs/${job.id}`} className="hover:underline flex items-center gap-1">
+                            <Briefcase className="w-3 h-3" />
                             Job: {job.jobNumber}
                           </Link>
                         )}
