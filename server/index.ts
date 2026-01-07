@@ -11,6 +11,8 @@ import { seedHelpCenter } from "./seed-help-center";
 const app = express();
 const httpServer = createServer(app);
 
+console.log(`[startup] Server restarting at ${new Date().toISOString()}...`);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
