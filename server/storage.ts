@@ -3510,31 +3510,6 @@ export class DatabaseStorage implements IStorage {
   async getSalesCommissions(): Promise<SalesCommission[]> {
     return db.select().from(salesCommissions).orderBy(desc(salesCommissions.createdAt));
   }
-
-  // Pay Periods
-  async getPayPeriods(): Promise<PayPeriod[]> {
-    return db.select().from(payPeriods).orderBy(desc(payPeriods.startDate));
-  }
-
-  async getPayPeriod(id: string): Promise<PayPeriod | undefined> {
-    const [period] = await db.select().from(payPeriods).where(eq(payPeriods.id, id));
-    return period;
-  }
-
-  async createPayPeriod(period: InsertPayPeriod): Promise<PayPeriod> {
-    const [created] = await db.insert(payPeriods).values(period).returning();
-    return created;
-  }
-
-  async updatePayPeriod(id: string, period: Partial<InsertPayPeriod>): Promise<PayPeriod | undefined> {
-    const [updated] = await db.update(payPeriods).set({ ...period }).where(eq(payPeriods.id, id)).returning();
-    return updated || undefined;
-  }
-
-  async deletePayPeriod(id: string): Promise<boolean> {
-    const [deleted] = await db.delete(payPeriods).where(eq(payPeriods.id, id)).returning();
-    return !!deleted;
-  }
 }
 
 export const storage = new DatabaseStorage();

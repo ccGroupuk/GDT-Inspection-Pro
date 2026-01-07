@@ -25,7 +25,7 @@ if (process.env.DATABASE_URL) {
   dbInstance = drizzlePglite(client, { schema });
 
   // Simple migration runner for PGLite
-  await (async () => {
+  (async () => {
     try {
       console.log("Running local migrations...");
       const migrationsDir = path.resolve("./migrations");
