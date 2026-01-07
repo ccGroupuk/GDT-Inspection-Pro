@@ -10,10 +10,14 @@ export const pool = (!process.env.DATABASE_URL) ? null : new pg.Pool({ connectio
 
 let dbInstance: any;
 
-console.log(`[DEBUG] Checking DATABASE_URL: ${process.env.DATABASE_URL ? 'DEFINED (Length: ' + process.env.DATABASE_URL.length + ')' : 'UNDEFINED'}`);
+// Fallback to hardcoded URL for debugging if env var is missing
+const dbUrl = process.env.DATABASE_URL || "postgresql://postgres:MkXscqkxhSunftcGMsvIbWhDXklkSRFO@yamanote.proxy.rlwy.net:32018/railway";
 
-if (process.env.DATABASE_URL) {
-  dbInstance = drizzle(pool!, { schema });
+console.log(`[DEBUG] Checking DATABASE_URL: ${dbUrl ? 'DEFINED (Length: ' + dbUrl.length + ')' : 'UNDEFINED'}`);
+
+if (dbUrl) {
+  const pool = new Pool({ connectionString: dbUrl });
+  dbInstance = drizzle(pool, { schema });
 } else {
   console.log("⚠️ DATABASE_URL not found. Switching to local PGLite (In-Memory/File Persistence)...");
 
