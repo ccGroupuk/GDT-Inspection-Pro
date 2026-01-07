@@ -8,7 +8,7 @@ import * as schema from "@shared/schema";
 import fs from "fs";
 import path from "path";
 
-export const pool = (!process.env.DATABASE_URL) ? null : new pg.Pool({ connectionString: process.env.DATABASE_URL });
+// export const pool = (!process.env.DATABASE_URL) ? null : new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
 let dbInstance: any;
 
@@ -18,7 +18,7 @@ const dbUrl = process.env.DATABASE_URL || "postgresql://postgres:MkXscqkxhSunftc
 console.log(`[DEBUG] Checking DATABASE_URL: ${dbUrl ? 'DEFINED (Length: ' + dbUrl.length + ')' : 'UNDEFINED'} `);
 
 if (dbUrl) {
-  const pool = new Pool({ connectionString: dbUrl });
+  const pool = new pg.Pool({ connectionString: dbUrl });
   dbInstance = drizzle(pool, { schema });
 } else {
   console.log("⚠️ DATABASE_URL not found. Switching to local PGLite (In-Memory/File Persistence)...");
