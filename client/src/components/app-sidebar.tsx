@@ -33,6 +33,7 @@ import {
   EyeOff,
   ChevronDown,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
