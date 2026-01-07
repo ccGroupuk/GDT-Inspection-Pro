@@ -10,6 +10,8 @@ export const pool = (!process.env.DATABASE_URL) ? null : new pg.Pool({ connectio
 
 let dbInstance: any;
 
+console.log(`[DEBUG] Checking DATABASE_URL: ${process.env.DATABASE_URL ? 'DEFINED (Length: ' + process.env.DATABASE_URL.length + ')' : 'UNDEFINED'}`);
+
 if (process.env.DATABASE_URL) {
   dbInstance = drizzle(pool!, { schema });
 } else {
