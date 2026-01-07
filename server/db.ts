@@ -1,7 +1,9 @@
+
 import { drizzle } from "drizzle-orm/node-postgres";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import pg from "pg";
 import { PGlite } from "@electric-sql/pglite";
+const { Pool } = pg;
 import * as schema from "@shared/schema";
 import fs from "fs";
 import path from "path";
@@ -13,7 +15,7 @@ let dbInstance: any;
 // Fallback to hardcoded URL for debugging if env var is missing
 const dbUrl = process.env.DATABASE_URL || "postgresql://postgres:MkXscqkxhSunftcGMsvIbWhDXklkSRFO@yamanote.proxy.rlwy.net:32018/railway";
 
-console.log(`[DEBUG] Checking DATABASE_URL: ${dbUrl ? 'DEFINED (Length: ' + dbUrl.length + ')' : 'UNDEFINED'}`);
+console.log(`[DEBUG] Checking DATABASE_URL: ${dbUrl ? 'DEFINED (Length: ' + dbUrl.length + ')' : 'UNDEFINED'} `);
 
 if (dbUrl) {
   const pool = new Pool({ connectionString: dbUrl });
@@ -50,7 +52,7 @@ if (dbUrl) {
             } catch (e: any) {
               // Ignore table already exists errors, but log others
               if (e.code !== '42P07') {
-                console.log(`[migration] Notice processing ${file}: ${e.message}`);
+                console.log(`[migration] Notice processing ${file}: ${e.message} `);
               } else {
                 console.log(`[migration] Skipping ${file} (tables exist)`);
               }
