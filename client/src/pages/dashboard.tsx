@@ -30,6 +30,7 @@ import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import type { Job, Contact, TradePartner, Task, JobScheduleProposal, JobSurvey, PartnerQuote } from "@shared/schema";
 import { ProjectCountdownWidget } from "@/components/ProjectCountdownWidget";
 import DailyQuote from "@/components/DailyQuote";
