@@ -14202,44 +14202,11 @@ ${cleanedHtml}`;
 
   app.get("/api/time-entries", async (req, res) => {
     try {
-      // Allow Admin (via cookie session) OR Employee (via Bearer token)
-      let employeeIdToFetch = null;
-
-      // 1. Try Admin (Session)
-      if (req.isAuthenticated && req.isAuthenticated()) { // Hypothetical check, reliant on existing middleware
-        // If admin, they can request specific employee via query
-        // We'll rely on the fact that if they are hitting this via the React App as Admin, they have the cookie.
-        // But I need to verify isAdmin logic. 
-        // For now, let's keep it simple: If query param exists, assume Admin context check happened elsewhere or we trust it for MVP.
-        // Actually, let's just support the Employee Portal use case first (Bearer Token).
-      }
-
       const employee = await getEmployeeFromRequest(req);
-      if (employee) {
-        // Employee can only see their own
-        employeeIdToFetch = employee.id;
-      } else if (req.user && (req.user as any).role === 'admin') {
-        // Fallback to passport/session if available
-        // This is risky without verifying the specific auth setup
-        employeeIdToFetch = req.query.employeeId as string;
-      }
+      if (!employee) return res.status(401).json({ message: "Unauthorized" });
 
-      // Safe fallback: simpler logic
-      // If Bearer token -> Employee (own entries)
-      // If no Bearer -> Check Admin Session (cookies) -> Allow querying any ID
-
-      if (employee) {
-        const entries = await storage.getTimeEntries(employee.id);
-        return res.json(entries);
-      }
-
-      // If we reach here, no Bearer token. Check for Admin Access via standard middleware (which might wrap this route? No, I'm defining it inline)
-      // I'll assume for the specific "Employee Portal" use case, we only need the Bearer token logic.
-      // For the Admin Dashboard, we will add a separate route or update this one properly next. 
-      // Wait, the Admin Dashboard uses the same API? 
-      // Let's create a separate ADMIN route to be safe and avoid auth mixups.
-      return res.status(401).json({ message: "Unauthorized" });
-
+      const entries = await storage.getTimeEntriesByEmployee(employee.id);
+      res.json(entries);
     } catch (error) {
       console.error("Get time entries error:", error);
       res.status(500).json({ message: "Failed to get entries" });
@@ -14250,7 +14217,14 @@ ${cleanedHtml}`;
   app.get("/api/admin/time-entries", isAdminAuthenticated, async (req, res) => {
     try {
       const { employeeId } = req.query;
-      const entries = await storage.getTimeEntries(employeeId as string);
+
+      let entries;
+      if (employeeId && typeof employeeId === 'string' && employeeId !== 'all') {
+        entries = await storage.getTimeEntriesByEmployee(employeeId);
+      } else {
+        entries = await storage.getTimeEntries();
+      }
+
       res.json(entries);
     } catch (error) {
       console.error("Admin get entries error:", error);

@@ -214,12 +214,14 @@ const SidebarItem = ({
   item,
   isActive,
   unreadCount,
-  handleHide
+  handleHide,
+  isReordering
 }: {
   item: typeof menuItems[0];
   isActive: boolean;
   unreadCount: number;
   handleHide: (item: typeof menuItems[0]) => void;
+  isReordering: boolean;
 }) => {
   const controls = useDragControls();
   const showBadge = item.url === "/communications" && unreadCount > 0;
@@ -232,38 +234,57 @@ const SidebarItem = ({
       dragControls={controls}
       whileDrag={{ scale: 1.02, zIndex: 10 }}
     >
+      {isReordering && (
+        <div
+          className="px-4 py-3 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-foreground touch-none flex items-center justify-center animate-in fade-in slide-in-from-left-2 duration-200"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            controls.start(e);
+          }}
+          style={{ touchAction: "none" }}
+        >
+          <GripVertical className="w-5 h-5" />
+        </div>
+      )}
+
       <div
-        className="px-2 py-2 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-foreground touch-none"
-        onPointerDown={(e) => controls.start(e)}
+        className="flex-1 min-w-0"
+        onPointerDown={(e) => e.stopPropagation()}
       >
-        <GripVertical className="w-4 h-4" />
-      </div>
-      <SidebarMenuButton
-        asChild
-        isActive={isActive}
-        className="flex-1 transition-all duration-200 pr-8"
-      >
-        <Link href={item.url}>
-          <item.icon className="w-4 h-4" />
-          <span className="flex-1 select-none">{item.title}</span>
-          {showBadge && (
-            <Badge variant="destructive" className="h-5 px-1.5 text-xs ml-auto">
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </Badge>
+        <SidebarMenuButton
+          asChild
+          isActive={isActive}
+          className={cn(
+            "w-full transition-all duration-200 py-3 h-auto",
+            isReordering ? "pr-8" : "px-4"
           )}
-        </Link>
-      </SidebarMenuButton>
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handleHide(item);
-        }}
-        className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover/menu-item:opacity-100 transition-opacity p-1 hover:bg-sidebar-accent rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground"
-        title="Hide from menu"
-      >
-        <EyeOff className="w-3.5 h-3.5" />
-      </button>
+        >
+          <Link href={item.url} className={cn("flex items-center gap-2", isReordering && "pointer-events-none")}>
+            <item.icon className="w-4 h-4 shrink-0" />
+            <span className="flex-1 truncate select-none leading-none">{item.title}</span>
+            {showBadge && (
+              <Badge variant="destructive" className="h-5 px-1.5 text-xs ml-auto shrink-0">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Badge>
+            )}
+          </Link>
+        </SidebarMenuButton>
+      </div>
+
+      {isReordering && (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleHide(item);
+          }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-sidebar-accent rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground animate-in fade-in slide-in-from-right-2 duration-200"
+          title="Hide from menu"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <EyeOff className="w-4 h-4" />
+        </button>
+      )}
     </Reorder.Item>
   );
 };
@@ -273,6 +294,7 @@ export function AppSidebar() {
   const [items, setItems] = useState(menuItems); // Visible items
   const [hiddenItems, setHiddenItems] = useState<typeof menuItems>([]);
   const [isHiddenOpen, setIsHiddenOpen] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
 
   // Load order and hidden state from local storage on mount
   useEffect(() => {
@@ -364,15 +386,33 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs uppercase tracking-wide text-muted-foreground px-4 py-2">
-            Main Menu
-          </SidebarGroupLabel>
+          <div className="flex items-center justify-between px-4 py-2">
+            <SidebarGroupLabel className="text-xs uppercase tracking-wide text-muted-foreground p-0">
+              Main Menu
+            </SidebarGroupLabel>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-6 w-6 p-0 hover:bg-sidebar-accent",
+                isReordering && "text-primary bg-sidebar-accent"
+              )}
+              onClick={() => setIsReordering(!isReordering)}
+              title={isReordering ? "Done Customizing" : "Customize Menu"}
+            >
+              {isReordering ? (
+                <CheckSquare className="w-3.5 h-3.5" />
+              ) : (
+                <Settings className="w-3.5 h-3.5" />
+              )}
+            </Button>
+          </div>
           <SidebarGroupContent>
             <Reorder.Group
               axis="y"
               values={items}
               onReorder={handleReorder}
-              className="flex w-full min-w-0 flex-col gap-1"
+              className="flex w-full min-w-0 flex-col gap-2"
             >
               {items.map((item) => {
                 const isActive = location === item.url ||
@@ -385,6 +425,7 @@ export function AppSidebar() {
                     isActive={isActive}
                     unreadCount={unreadCount}
                     handleHide={handleHide}
+                    isReordering={isReordering}
                   />
                 );
               })}

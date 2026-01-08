@@ -230,28 +230,7 @@ export type Task = typeof tasks.$inferSelect;
 // Quote Line Items (keeping this comment for context, insert above this block)
 
 // Time Entries (Clock In/Out)
-export const timeEntries = pgTable("time_entries", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  employeeId: varchar("employee_id").notNull().references(() => employees.id),
-  clockIn: timestamp("clock_in").notNull(),
-  clockOut: timestamp("clock_out"),
-  entryType: text("entry_type").notNull().default("work"), // work, project, meeting, etc
-  description: text("description"), // Optional notes
-  breakMinutes: integer("break_minutes").default(0),
-  totalHours: decimal("total_hours", { precision: 10, scale: 2 }), // Calculated and stored on clock out
-  createdAt: timestamp("created_at").defaultNow(),
-});
 
-export const timeEntriesRelations = relations(timeEntries, ({ one }) => ({
-  employee: one(employees, {
-    fields: [timeEntries.employeeId],
-    references: [employees.id],
-  }),
-}));
-
-export const insertTimeEntrySchema = createInsertSchema(timeEntries).omit({ id: true, createdAt: true });
-export type InsertTimeEntry = z.infer<typeof insertTimeEntrySchema>;
-export type TimeEntry = typeof timeEntries.$inferSelect;
 
 // Quote Line Items
 export const quoteItems = pgTable("quote_items", {
