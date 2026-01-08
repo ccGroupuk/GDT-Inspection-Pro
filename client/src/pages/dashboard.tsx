@@ -9,24 +9,26 @@ import {
   Users,
   Handshake,
   PoundSterling,
-  TrendingUp,
-  Clock,
-  AlertCircle,
-  CheckCircle,
   ThumbsUp,
-  Sparkles,
+  UserCheck,
+  Check,
   Bell,
   CalendarCheck,
   CalendarClock,
-  UserCheck,
-  Check,
   ClipboardCheck,
   FileText,
-  GripVertical
+  Sparkles,
+  Clock,
+  AlertCircle,
+  CheckCircle,
+  TrendingUp,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import type { Job, Contact, TradePartner, Task, JobScheduleProposal, JobSurvey, PartnerQuote } from "@shared/schema";
 import { ProjectCountdownWidget } from "@/components/ProjectCountdownWidget";
@@ -45,6 +47,8 @@ interface DashboardData {
 }
 
 export default function Dashboard() {
+  console.log("DASHBOARD COMPONENT MOUNTING...");
+  const { user } = useAuth();
   const { toast } = useToast();
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ["/api/dashboard"],
@@ -113,21 +117,47 @@ export default function Dashboard() {
     new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
   ).slice(0, 5);
 
+  const moveWidget = (index: number, direction: -1 | 1) => {
+    const newOrder = [...widgetOrder];
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
+
+    [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
+    handleReorder(newOrder); // Persist change
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <span className="text-sm text-muted-foreground">
-          Welcome back! Here's your business overview. Drag sections to reorder.
+          Welcome back! Customize your view using the arrows.
         </span>
       </div>
 
-      <Reorder.Group axis="y" values={widgetOrder} onReorder={handleReorder} className="space-y-6">
-        {widgetOrder.map((widgetId) => (
-          <Reorder.Item key={widgetId} value={widgetId} className="list-none relative group">
-            {/* Drag Handle */}
-            <div className="absolute -left-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1 bg-muted rounded z-10 hidden lg:block">
-              <GripVertical className="w-5 h-5 text-muted-foreground" />
+      <div className="space-y-6">
+        {widgetOrder.map((widgetId, index) => (
+          <div key={widgetId} className="relative group">
+            {/* Reorder Controls */}
+            <div className="absolute -left-8 top-0 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 hidden lg:flex">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                disabled={index === 0}
+                onClick={() => moveWidget(index, -1)}
+              >
+                <ChevronUp className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                disabled={index === widgetOrder.length - 1}
+                onClick={() => moveWidget(index, 1)}
+              >
+                <ChevronDown className="w-4 h-4" />
+              </Button>
             </div>
 
             {widgetId === "summary-stats" && (
@@ -468,9 +498,9 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             )}
-          </Reorder.Item>
+          </div>
         ))}
-      </Reorder.Group>
+      </div>
     </div>
   );
 }

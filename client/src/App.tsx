@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { GlobalSearch } from "@/components/global-search";
 import { useAuth } from "@/hooks/use-auth";
@@ -210,12 +210,16 @@ function ProtectedAdminLayout() {
   }, [shouldRedirect, setLocation]);
 
   if (isLoading) {
+    console.log("[ProtectedAdminLayout] Loading...");
     return <AuthLoadingScreen />;
   }
 
   if (shouldRedirect) {
+    console.log("[ProtectedAdminLayout] Redirecting to:", shouldRedirect);
     return <AuthLoadingScreen />;
   }
+
+  console.log("[ProtectedAdminLayout] Rendering content. user:", { isAuthenticated, hasAdminAccess });
 
   const style = {
     "--sidebar-width": "16rem",
@@ -224,53 +228,83 @@ function ProtectedAdminLayout() {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full">
-        <AppSidebar />
-        <div className="flex flex-col flex-1 min-h-0">
-          <header className="flex items-center justify-between gap-4 px-4 h-14 border-b border-border shrink-0">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <GlobalSearch />
-            <ThemeToggle />
-          </header>
-          <main className="flex-1 overflow-auto bg-background">
-            <AdminRouter />
-          </main>
-        </div>
-      </div>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="flex items-center justify-between gap-4 px-4 h-14 border-b border-border shrink-0">
+          <SidebarTrigger data-testid="button-sidebar-toggle" />
+          <GlobalSearch />
+          <ThemeToggle />
+        </header>
+        <main className="flex-1 overflow-auto bg-background">
+          <AdminRouter />
+        </main>
+      </SidebarInset>
     </SidebarProvider>
   );
 }
 
 function App() {
-  const [location] = useLocation();
-  const isLandingPage = location === "/landing";
-  const isClientPortalLogin = location === "/client-portal-login";
-  const isPortalRoute = location.startsWith("/portal");
-  const isPartnerPortalRoute = location.startsWith("/partner-portal");
-  const isEmployeePortalRoute = location.startsWith("/employee-portal");
-  const isJobHubRoute = location.startsWith("/job-hub");
+  const [location, setLocation] = useLocation();
+  const { user, isLoading, isAuthenticated } = useAuth();
 
-  const getContent = () => {
-    if (isLandingPage) return <Landing />;
-    if (location === "/enquiry") return <EnquiryPage />;
-    if (location === "/partner-onboarding") return <PartnerOnboardingPage />;
-    if (isClientPortalLogin) return <ClientPortalLogin />;
-    if (isJobHubRoute) return <Route path="/job-hub/:token" component={JobHub} />;
-    if (isPartnerPortalRoute) return <PartnerPortalRouter />;
-    if (isPortalRoute) return <PortalRouter />;
-    if (isEmployeePortalRoute) return <EmployeePortalRouter />;
-    return <ProtectedAdminLayout />;
-  };
+  console.log("APP RENDER. Location:", location, "Loading:", isLoading, "Auth:", isAuthenticated);
+
+  // Handle protected redirects
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && !location.startsWith("/auth") &&
+      !location.startsWith("/portal") && !location.startsWith("/partner-portal") &&
+      !location.startsWith("/employee-portal") && !location.startsWith("/client-portal") &&
+      location !== "/landing" && location !== "/enquiry" && location !== "/partner-onboarding") {
+      setLocation("/landing");
+    }
+  }, [isLoading, isAuthenticated, location, setLocation]);
+
+  if (isLoading) {
+    return <AuthLoadingScreen />;
+  }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          {getContent()}
-          <Toaster />
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+      <TooltipProvider>
+        <Switch>
+          <Route path="/auth">
+            {isAuthenticated ? <Redirect to="/" /> : <PortalLogin />}
+          </Route>
+          <Route path="/portal/login" component={PortalLogin} />
+          <Route path="/portal/invite" component={PortalInvite} />
+          <Route path="/partner-portal/login" component={PartnerPortalLogin} />
+          <Route path="/partner-portal/invite" component={PartnerPortalInvite} />
+          <Route path="/employee-portal/login" component={EmployeePortalLogin} />
+          <Route path="/employee-portal/change-password" component={EmployeePortalChangePassword} />
+          <Route path="/client-portal/login" component={ClientPortalLogin} />
+
+          <Route path="/portal/:rest*">
+            <PortalRouter />
+          </Route>
+
+          <Route path="/partner-portal/:rest*">
+            <PartnerPortalRouter />
+          </Route>
+
+          <Route path="/employee-portal/:rest*">
+            <EmployeePortalRouter />
+          </Route>
+
+          <Route path="/landing" component={Landing} />
+          <Route path="/enquiry" component={EnquiryPage} />
+          <Route path="/partner-onboarding" component={PartnerOnboardingPage} />
+
+          {/* Default Admin Routes */}
+          <Route path="/">
+            <ProtectedAdminLayout />
+          </Route>
+          <Route path="/:rest*">
+            <ProtectedAdminLayout />
+          </Route>
+        </Switch>
+        <Toaster />
+      </TooltipProvider>
+    </ThemeProvider>
   );
 }
 

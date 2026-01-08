@@ -2,9 +2,13 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 function getAuthHeaders(): HeadersInit {
   const headers: HeadersInit = {};
-  const employeeToken = localStorage.getItem("employeeToken");
-  if (employeeToken) {
-    headers["Authorization"] = `Bearer ${employeeToken}`;
+  try {
+    const employeeToken = localStorage.getItem("employeeToken");
+    if (employeeToken) {
+      headers["Authorization"] = `Bearer ${employeeToken}`;
+    }
+  } catch (e) {
+    // Ignore localStorage access errors (e.g. SecurityError in private mode/iframe)
   }
   return headers;
 }
