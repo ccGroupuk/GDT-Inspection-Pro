@@ -14122,6 +14122,143 @@ ${cleanedHtml}`;
     }
   });
 
+  // ==================== TIME TRACKING (EMPLOYEE PORTAL) ====================
+
+  const getEmployeeFromRequest = async (req: Request) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getEmployeeSession(token);
+    if (!session || new Date() > session.expiresAt) return null;
+    return storage.getEmployee(session.employeeId);
+  };
+
+  app.get("/api/employee/active-entry", async (req, res) => {
+    try {
+      const employee = await getEmployeeFromRequest(req);
+      if (!employee) return res.status(401).json({ message: "Unauthorized" });
+
+      const entry = await storage.getActiveTimeEntry(employee.id);
+      res.json(entry || null);
+    } catch (error) {
+      console.error("Get active time entry error:", error);
+      res.status(500).json({ message: "Failed to get active entry" });
+    }
+  });
+
+  app.post("/api/employee/clock-in", async (req, res) => {
+    try {
+      const employee = await getEmployeeFromRequest(req);
+      if (!employee) return res.status(401).json({ message: "Unauthorized" });
+
+      const existing = await storage.getActiveTimeEntry(employee.id);
+      if (existing) return res.status(400).json({ message: "Already clocked in" });
+
+      const entry = await storage.createTimeEntry({
+        employeeId: employee.id,
+        clockIn: new Date(),
+        entryType: req.body.entryType || "work",
+        breakMinutes: 0
+      });
+
+      res.status(201).json(entry);
+    } catch (error) {
+      console.error("Clock in error:", error);
+      res.status(500).json({ message: "Failed to clock in" });
+    }
+  });
+
+  app.post("/api/employee/clock-out", async (req, res) => {
+    try {
+      const employee = await getEmployeeFromRequest(req);
+      if (!employee) return res.status(401).json({ message: "Unauthorized" });
+
+      const active = await storage.getActiveTimeEntry(employee.id);
+      if (!active) return res.status(400).json({ message: "Not clocked in" });
+
+      const clockOut = new Date();
+      const clockIn = new Date(active.clockIn);
+      const breakMinutes = parseInt(req.body.breakMinutes || "0");
+
+      // Calculate total hours
+      const diffMs = clockOut.getTime() - clockIn.getTime();
+      const diffHrs = diffMs / (1000 * 60 * 60);
+      const breakHrs = breakMinutes / 60;
+      const totalHours = Math.max(0, diffHrs - breakHrs).toFixed(2);
+
+      const updated = await storage.updateTimeEntry(active.id, {
+        clockOut,
+        description: req.body.notes,
+        breakMinutes,
+        totalHours: totalHours.toString()
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Clock out error:", error);
+      res.status(500).json({ message: "Failed to clock out" });
+    }
+  });
+
+  app.get("/api/time-entries", async (req, res) => {
+    try {
+      // Allow Admin (via cookie session) OR Employee (via Bearer token)
+      let employeeIdToFetch = null;
+
+      // 1. Try Admin (Session)
+      if (req.isAuthenticated && req.isAuthenticated()) { // Hypothetical check, reliant on existing middleware
+        // If admin, they can request specific employee via query
+        // We'll rely on the fact that if they are hitting this via the React App as Admin, they have the cookie.
+        // But I need to verify isAdmin logic. 
+        // For now, let's keep it simple: If query param exists, assume Admin context check happened elsewhere or we trust it for MVP.
+        // Actually, let's just support the Employee Portal use case first (Bearer Token).
+      }
+
+      const employee = await getEmployeeFromRequest(req);
+      if (employee) {
+        // Employee can only see their own
+        employeeIdToFetch = employee.id;
+      } else if (req.user && (req.user as any).role === 'admin') {
+        // Fallback to passport/session if available
+        // This is risky without verifying the specific auth setup
+        employeeIdToFetch = req.query.employeeId as string;
+      }
+
+      // Safe fallback: simpler logic
+      // If Bearer token -> Employee (own entries)
+      // If no Bearer -> Check Admin Session (cookies) -> Allow querying any ID
+
+      if (employee) {
+        const entries = await storage.getTimeEntries(employee.id);
+        return res.json(entries);
+      }
+
+      // If we reach here, no Bearer token. Check for Admin Access via standard middleware (which might wrap this route? No, I'm defining it inline)
+      // I'll assume for the specific "Employee Portal" use case, we only need the Bearer token logic.
+      // For the Admin Dashboard, we will add a separate route or update this one properly next. 
+      // Wait, the Admin Dashboard uses the same API? 
+      // Let's create a separate ADMIN route to be safe and avoid auth mixups.
+      return res.status(401).json({ message: "Unauthorized" });
+
+    } catch (error) {
+      console.error("Get time entries error:", error);
+      res.status(500).json({ message: "Failed to get entries" });
+    }
+  });
+
+  // Admin Route for Time Entries
+  app.get("/api/admin/time-entries", isAdminAuthenticated, async (req, res) => {
+    try {
+      const { employeeId } = req.query;
+      const entries = await storage.getTimeEntries(employeeId as string);
+      res.json(entries);
+    } catch (error) {
+      console.error("Admin get entries error:", error);
+      res.status(500).json({ message: "Failed" });
+    }
+  });
+
+
   // ==================== PUBLIC PARTNER SIGNUP ====================
   app.post("/api/public/partner-signup", async (req, res) => {
     try {

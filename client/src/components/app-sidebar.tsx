@@ -36,6 +36,8 @@ import {
   Sparkles,
   Inbox,
   LinkIcon,
+  GripVertical,
+  Clock,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -124,6 +126,11 @@ const menuItems = [
     icon: UserCog,
   },
   {
+    title: "Timesheets",
+    url: "/timesheets",
+    icon: Clock,
+  },
+  {
     title: "Emergency Callouts",
     url: "/emergency-callouts",
     icon: Siren,
@@ -200,8 +207,66 @@ const menuItems = [
   },
 ];
 
-import { Reorder } from "framer-motion";
+import { Reorder, useDragControls } from "framer-motion";
 import { useEffect, useState } from "react";
+
+const SidebarItem = ({
+  item,
+  isActive,
+  unreadCount,
+  handleHide
+}: {
+  item: typeof menuItems[0];
+  isActive: boolean;
+  unreadCount: number;
+  handleHide: (item: typeof menuItems[0]) => void;
+}) => {
+  const controls = useDragControls();
+  const showBadge = item.url === "/communications" && unreadCount > 0;
+
+  return (
+    <Reorder.Item
+      value={item}
+      className="group/menu-item relative list-none flex items-center"
+      dragListener={false}
+      dragControls={controls}
+      whileDrag={{ scale: 1.02, zIndex: 10 }}
+    >
+      <div
+        className="px-2 py-2 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-foreground touch-none"
+        onPointerDown={(e) => controls.start(e)}
+      >
+        <GripVertical className="w-4 h-4" />
+      </div>
+      <SidebarMenuButton
+        asChild
+        isActive={isActive}
+        className="flex-1 transition-all duration-200 pr-8"
+      >
+        <Link href={item.url}>
+          <item.icon className="w-4 h-4" />
+          <span className="flex-1 select-none">{item.title}</span>
+          {showBadge && (
+            <Badge variant="destructive" className="h-5 px-1.5 text-xs ml-auto">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </Badge>
+          )}
+        </Link>
+      </SidebarMenuButton>
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleHide(item);
+        }}
+        className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover/menu-item:opacity-100 transition-opacity p-1 hover:bg-sidebar-accent rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground"
+        title="Hide from menu"
+      >
+        <EyeOff className="w-3.5 h-3.5" />
+      </button>
+    </Reorder.Item>
+  );
+};
 
 export function AppSidebar() {
   const [location] = useLocation();
@@ -312,44 +377,15 @@ export function AppSidebar() {
               {items.map((item) => {
                 const isActive = location === item.url ||
                   (item.url !== "/" && location.startsWith(item.url));
-                const showBadge = item.url === "/communications" && unreadCount > 0;
 
                 return (
-                  <Reorder.Item
+                  <SidebarItem
                     key={item.title}
-                    value={item}
-                    className="group/menu-item relative list-none"
-                    whileDrag={{ scale: 1.02, zIndex: 10 }}
-                  >
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive}
-                      className="mx-2 cursor-grab active:cursor-grabbing transition-all duration-200 pr-8"
-                    >
-                      <Link href={item.url} onClick={(e) => {
-                        // Optional: prevent navigation if dragging (Reorder usually handles this)
-                      }}>
-                        <item.icon className="w-4 h-4" />
-                        <span className="flex-1 select-none">{item.title}</span>
-                        {showBadge && (
-                          <Badge variant="destructive" className="h-5 px-1.5 text-xs ml-auto">
-                            {unreadCount > 99 ? '99+' : unreadCount}
-                          </Badge>
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleHide(item);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover/menu-item:opacity-100 transition-opacity p-1 hover:bg-sidebar-accent rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground"
-                      title="Hide from menu"
-                    >
-                      <EyeOff className="w-3.5 h-3.5" />
-                    </button>
-                  </Reorder.Item>
+                    item={item}
+                    isActive={isActive}
+                    unreadCount={unreadCount}
+                    handleHide={handleHide}
+                  />
                 );
               })}
             </Reorder.Group>

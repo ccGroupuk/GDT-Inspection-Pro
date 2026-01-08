@@ -52,6 +52,7 @@ import EmployeePortalHome from "@/pages/employee-portal-home";
 import EmployeePortalChangePassword from "@/pages/employee-portal-change-password";
 import ClientPortalLogin from "@/pages/client-portal-login";
 import EmployeePortalAdminView from "@/pages/employee-portal-admin-view";
+import TimesheetsAdmin from "@/pages/timesheets-admin";
 import EmployeesAdmin from "@/pages/employees-admin";
 import EmergencyCallouts from "@/pages/emergency-callouts";
 import Catalog from "@/pages/catalog";
@@ -91,6 +92,7 @@ function AdminRouter() {
       <Route path="/payroll/:id" component={PayrollDetail} />
       <Route path="/commissions" component={Commissions} />
       <Route path="/partner-invoicing" component={PartnerInvoicing} />
+      <Route path="/timesheets" component={TimesheetsAdmin} />
       <Route path="/employees" component={EmployeesAdmin} />
       <Route path="/employees/:employeeId/portal" component={EmployeePortalAdminView} />
       <Route path="/emergency-callouts" component={EmergencyCallouts} />

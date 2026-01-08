@@ -39,6 +39,7 @@ import {
   employeeCredentials, type EmployeeCredential, type InsertEmployeeCredential,
   employeeSessions, type EmployeeSession, type InsertEmployeeSession,
   timeEntries, type TimeEntry, type InsertTimeEntry,
+  timeEntries, type TimeEntry, type InsertTimeEntry,
   payPeriods, type PayPeriod, type InsertPayPeriod,
   payrollRuns, type PayrollRun, type InsertPayrollRun,
   payrollAdjustments, type PayrollAdjustment, type InsertPayrollAdjustment,
@@ -117,6 +118,20 @@ export interface IStorage {
   createTask(task: InsertTask): Promise<Task>;
   updateTask(id: string, task: Partial<InsertTask>): Promise<Task | undefined>;
   deleteTask(id: string): Promise<boolean>;
+
+  // Time Entries
+  getTimeEntries(employeeId?: string): Promise<TimeEntry[]>;
+  getTimeEntry(id: string): Promise<TimeEntry | undefined>;
+  getActiveTimeEntry(employeeId: string): Promise<TimeEntry | undefined>;
+  createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry>;
+  updateTimeEntry(id: string, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined>;
+
+  // Time Entries
+  getTimeEntries(employeeId?: string): Promise<TimeEntry[]>;
+  getTimeEntry(id: string): Promise<TimeEntry | undefined>;
+  getActiveTimeEntry(employeeId: string): Promise<TimeEntry | undefined>;
+  createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry>;
+  updateTimeEntry(id: string, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined>;
 
   // Quote Items
   getQuoteItemsByJob(jobId: string): Promise<QuoteItem[]>;
@@ -838,6 +853,41 @@ export class DatabaseStorage implements IStorage {
   async deleteTask(id: string): Promise<boolean> {
     await db.delete(tasks).where(eq(tasks.id, id));
     return true;
+  }
+
+  // Time Entries
+  async getTimeEntries(employeeId?: string): Promise<TimeEntry[]> {
+    if (employeeId) {
+      return await db.select().from(timeEntries).where(eq(timeEntries.employeeId, employeeId)).orderBy(desc(timeEntries.clockIn));
+    }
+    return await db.select().from(timeEntries).orderBy(desc(timeEntries.clockIn));
+  }
+
+  async getTimeEntry(id: string): Promise<TimeEntry | undefined> {
+    const [entry] = await db.select().from(timeEntries).where(eq(timeEntries.id, id));
+    return entry;
+  }
+
+  async getActiveTimeEntry(employeeId: string): Promise<TimeEntry | undefined> {
+    const [entry] = await db
+      .select()
+      .from(timeEntries)
+      .where(and(eq(timeEntries.employeeId, employeeId), isNull(timeEntries.clockOut)));
+    return entry;
+  }
+
+  async createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry> {
+    const [newEntry] = await db.insert(timeEntries).values(entry).returning();
+    return newEntry;
+  }
+
+  async updateTimeEntry(id: string, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined> {
+    const [updated] = await db
+      .update(timeEntries)
+      .set(entry)
+      .where(eq(timeEntries.id, id))
+      .returning();
+    return updated;
   }
 
   // Client Portal Methods
