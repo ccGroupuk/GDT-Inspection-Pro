@@ -30,6 +30,7 @@ export default defineConfig({
     },
   },
   root: path.resolve(__dirname, "client"),
+  // Force cache invalidation: 2026-01-09-001
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,

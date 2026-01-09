@@ -1,0 +1,3 @@
+[phases.build]
+cmds = ['npm run build']
+cacheDirectories = [] # Explicitly disable build phase caching to fix persistent stale builds

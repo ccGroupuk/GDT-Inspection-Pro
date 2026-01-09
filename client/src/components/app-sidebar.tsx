@@ -1,5 +1,6 @@
 import { useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Briefcase,
