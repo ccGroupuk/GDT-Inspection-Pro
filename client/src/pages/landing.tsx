@@ -62,7 +62,7 @@ export default function Landing() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Link href="/client-portal-login">
+              <Link href="/client-portal/login">
                 <Button className="w-full" variant="outline" data-testid="button-client-login">
                   Client Login
                 </Button>
