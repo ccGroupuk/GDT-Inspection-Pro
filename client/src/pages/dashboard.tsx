@@ -410,7 +410,7 @@ export default function Dashboard() {
                         const isQuoteAccepted = job.quoteResponse === "accepted" || job.status === "quote_accepted";
                         return (
                           <Link key={job.id} href={`/jobs/${job.id}`}>
-                            <div className={`flex items-center justify-between gap-4 p-3 rounded-lg hover-elevate active-elevate-2 cursor-pointer ${isQuoteAccepted ? "ring-1 ring-green-500/30 bg-green-500/5" : ""}`} data-testid={`dashboard-job-${job.id}`}>
+                            <div className={cn("flex items-center justify-between gap-4 p-3 rounded-lg hover-elevate active-elevate-2 cursor-pointer", isQuoteAccepted && "ring-1 ring-green-500/30 bg-green-500/5")} data-testid={`dashboard-job-${job.id}`}>
                               <div className="flex flex-col gap-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-mono text-xs text-muted-foreground">{job.jobNumber}</span>
