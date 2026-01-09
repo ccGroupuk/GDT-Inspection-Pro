@@ -54,6 +54,12 @@ export async function registerRoutes(
   registerAuthRoutes(app);
   // Note: registerChecklistRoutes is called AFTER the auth middleware is registered (see below)
 
+  // Health check endpoint for Railway monitoring
+  app.get("/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+
   // Helper to get employee from session cookie
   const getEmployeeFromCookie = async (req: Request): Promise<Employee | null> => {
     const sessionToken = req.cookies?.employeeSession;
