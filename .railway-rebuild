@@ -1,0 +1,4 @@
+# Force Railway Rebuild
+# This file exists to invalidate Railway's build cache
+# Last updated: 2026-01-09T10:40:00Z
+BUILD_ID=force-rebuild-001
