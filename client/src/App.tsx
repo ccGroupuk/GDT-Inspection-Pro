@@ -26,6 +26,7 @@ import CalendarPage from "@/pages/calendar";
 import Settings from "@/pages/settings";
 import SEOPowerHouse from "@/pages/seo";
 import HelpCenterAdmin from "@/pages/help-center-admin";
+import MapView from "@/pages/map-view";
 import NotFound from "@/pages/not-found";
 import PortalLogin from "@/pages/portal/login";
 import PortalInvite from "@/pages/portal/invite";
@@ -96,6 +97,7 @@ function AdminRouter() {
       <Route path="/employees" component={EmployeesAdmin} />
       <Route path="/employees/:employeeId/portal" component={EmployeePortalAdminView} />
       <Route path="/emergency-callouts" component={EmergencyCallouts} />
+      <Route path="/map-view" component={MapView} />
       <Route path="/catalog" component={Catalog} />
       <Route path="/suppliers" component={Suppliers} />
       <Route path="/product-finder" component={ProductFinder} />

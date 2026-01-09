@@ -8,6 +8,20 @@ import { users, sessions } from "./models/auth";
 export { users, sessions };
 export type { User, UpsertUser } from "./models/auth";
 
+// Employee Locations (GPS Tracking)
+export const employeeLocations = pgTable("employee_locations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull(), // Intentionally not a reference to avoid circular deps if users table is complex
+  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+  source: text("source").default("tracking"),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+export const insertEmployeeLocationSchema = createInsertSchema(employeeLocations).omit({ id: true });
+export type InsertEmployeeLocation = z.infer<typeof insertEmployeeLocationSchema>;
+export type EmployeeLocation = typeof employeeLocations.$inferSelect;
+
 // Contacts (Clients)
 export const contacts = pgTable("contacts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -74,6 +88,8 @@ export const jobs = pgTable("jobs", {
   clientBudget: text("client_budget"), // Client's budget expectation if known
   jobAddress: text("job_address").notNull(),
   jobPostcode: text("job_postcode").notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }),
   leadSource: text("lead_source"),
 
   // Classification

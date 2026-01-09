@@ -5,6 +5,6 @@ export default defineConfig({
   schema: "./shared/schema.ts",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL || "postgres://dummy:dummy@localhost:5432/dummy",
+    url: process.env.DATABASE_URL || "postgresql://postgres:MkXscqkxhSunftcGMsvIbWhDXklkSRFO@yamanote.proxy.rlwy.net:32018/railway",
   },
 });

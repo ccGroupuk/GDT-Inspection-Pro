@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Job, Contact, TradePartner, Task, JobScheduleProposal, JobSurvey, PartnerQuote } from "@shared/schema";
 import { ProjectCountdownWidget } from "@/components/ProjectCountdownWidget";
 import DailyQuote from "@/components/DailyQuote";
+import DashboardMap from "@/components/dashboard/DashboardMap";
 import { Reorder } from "framer-motion";
 import { useState, useEffect } from "react";
 
@@ -205,6 +206,7 @@ export default function Dashboard() {
 
             {widgetId === "active-notifications" && (
               <div className="space-y-6">
+                <DashboardMap />
                 {unacknowledgedPartnerAcceptances.length > 0 && (
                   <Card className="border-green-500/30 bg-green-500/5">
                     <CardHeader className="pb-3">

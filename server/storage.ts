@@ -39,7 +39,6 @@ import {
   employeeCredentials, type EmployeeCredential, type InsertEmployeeCredential,
   employeeSessions, type EmployeeSession, type InsertEmployeeSession,
   timeEntries, type TimeEntry, type InsertTimeEntry,
-  timeEntries, type TimeEntry, type InsertTimeEntry,
   payPeriods, type PayPeriod, type InsertPayPeriod,
   payrollRuns, type PayrollRun, type InsertPayrollRun,
   payrollAdjustments, type PayrollAdjustment, type InsertPayrollAdjustment,
@@ -87,6 +86,7 @@ import {
   jobClientPayments, type JobClientPayment, type InsertJobClientPayment,
   jobFundAllocations, type JobFundAllocation, type InsertJobFundAllocation,
   salesCommissions, type SalesCommission, type InsertSalesCommission,
+  employeeLocations, type EmployeeLocation, type InsertEmployeeLocation,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, gte, lte } from "drizzle-orm";
@@ -119,19 +119,7 @@ export interface IStorage {
   updateTask(id: string, task: Partial<InsertTask>): Promise<Task | undefined>;
   deleteTask(id: string): Promise<boolean>;
 
-  // Time Entries
-  getTimeEntries(employeeId?: string): Promise<TimeEntry[]>;
-  getTimeEntry(id: string): Promise<TimeEntry | undefined>;
-  getActiveTimeEntry(employeeId: string): Promise<TimeEntry | undefined>;
-  createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry>;
-  updateTimeEntry(id: string, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined>;
 
-  // Time Entries
-  getTimeEntries(employeeId?: string): Promise<TimeEntry[]>;
-  getTimeEntry(id: string): Promise<TimeEntry | undefined>;
-  getActiveTimeEntry(employeeId: string): Promise<TimeEntry | undefined>;
-  createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry>;
-  updateTimeEntry(id: string, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined>;
 
   // Quote Items
   getQuoteItemsByJob(jobId: string): Promise<QuoteItem[]>;
@@ -364,6 +352,10 @@ export interface IStorage {
   getEmployeeCredential(employeeId: string): Promise<EmployeeCredential | undefined>;
   createEmployeeCredential(credential: InsertEmployeeCredential): Promise<EmployeeCredential>;
   updateEmployeeCredential(employeeId: string, credential: Partial<InsertEmployeeCredential>): Promise<EmployeeCredential | undefined>;
+
+  // Employee Locations
+  createEmployeeLocation(location: InsertEmployeeLocation): Promise<EmployeeLocation>;
+  getLatestEmployeeLocations(): Promise<EmployeeLocation[]>;
 
   // Employee Sessions
   getEmployeeSession(token: string): Promise<EmployeeSession | undefined>;
@@ -856,39 +848,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Time Entries
-  async getTimeEntries(employeeId?: string): Promise<TimeEntry[]> {
-    if (employeeId) {
-      return await db.select().from(timeEntries).where(eq(timeEntries.employeeId, employeeId)).orderBy(desc(timeEntries.clockIn));
-    }
-    return await db.select().from(timeEntries).orderBy(desc(timeEntries.clockIn));
-  }
 
-  async getTimeEntry(id: string): Promise<TimeEntry | undefined> {
-    const [entry] = await db.select().from(timeEntries).where(eq(timeEntries.id, id));
-    return entry;
-  }
-
-  async getActiveTimeEntry(employeeId: string): Promise<TimeEntry | undefined> {
-    const [entry] = await db
-      .select()
-      .from(timeEntries)
-      .where(and(eq(timeEntries.employeeId, employeeId), isNull(timeEntries.clockOut)));
-    return entry;
-  }
-
-  async createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry> {
-    const [newEntry] = await db.insert(timeEntries).values(entry).returning();
-    return newEntry;
-  }
-
-  async updateTimeEntry(id: string, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined> {
-    const [updated] = await db
-      .update(timeEntries)
-      .set(entry)
-      .where(eq(timeEntries.id, id))
-      .returning();
-    return updated;
-  }
 
   // Client Portal Methods
   async getJobsByContact(contactId: string): Promise<Job[]> {
@@ -2119,6 +2079,11 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
+  async deletePayPeriod(id: string): Promise<boolean> {
+    await db.delete(payPeriods).where(eq(payPeriods.id, id));
+    return true;
+  }
+
   // Payroll Run Methods
   async getPayrollRunsByPeriod(periodId: string): Promise<PayrollRun[]> {
     return db.select().from(payrollRuns).where(eq(payrollRuns.payPeriodId, periodId));
@@ -2514,6 +2479,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+
   async updateQuoteTemplateItem(id: string, item: Partial<InsertQuoteTemplateItem>): Promise<QuoteTemplateItem | undefined> {
     const [updated] = await db.update(quoteTemplateItems).set(item).where(eq(quoteTemplateItems.id, id)).returning();
     return updated || undefined;
@@ -2527,6 +2493,21 @@ export class DatabaseStorage implements IStorage {
   async deleteQuoteTemplateItemsByTemplate(templateId: string): Promise<boolean> {
     await db.delete(quoteTemplateItems).where(eq(quoteTemplateItems.templateId, templateId));
     return true;
+  }
+
+  // Employee Locations
+  async createEmployeeLocation(location: InsertEmployeeLocation): Promise<EmployeeLocation> {
+    const [entry] = await db.insert(employeeLocations).values(location).returning();
+    return entry;
+  }
+
+  async getLatestEmployeeLocations(): Promise<EmployeeLocation[]> {
+    // For PostgreSQL, distinctOn is great. For basic SQL usually we'd use a subquery.
+    // Drizzle's distinctOn is convenient here.
+    return db
+      .selectDistinctOn([employeeLocations.employeeId])
+      .from(employeeLocations)
+      .orderBy(employeeLocations.employeeId, desc(employeeLocations.timestamp));
   }
 
   // Connection Links

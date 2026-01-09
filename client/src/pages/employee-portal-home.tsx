@@ -103,9 +103,9 @@ export default function EmployeePortalHome() {
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
       setClockOutNotes("");
       setBreakMinutes("0");
-      toast({ 
-        title: "Clocked Out", 
-        description: `Total hours: ${data.totalHours}` 
+      toast({
+        title: "Clocked Out",
+        description: `Total hours: ${data.totalHours}`
       });
     },
     onError: (error: Error) => {
@@ -127,6 +127,40 @@ export default function EmployeePortalHome() {
     return clockIn >= weekStart && clockIn <= weekEnd && e.clockOut;
   });
   const weekHours = weekEntries.reduce((sum, e) => sum + parseFloat(e.totalHours || "0"), 0);
+
+  // Geolocation Tracking
+  useEffect(() => {
+    if (!employeeData?.id || !activeEntry) return;
+
+    const sendLocation = (position: GeolocationPosition) => {
+      const { latitude, longitude } = position.coords;
+
+      fetch("/api/staff-locations", {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          latitude: latitude.toString(),
+          longitude: longitude.toString(),
+          source: "tracking_update" // can distinguish between manual clock events vs background
+        })
+      }).catch(err => console.error("Failed to send location", err));
+    };
+
+    // Send immediately on load/clock-in
+    navigator.geolocation.getCurrentPosition(sendLocation, (err) => console.error(err));
+
+    // Watch position
+    const watchId = navigator.geolocation.watchPosition(sendLocation, (err) => console.error(err), {
+      enableHighAccuracy: true,
+      timeout: 30000,
+      maximumAge: 30000
+    });
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [employeeData?.id, activeEntry]); // Only track when clocked in (activeEntry exists)
 
   if (!employeeData) {
     return null;
@@ -181,7 +215,7 @@ export default function EmployeePortalHome() {
                     {format(new Date(activeEntry.clockIn), "h:mm a")}
                   </p>
                 </div>
-                
+
                 <div className="space-y-3">
                   <div>
                     <label className="text-sm font-medium">Break Minutes</label>
@@ -208,7 +242,7 @@ export default function EmployeePortalHome() {
                       data-testid="input-clock-notes"
                     />
                   </div>
-                  <Button 
+                  <Button
                     onClick={() => clockOutMutation.mutate()}
                     disabled={clockOutMutation.isPending}
                     className="w-full bg-red-600 hover:bg-red-700"
@@ -237,7 +271,7 @@ export default function EmployeePortalHome() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button 
+                <Button
                   onClick={() => clockInMutation.mutate()}
                   disabled={clockInMutation.isPending}
                   className="w-full bg-green-600 hover:bg-green-700"
@@ -274,8 +308,8 @@ export default function EmployeePortalHome() {
             ) : (
               <div className="space-y-2">
                 {timeEntries.slice(0, 5).map((entry) => (
-                  <div 
-                    key={entry.id} 
+                  <div
+                    key={entry.id}
                     className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
                     data-testid={`time-entry-${entry.id}`}
                   >
