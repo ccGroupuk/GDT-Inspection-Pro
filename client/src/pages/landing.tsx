@@ -24,7 +24,7 @@ export default function Landing() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href="/dashboard">
+              <Link href="/employee-portal/login">
                 <Button className="w-full" data-testid="button-admin-login">
                   Admin Login
                 </Button>
@@ -43,7 +43,7 @@ export default function Landing() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href="/employee-portal">
+              <Link href="/employee-portal/login">
                 <Button className="w-full" data-testid="button-employee-login">
                   Staff Login
                 </Button>
