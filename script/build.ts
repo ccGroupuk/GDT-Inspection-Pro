@@ -33,12 +33,21 @@ const allowlist = [
 ];
 
 async function buildAll() {
+  console.log("🗑️  Cleaning dist directory...");
   await rm("dist", { recursive: true, force: true });
 
-  console.log("building client...");
-  await viteBuild();
+  console.log("📦 Building client with Vite...");
+  try {
+    const viteResult = await viteBuild();
+    console.log("✅ Vite build completed successfully");
+    console.log("Vite result:", JSON.stringify(viteResult, null, 2));
+  } catch (error) {
+    console.error("❌ Vite build FAILED:");
+    console.error(error);
+    throw error;
+  }
 
-  console.log("building server...");
+  console.log("🔨 Building server with esbuild...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
   const allDeps = [
     ...Object.keys(pkg.dependencies || {}),
@@ -59,6 +68,8 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+
+  console.log("✅ Server build completed successfully");
 }
 
 buildAll().catch((err) => {
