@@ -5,11 +5,10 @@
   "license": "MIT",
   "scripts": {
     "dev": "npm run server",
-    "build": "npm run build:client && npm run build:server",
+    "heroku-postbuild": "npm run compile:client && npm run compile:server",
     "server": "tsx watch server/index.ts",
-    "client": "vite --config client/vite.config.ts",
-    "build:client": "vite build --config client/vite.config.ts",
-    "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "compile:client": "vite build --config client/vite.config.ts",
+    "compile:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "check-types": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "start": "node dist/index.js"
