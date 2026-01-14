@@ -1,3 +1,12 @@
+[phases.setup]
+nixPkgs = ["nodejs", "npm"]
+
+[phases.install]
+cmds = ["npm install"]
+
 [phases.build]
-cmds = ['npm run build']
-cacheDirectories = [] # Explicitly disable build phase caching to fix persistent stale builds
+cmds = ["npm run build"]
+cacheDirectories = []
+
+[start]
+cmd = "npm start"
