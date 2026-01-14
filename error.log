@@ -1,0 +1,11 @@
+﻿client/src/components/inspection/Wizard.tsx(248,33): error TS2322: Type '(files: string[]) => void' is not assignable to type '(files: (string | PhotoItem)[]) => void'.
+  Types of parameters 'files' and 'files' are incompatible.
+    Type '(string | PhotoItem)[]' is not assignable to type 'string[]'.
+      Type 'string | PhotoItem' is not assignable to type 'string'.
+        Type 'PhotoItem' is not assignable to type 'string'.
+client/src/components/ObjectUploader.tsx(3,18): error TS2307: Cannot find module '@uppy/core' or its corresponding type declarations.
+client/src/components/ObjectUploader.tsx(4,45): error TS2307: Cannot find module '@uppy/core' or its corresponding type declarations.
+client/src/components/ObjectUploader.tsx(5,28): error TS2307: Cannot find module '@uppy/react/dashboard-modal' or its corresponding type declarations.
+client/src/components/ObjectUploader.tsx(8,19): error TS2307: Cannot find module '@uppy/aws-s3' or its corresponding type declarations.
+client/src/components/ObjectUploader.tsx(83,24): error TS7006: Parameter 'result' implicitly has an 'any' type.
+client/src/hooks/use-upload.ts(2,31): error TS2307: Cannot find module '@uppy/core' or its corresponding type declarations.

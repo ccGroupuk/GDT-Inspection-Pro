@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GDT Inspection Pro</string>
+    <string name="title_activity_main">GDT Inspection Pro</string>
+    <string name="package_name">com.gdt.inspectionpro</string>
+    <string name="custom_url_scheme">com.gdt.inspectionpro</string>
+</resources>

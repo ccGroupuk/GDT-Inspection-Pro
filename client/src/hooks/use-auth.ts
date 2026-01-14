@@ -1,129 +1,114 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
-
-interface AuthUser {
-  id: string;
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-  profileImageUrl?: string;
-}
-
-interface EmployeeUser {
-  id: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-  accessLevel: "owner" | "full_access" | "standard";
-  role: string | "admin" | "accounting" | "fitting" | "sales";
-  isActive: boolean;
-}
-
-interface AuthData {
-  user: AuthUser | null;
-  employee: EmployeeUser | null;
-  authType: "replit" | "employee" | null;
-}
-
-interface AuthError {
-  message: string;
-  authenticated?: boolean;
-  authorized?: boolean;
-}
-
-async function fetchAuthStatus(): Promise<AuthData | null> {
-  const response = await fetch("/api/auth/me", {
-    credentials: "include",
-  });
-
-  if (response.status === 401) {
-    return null;
-  }
-
-  // Handle 403 - authenticated but not authorized
-  if (response.status === 403) {
-    const error: AuthError = await response.json();
-    // Return a special object indicating user is authenticated but not authorized
-    throw new Error(error.message || "Access denied");
-  }
-
-  if (!response.ok) {
-    throw new Error(`${response.status}: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-async function performLogout(): Promise<void> {
-  await fetch("/api/auth/logout", {
-    method: "POST",
-    credentials: "include",
-  });
-}
+import { type InsertEngineer, type Engineer } from "@shared/schema";
+import { getSettings } from "@/lib/local-storage";
+import { useToast } from "@/hooks/use-toast";
 
 export function useAuth() {
-  const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
 
-  const { data: authData, isLoading, refetch } = useQuery<AuthData | null>({
-    queryKey: ["/api/auth/me"],
-    queryFn: fetchAuthStatus,
-    retry: false,
-    staleTime: 1000 * 60 * 5,
-  });
+    const { data: user, error, isLoading } = useQuery<Engineer | null>({
+        queryKey: ["/api/user"],
+        queryFn: async () => {
+            const res = await fetch("/api/user");
+            if (!res.ok) {
+                if (res.status === 401) return null;
+                throw new Error("Failed to fetch user");
+            }
+            return res.json();
+        },
+    });
 
-  const logoutMutation = useMutation({
-    mutationFn: performLogout,
-    onSuccess: () => {
-      queryClient.setQueryData(["/api/auth/me"], null);
-      queryClient.clear();
-      setLocation("/landing");
-    },
-  });
+    const loginMutation = useMutation({
+        mutationFn: async (credentials: Pick<InsertEngineer, "username" | "password">) => {
+            const res = await fetch("/api/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(credentials),
+            });
 
-  const isAuthenticated = !!authData?.authType;
-  const hasAdminAccess = isAuthenticated && (
-    authData?.authType === "replit" ||
-    (authData?.employee?.accessLevel === "owner" ||
-      authData?.employee?.accessLevel === "full_access" ||
-      authData?.employee?.role === "admin")
-  );
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || "Login failed");
+            }
+            return res.json();
+        },
+        onSuccess: (user) => {
+            queryClient.setQueryData(["/api/user"], user);
+            toast({ title: "Welcome back!", description: `Logged in as ${user.username}` });
+        },
+        onError: (error: Error) => {
+            toast({ variant: "destructive", title: "Login failed", description: error.message });
+        },
+    });
 
-  return {
-    user: authData?.user || null,
-    employee: authData?.employee || null,
-    authType: authData?.authType || null,
-    isLoading,
-    isAuthenticated,
-    hasAdminAccess,
-    logout: logoutMutation.mutate,
-    isLoggingOut: logoutMutation.isPending,
-    refetch,
-  };
-}
+    const registerMutation = useMutation({
+        mutationFn: async (credentials: InsertEngineer) => {
+            const res = await fetch("/api/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(credentials),
+            });
 
-export function useRequireAuth(redirectTo: string = "/landing") {
-  const auth = useAuth();
-  const [, setLocation] = useLocation();
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || "Registration failed");
+            }
+            return res.json();
+        },
+        onSuccess: (user) => {
+            queryClient.setQueryData(["/api/user"], user);
+            toast({ title: "Welcome!", description: "Account created successfully" });
+        },
+        onError: (error: Error) => {
+            toast({ variant: "destructive", title: "Registration failed", description: error.message });
+        },
+    });
 
-  if (!auth.isLoading && !auth.isAuthenticated) {
-    setLocation(redirectTo);
-  }
+    const logoutMutation = useMutation({
+        mutationFn: async () => {
+            await fetch("/api/logout", { method: "POST" });
+        },
+        onSuccess: () => {
+            queryClient.setQueryData(["/api/user"], null);
+            toast({ title: "Goodbye!", description: "You have been logged out" });
+        },
+        onError: (error: Error) => {
+            toast({ variant: "destructive", title: "Logout failed", description: error.message });
+        },
+    });
 
-  return auth;
-}
 
-export function useRequireAdminAuth() {
-  const auth = useAuth();
-  const [, setLocation] = useLocation();
+    const loginAsGuestMutation = useMutation({
+        mutationFn: async () => {
+            // Simulate a "network request"
+            return new Promise<Engineer & { isGuest: boolean }>((resolve) => {
+                setTimeout(() => {
+                    resolve({
+                        id: -1,
+                        username: "guest",
+                        name: "Guest Engineer",
+                        password: "",
+                        role: "engineer",
+                        createdAt: new Date(),
+                        isGuest: true
+                    });
+                }, 500);
+            });
+        },
+        onSuccess: (user) => {
+            queryClient.setQueryData(["/api/user"], user);
+            toast({ title: "Guest Mode", description: "You are now using offline mode." });
+        },
+    });
 
-  if (!auth.isLoading) {
-    if (!auth.isAuthenticated) {
-      setLocation("/landing");
-    } else if (!auth.hasAdminAccess) {
-      setLocation("/employee-portal/home");
-    }
-  }
-
-  return auth;
+    return {
+        user,
+        isLoading,
+        error,
+        loginMutation,
+        registerMutation,
+        logoutMutation,
+        loginAsGuestMutation
+    };
 }

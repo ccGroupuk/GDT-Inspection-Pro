@@ -1,313 +1,229 @@
-import { useState, useEffect } from "react";
-import { Switch, Route, useLocation, Redirect } from "wouter";
-import { queryClient } from "./lib/queryClient";
+import { Switch, Route } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { GlobalSearch } from "@/components/global-search";
-import { useAuth } from "@/hooks/use-auth";
-import { Loader2 } from "lucide-react";
-import Dashboard from "@/pages/dashboard";
-import Jobs from "@/pages/jobs";
-import JobForm from "@/pages/job-form";
-import JobDetail from "@/pages/job-detail";
-import Contacts from "@/pages/contacts";
-import Partners from "@/pages/partners";
-import Tasks from "@/pages/tasks";
-import Finance from "@/pages/finance";
-import Payroll from "@/pages/payroll";
-import PayrollDetail from "@/pages/payroll-detail";
-import Commissions from "@/pages/commissions";
-import CalendarPage from "@/pages/calendar";
-import Settings from "@/pages/settings";
-import SEOPowerHouse from "@/pages/seo";
-import HelpCenterAdmin from "@/pages/help-center-admin";
-import MapView from "@/pages/map-view";
 import NotFound from "@/pages/not-found";
-import PortalLogin from "@/pages/portal/login";
-import PortalInvite from "@/pages/portal/invite";
-import PortalJobs from "@/pages/portal/jobs";
-import PortalJobDetail from "@/pages/portal/job-detail";
-import PortalProfile from "@/pages/portal/profile";
-import PortalReviews from "@/pages/portal/reviews";
-import PortalSurveys from "@/pages/portal/surveys";
-import PortalHelp from "@/pages/portal/help";
-import PartnerPortalLogin from "@/pages/partner-portal/login";
-import PartnerPortalInvite from "@/pages/partner-portal/invite";
-import PartnerPortalJobs from "@/pages/partner-portal/jobs";
-import PartnerPortalJobDetail from "@/pages/partner-portal/job-detail";
-import PartnerPortalCalendar from "@/pages/partner-portal/calendar";
-import PartnerPortalHelp from "@/pages/partner-portal/help";
-import PartnerPortalProfile from "@/pages/partner-portal/profile";
-import PartnerPortalBilling from "@/pages/partner-portal/billing";
-import PartnerPortalSurveys from "@/pages/partner-portal/surveys";
-import PartnerPortalQuotes from "@/pages/partner-portal/quotes";
-import PartnerPortalEmergencyCallouts from "@/pages/partner-portal/emergency-callouts";
-import Landing from "@/pages/landing";
-import EmployeePortalLogin from "@/pages/employee-portal-login";
-import EmployeePortalHome from "@/pages/employee-portal-home";
-import EmployeePortalChangePassword from "@/pages/employee-portal-change-password";
-import ClientPortalLogin from "@/pages/client-portal-login";
-import EmployeePortalAdminView from "@/pages/employee-portal-admin-view";
-import TimesheetsAdmin from "@/pages/timesheets-admin";
-import EmployeesAdmin from "@/pages/employees-admin";
-import EmergencyCallouts from "@/pages/emergency-callouts";
-import Catalog from "@/pages/catalog";
-import Suppliers from "@/pages/suppliers";
-import QuoteTemplates from "@/pages/quote-templates";
-import Assets from "@/pages/assets";
-import JobHub from "@/pages/job-hub";
-import Checklists from "@/pages/checklists";
-import ChecklistAnalytics from "@/pages/checklist-analytics";
-import Wellbeing from "@/pages/wellbeing";
-import Communications from "@/pages/communications";
-import CommunicationsInbox from "@/pages/communications-inbox";
-import ProductFinder from "@/pages/product-finder";
-import SupplierLookup from "@/pages/supplier-lookup";
-import DailyActivities from "@/pages/daily-activities";
-import PartnerInvoicing from "@/pages/partner-invoicing";
-import AIBridge from "@/pages/ai-bridge";
-import AgentInbox from "@/pages/agent-inbox";
-import EnquiryPage from "@/pages/enquiry";
-import PartnerOnboardingPage from "@/pages/partner-onboarding";
+import NewInspection from "@/pages/inspection/new";
+import ReportView from "@/components/inspection/ReportView";
+import Settings from "@/pages/settings";
+import HelpPage from "@/pages/settings/help";
+import TemplatesList from "@/pages/settings/templates";
+import TemplateEditor from "@/pages/settings/template-editor";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { PlusCircle, ClipboardList, User, Settings as SettingsIcon } from "lucide-react";
+import { getInspections, getSettings, type SavedInspection } from "@/lib/local-storage";
+import { useEffect, useState } from "react";
 
-function AdminRouter() {
-  return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/jobs" component={Jobs} />
-      <Route path="/jobs/new" component={JobForm} />
-      <Route path="/jobs/:id" component={JobDetail} />
-      <Route path="/jobs/:id/edit" component={JobForm} />
-      <Route path="/contacts" component={Contacts} />
-      <Route path="/partners" component={Partners} />
-      <Route path="/tasks" component={Tasks} />
-      <Route path="/calendar" component={CalendarPage} />
-      <Route path="/finance" component={Finance} />
-      <Route path="/payroll" component={Payroll} />
-      <Route path="/payroll/:id" component={PayrollDetail} />
-      <Route path="/commissions" component={Commissions} />
-      <Route path="/partner-invoicing" component={PartnerInvoicing} />
-      <Route path="/timesheets" component={TimesheetsAdmin} />
-      <Route path="/employees" component={EmployeesAdmin} />
-      <Route path="/employees/:employeeId/portal" component={EmployeePortalAdminView} />
-      <Route path="/emergency-callouts" component={EmergencyCallouts} />
-      <Route path="/map-view" component={MapView} />
-      <Route path="/catalog" component={Catalog} />
-      <Route path="/suppliers" component={Suppliers} />
-      <Route path="/product-finder" component={ProductFinder} />
-      <Route path="/supplier-lookup" component={SupplierLookup} />
-      <Route path="/templates" component={QuoteTemplates} />
-      <Route path="/assets" component={Assets} />
-      <Route path="/checklists" component={Checklists} />
-      <Route path="/checklist-analytics" component={ChecklistAnalytics} />
-      <Route path="/communications" component={Communications} />
-      <Route path="/communications-inbox" component={CommunicationsInbox} />
-      <Route path="/daily-activities" component={DailyActivities} />
-      <Route path="/seo" component={SEOPowerHouse} />
-      <Route path="/wellbeing" component={Wellbeing} />
-      <Route path="/help-center" component={HelpCenterAdmin} />
-      <Route path="/ai-bridge" component={AIBridge} />
-      <Route path="/agent-inbox" component={AgentInbox} />
-      <Route path="/settings" component={Settings} />
-      <Route component={NotFound} />
-    </Switch>
-  );
+import { ProtectedRoute } from "@/lib/protected-route";
+import AuthPage from "@/pages/auth-page";
+
+function Router() {
+    return (
+        <Switch>
+            <ProtectedRoute path="/" component={Home} />
+            <ProtectedRoute path="/inspection/new" component={NewInspection} />
+            <ProtectedRoute path="/inspection/edit/:id" component={NewInspection} />
+            <ProtectedRoute path="/report/:id" component={ReportView} />
+            <ProtectedRoute path="/settings" component={Settings} />
+            <ProtectedRoute path="/settings/help" component={HelpPage} />
+            <ProtectedRoute path="/settings/templates" component={TemplatesList} />
+            <ProtectedRoute path="/settings/templates/new" component={TemplateEditor} />
+            <Route path="/auth" component={AuthPage} />
+            <Route component={NotFound} />
+        </Switch>
+    );
 }
 
-function EmployeePortalRouter() {
-  return (
-    <Switch>
-      <Route path="/employee-portal" component={EmployeePortalLogin} />
-      <Route path="/employee-portal/login" component={EmployeePortalLogin} />
-      <Route path="/employee-portal/home" component={EmployeePortalHome} />
-      <Route path="/employee-portal/change-password" component={EmployeePortalChangePassword} />
-      <Route component={NotFound} />
-    </Switch>
-  );
+import { useInspections } from "@/hooks/use-inspections";
+import { syncAllInspections } from "@/lib/local-storage";
+import { Cloud, CloudOff, RefreshCw } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+function Home() {
+    const { inspections, isLoading } = useInspections();
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const { toast } = useToast();
+
+    // Initial load for settings
+    useEffect(() => {
+        const settings = getSettings();
+        if (settings.logoUrl) setLogoUrl(settings.logoUrl);
+    }, []);
+
+    // Listen for setting changes
+    useEffect(() => {
+        const handleSettingsUpdate = () => {
+            const settings = getSettings();
+            setLogoUrl(settings.logoUrl || null);
+        };
+
+        window.addEventListener('settings-updated', handleSettingsUpdate);
+        return () => window.removeEventListener('settings-updated', handleSettingsUpdate);
+    }, []);
+
+    const unsyncedCount = inspections.filter(i => !i.isSynced).length;
+
+    const handleSync = async () => {
+        setIsSyncing(true);
+        const count = await syncAllInspections();
+        setIsSyncing(false);
+
+        if (count > 0) {
+            toast({
+                title: "Sync Complete",
+                description: `Successfully uploaded ${count} inspection(s) to the server.`,
+            });
+        } else {
+            // Either all failed or none needed syncing (but button wouldn't show if 0)
+            // Or maybe network error
+            toast({
+                title: "Sync Finished",
+                description: "Process completed. Check for any remaining unsynced items.",
+            });
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-background flex flex-col">
+            {/* Mobile Header */}
+            <header className="px-4 py-3 flex items-center justify-between sticky top-0 z-10 h-16 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 border-b border-blue-800 shadow-lg">
+                <div className="flex items-center">
+                    {logoUrl ? (
+                        <img src={logoUrl} alt="Company Logo" className="h-10 object-contain" />
+                    ) : (
+                        <h1 className="font-extrabold text-xl text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-200">GDT Inspection Pro</h1>
+                    )}
+                </div>
+                <Link href="/settings">
+                    <Button variant="ghost" size="icon" className="hover:bg-white/10 text-blue-100">
+                        <SettingsIcon className="h-5 w-5" />
+                    </Button>
+                </Link>
+            </header>
+
+            <main className="flex-1 p-4 space-y-6">
+                {/* Welcome Section */}
+                <div className="space-y-1">
+                    <h2 className="text-2xl font-bold text-foreground">Hello, Engineer</h2>
+                    <p className="text-muted-foreground">Ready for your first inspection today?</p>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="space-y-4">
+                    <Link href="/inspection/new">
+                        <Button className="w-full h-20 text-lg font-bold shadow-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border-0 transition-all active:scale-[0.98]" size="lg">
+                            <PlusCircle className="mr-2 h-7 w-7 text-white" />
+                            <span className="text-white">Start New Inspection</span>
+                        </Button>
+                    </Link>
+
+                    {/* Sync Button - Conditional */}
+                    {unsyncedCount > 0 && (
+                        <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-900/30 rounded-lg p-4 flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-orange-100 dark:bg-orange-900/30 p-2 rounded-full">
+                                    <CloudOff className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-orange-800 dark:text-orange-300 text-sm">{unsyncedCount} Unsynced Reports</p>
+                                    <p className="text-xs text-orange-600 dark:text-orange-400/80">Upload pending inspections.</p>
+                                </div>
+                            </div>
+                            <Button size="sm" onClick={handleSync} disabled={isSyncing} className="bg-orange-600 hover:bg-orange-700 text-white border-none shadow-md">
+                                {isSyncing ? (
+                                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                                ) : (
+                                    <Cloud className="h-4 w-4 mr-2" />
+                                )}
+                                {isSyncing ? 'Syncing...' : 'Sync All'}
+                            </Button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Recent Activity */}
+                <div>
+                    <h3 className="font-semibold text-foreground mb-3 flex items-center">
+                        <ClipboardList className="mr-2 h-5 w-5 text-muted-foreground" />
+                        Recent Inspections
+                    </h3>
+                    <div className="space-y-3">
+                        {inspections.length === 0 ? (
+                            <div className="text-center p-8 bg-muted/50 rounded-xl border border-dashed border-border text-muted-foreground">
+                                No inspections yet. Start one above!
+                            </div>
+                        ) : (
+                            inspections.map((inspection) => (
+                                <Link key={inspection.id} href={`/report/${inspection.id}`}>
+                                    <div className="bg-card hover:bg-accent/50 p-4 rounded-xl border border-border shadow-sm cursor-pointer transition-all group relative overflow-hidden">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className="font-medium text-foreground group-hover:text-primary transition-colors">{inspection.address}</span>
+
+                                            <div className="flex items-center gap-2">
+                                                {/* Sync Status Icon */}
+                                                {inspection.isSynced ? (
+                                                    <div title="Synced to Server">
+                                                        <Cloud className="h-4 w-4 text-green-500" />
+                                                    </div>
+                                                ) : (
+                                                    <div title="Not Synced (Local Only)">
+                                                        <CloudOff className="h-4 w-4 text-orange-500" />
+                                                    </div>
+                                                )}
+
+                                                <span className={`text-[10px] px-2 py-1 rounded-full font-bold tracking-wide uppercase ${inspection.status === 'completed'
+                                                        ? 'bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800'
+                                                        : 'bg-muted text-muted-foreground border border-border'
+                                                    }`}>
+                                                    {inspection.status || "draft"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground flex items-center gap-2">
+                                            <span className={`w-2 h-2 rounded-full ${inspection.status === 'completed' ? 'bg-green-500' : 'bg-slate-400'}`}></span>
+                                            {inspection.clientName || "Unknown Client"}
+                                            <span className="text-border">•</span>
+                                            {new Date(inspection.date || inspection.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                    </div>
+                                </Link>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
 }
 
-function PortalRouter() {
-  return (
-    <Switch>
-      <Route path="/portal/login" component={PortalLogin} />
-      <Route path="/portal/invite/:token" component={PortalInvite} />
-      <Route path="/portal/jobs/:jobId" component={PortalJobDetail} />
-      <Route path="/portal/jobs" component={PortalJobs} />
-      <Route path="/portal/surveys" component={PortalSurveys} />
-      <Route path="/portal/profile" component={PortalProfile} />
-      <Route path="/portal/reviews" component={PortalReviews} />
-      <Route path="/portal/help" component={PortalHelp} />
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
-
-function PartnerPortalRedirect() {
-  const [, setLocation] = useLocation();
-  useEffect(() => {
-    setLocation("/partner-portal/jobs");
-  }, [setLocation]);
-  return null;
-}
-
-function PartnerPortalRouter() {
-  return (
-    <Switch>
-      <Route path="/partner-portal/login" component={PartnerPortalLogin} />
-      <Route path="/partner-portal/invite/:token" component={PartnerPortalInvite} />
-      <Route path="/partner-portal/jobs/:jobId" component={PartnerPortalJobDetail} />
-      <Route path="/partner-portal/jobs" component={PartnerPortalJobs} />
-      <Route path="/partner-portal/surveys" component={PartnerPortalSurveys} />
-      <Route path="/partner-portal/quotes/new" component={PartnerPortalQuotes} />
-      <Route path="/partner-portal/quotes" component={PartnerPortalQuotes} />
-      <Route path="/partner-portal/emergency-callouts" component={PartnerPortalEmergencyCallouts} />
-      <Route path="/partner-portal/calendar" component={PartnerPortalCalendar} />
-      <Route path="/partner-portal/help" component={PartnerPortalHelp} />
-      <Route path="/partner-portal/profile" component={PartnerPortalProfile} />
-      <Route path="/partner-portal/billing" component={PartnerPortalBilling} />
-      <Route path="/partner-portal" component={PartnerPortalRedirect} />
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
-
-function AuthLoadingScreen() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center">
-        <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-        <p className="mt-2 text-muted-foreground">Loading...</p>
-      </div>
-    </div>
-  );
-}
-
-function ProtectedAdminLayout() {
-  const { isLoading, isAuthenticated, hasAdminAccess } = useAuth();
-  const [location, setLocation] = useLocation();
-  const [shouldRedirect, setShouldRedirect] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isLoading) {
-      if (!isAuthenticated) {
-        setShouldRedirect("/landing");
-      } else if (!hasAdminAccess) {
-        setShouldRedirect("/employee-portal/home");
-      } else {
-        setShouldRedirect(null);
-      }
-    }
-  }, [isLoading, isAuthenticated, hasAdminAccess]);
-
-  useEffect(() => {
-    if (shouldRedirect) {
-      setLocation(shouldRedirect);
-    }
-  }, [shouldRedirect, setLocation]);
-
-  if (isLoading) {
-    console.log("[ProtectedAdminLayout] Loading...");
-    return <AuthLoadingScreen />;
-  }
-
-  if (shouldRedirect) {
-    console.log("[ProtectedAdminLayout] Redirecting to:", shouldRedirect);
-    return <AuthLoadingScreen />;
-  }
-
-  console.log("[ProtectedAdminLayout] Rendering content. user:", { isAuthenticated, hasAdminAccess });
-
-  const style = {
-    "--sidebar-width": "16rem",
-    "--sidebar-width-icon": "3rem",
-  };
-
-  return (
-    <SidebarProvider style={style as React.CSSProperties}>
-      <AppSidebar />
-      <SidebarInset>
-        <header className="flex items-center justify-between gap-4 px-4 h-14 border-b border-border shrink-0">
-          <SidebarTrigger data-testid="button-sidebar-toggle" />
-          <GlobalSearch />
-          <ThemeToggle />
-        </header>
-        <main className="flex-1 overflow-auto bg-background">
-          <AdminRouter />
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
-  );
-}
+import { ThemeProvider } from "@/components/theme-provider";
+import { App as CapacitorApp } from '@capacitor/app';
 
 function App() {
-  const [location, setLocation] = useLocation();
-  const { user, isLoading, isAuthenticated } = useAuth();
+    // Handle Android Hardware Back Button
+    useEffect(() => {
+        const handleBackButton = async () => {
+            CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+                if (window.location.pathname === '/') {
+                    CapacitorApp.exitApp();
+                } else {
+                    window.history.back();
+                }
+            });
+        };
+        handleBackButton();
+    }, []);
 
-  console.log("APP RENDER. Location:", location, "Loading:", isLoading, "Auth:", isAuthenticated);
-
-  // Handle protected redirects
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated && !location.startsWith("/auth") &&
-      !location.startsWith("/portal") && !location.startsWith("/partner-portal") &&
-      !location.startsWith("/employee-portal") && !location.startsWith("/client-portal") &&
-      location !== "/landing" && location !== "/enquiry" && location !== "/partner-onboarding") {
-      setLocation("/landing");
-    }
-  }, [isLoading, isAuthenticated, location, setLocation]);
-
-  if (isLoading) {
-    return <AuthLoadingScreen />;
-  }
-
-  return (
-    <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
-      <TooltipProvider>
-        <Switch>
-          <Route path="/auth">
-            {isAuthenticated ? <Redirect to="/" /> : <PortalLogin />}
-          </Route>
-          <Route path="/portal/login" component={PortalLogin} />
-          <Route path="/portal/invite" component={PortalInvite} />
-          <Route path="/partner-portal/login" component={PartnerPortalLogin} />
-          <Route path="/partner-portal/invite" component={PartnerPortalInvite} />
-          <Route path="/employee-portal/login" component={EmployeePortalLogin} />
-          <Route path="/employee-portal/change-password" component={EmployeePortalChangePassword} />
-          <Route path="/client-portal/login" component={ClientPortalLogin} />
-
-          <Route path="/portal/:rest*">
-            <PortalRouter />
-          </Route>
-
-          <Route path="/partner-portal/:rest*">
-            <PartnerPortalRouter />
-          </Route>
-
-          <Route path="/employee-portal/:rest*">
-            <EmployeePortalRouter />
-          </Route>
-
-          <Route path="/landing" component={Landing} />
-          <Route path="/enquiry" component={EnquiryPage} />
-          <Route path="/partner-onboarding" component={PartnerOnboardingPage} />
-
-          {/* Default Admin Routes */}
-          <Route path="/">
-            <ProtectedAdminLayout />
-          </Route>
-          <Route path="/:rest*">
-            <ProtectedAdminLayout />
-          </Route>
-        </Switch>
-        <Toaster />
-      </TooltipProvider>
-    </ThemeProvider>
-  );
+    return (
+        <QueryClientProvider client={queryClient}>
+            <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+                <Router />
+                <Toaster />
+            </ThemeProvider>
+        </QueryClientProvider>
+    );
 }
 
 export default App;

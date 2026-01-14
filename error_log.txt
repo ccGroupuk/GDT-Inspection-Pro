@@ -1,0 +1,571 @@
+﻿
+> gdt-inspection-pro@1.0.0 check-types
+> tsc --noEmit
+
+client/src/components/checklist-completion.tsx(35,15): error TS2305: Module '"@shared/schema"' has no exported member 'ChecklistInstance'.
+client/src/components/checklist-completion.tsx(35,34): error TS2305: Module '"@shared/schema"' has no exported member 'ChecklistTemplate'.
+client/src/components/checklist-completion.tsx(35,53): error TS2305: Module '"@shared/schema"' has no exported member 'ChecklistItem'.
+client/src/components/checklist-completion.tsx(35,68): error TS2305: Module '"@shared/schema"' has no exported member 'ChecklistResponse'.
+client/src/components/checklist-completion.tsx(35,87): error TS2305: Module '"@shared/schema"' has no exported member 'ChecklistAuditEvent'.
+client/src/components/checklist-completion.tsx(268,45): error TS7006: Parameter 'r' implicitly has an 'any' type.
+client/src/components/checklist-completion.tsx(293,19): error TS7006: Parameter 'item' implicitly has an 'any' type.
+client/src/components/checklist-completion.tsx(394,43): error TS2339: Property 'photoUrl' does not exist on type '{}'.
+client/src/components/checklist-completion.tsx(396,40): error TS2339: Property 'photoUrl' does not exist on type '{}'.
+client/src/components/checklist-completion.tsx(425,43): error TS2339: Property 'signatureData' does not exist on type '{}'.
+client/src/components/checklist-completion.tsx(427,40): error TS2339: Property 'signatureData' does not exist on type '{}'.
+client/src/components/checklist-completion.tsx(455,24): error TS2339: Property 'note' does not exist on type '{}'.
+client/src/components/checklist-completion.tsx(458,33): error TS2339: Property 'note' does not exist on type '{}'.
+client/src/components/checklist-completion.tsx(461,24): error TS2339: Property 'completedAt' does not exist on type '{}'.
+client/src/components/checklist-completion.tsx(463,47): error TS2339: Property 'completedAt' does not exist on type '{}'.
+client/src/components/dashboard/DashboardMap.tsx(4,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/components/finance/ReceiptScannerDialog.tsx(17,15): error TS2305: Module '"@shared/schema"' has no exported member 'FinancialCategory'.
+client/src/components/finance/ReceiptScannerDialog.tsx(17,34): error TS2305: Module '"@shared/schema"' has no exported member 'FinancialTransaction'.
+client/src/components/finance/ReceiptScannerDialog.tsx(17,56): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/components/global-search.tsx(9,15): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/components/global-search.tsx(9,24): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/components/global-search.tsx(9,29): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/components/job-card.tsx(4,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/components/job-card.tsx(4,20): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/components/job-card.tsx(4,29): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/components/map/MapWidget.tsx(8,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/components/map/MapWidget.tsx(8,20): error TS2305: Module '"@shared/schema"' has no exported member 'EmployeeLocation'.
+client/src/components/map/MapWidget.tsx(11,26): error TS2307: Cannot find module 'leaflet/dist/images/marker-icon-2x.png' or its corresponding type declarations.
+client/src/components/map/MapWidget.tsx(12,24): error TS2307: Cannot find module 'leaflet/dist/images/marker-icon.png' or its corresponding type declarations.
+client/src/components/map/MapWidget.tsx(13,26): error TS2307: Cannot find module 'leaflet/dist/images/marker-shadow.png' or its corresponding type declarations.
+client/src/components/send-message-dialog.tsx(27,10): error TS2305: Module '"@shared/schema"' has no exported member 'MESSAGE_TYPES'.
+client/src/components/send-message-dialog.tsx(27,25): error TS2305: Module '"@shared/schema"' has no exported member 'MESSAGE_URGENCY'.
+client/src/components/send-message-dialog.tsx(137,62): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/components/send-message-dialog.tsx(155,41): error TS7006: Parameter 'type' implicitly has an 'any' type.
+client/src/components/send-message-dialog.tsx(177,43): error TS7006: Parameter 'level' implicitly has an 'any' type.
+client/src/components/status-badge.tsx(2,10): error TS2305: Module '"@shared/schema"' has no exported member 'PIPELINE_STAGES'.
+client/src/components/status-badge.tsx(10,38): error TS7006: Parameter 's' implicitly has an 'any' type.
+client/src/pages/agent-inbox.tsx(34,15): error TS2305: Module '"@shared/schema"' has no exported member 'BuildRequest'.
+client/src/pages/ai-bridge.tsx(16,15): error TS2305: Module '"@shared/schema"' has no exported member 'AiConversation'.
+client/src/pages/assets.tsx(18,15): error TS2305: Module '"@shared/schema"' has no exported member 'Asset'.
+client/src/pages/assets.tsx(18,22): error TS2305: Module '"@shared/schema"' has no exported member 'Employee'.
+client/src/pages/calendar.tsx(31,15): error TS2305: Module '"@shared/schema"' has no exported member 'CalendarEvent'.
+client/src/pages/calendar.tsx(31,30): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/calendar.tsx(31,35): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/pages/catalog.tsx(54,15): error TS2305: Module '"@shared/schema"' has no exported member 'ProductCategory'.
+client/src/pages/catalog.tsx(54,32): error TS2305: Module '"@shared/schema"' has no exported member 'CatalogItem'.
+client/src/pages/catalog.tsx(54,45): error TS2305: Module '"@shared/schema"' has no exported member 'InsertProductCategory'.
+client/src/pages/catalog.tsx(54,68): error TS2305: Module '"@shared/schema"' has no exported member 'InsertCatalogItem'.
+client/src/pages/catalog.tsx(54,87): error TS2305: Module '"@shared/schema"' has no exported member 'Supplier'.
+client/src/pages/catalog.tsx(54,97): error TS2305: Module '"@shared/schema"' has no exported member 'SupplierCatalogItem'.
+client/src/pages/checklists.tsx(53,15): error TS2305: Module '"@shared/schema"' has no exported member 'ChecklistTemplate'.
+client/src/pages/checklists.tsx(53,34): error TS2305: Module '"@shared/schema"' has no exported member 'ChecklistItem'.
+client/src/pages/checklists.tsx(53,49): error TS2305: Module '"@shared/schema"' has no exported member 'ChecklistInstance'.
+client/src/pages/checklists.tsx(183,34): error TS7006: Parameter 'item' implicitly has an 'any' type.
+client/src/pages/communications-inbox.tsx(12,15): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/communications.tsx(32,15): error TS2305: Module '"@shared/schema"' has no exported member 'Employee'.
+client/src/pages/communications.tsx(32,25): error TS2305: Module '"@shared/schema"' has no exported member 'Task'.
+client/src/pages/communications.tsx(32,31): error TS2305: Module '"@shared/schema"' has no exported member 'InternalMessage'.
+client/src/pages/communications.tsx(32,48): error TS2305: Module '"@shared/schema"' has no exported member 'TeamActivityLog'.
+client/src/pages/communications.tsx(32,65): error TS2305: Module '"@shared/schema"' has no exported member 'ChecklistInstance'.
+client/src/pages/contacts.tsx(32,15): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/contacts.tsx(32,24): error TS2305: Module '"@shared/schema"' has no exported member 'InsertContact'.
+client/src/pages/contacts.tsx(32,39): error TS2305: Module '"@shared/schema"' has no exported member 'ClientPortalAccess'.
+client/src/pages/contacts.tsx(41,10): error TS2305: Module '"@shared/schema"' has no exported member 'insertContactSchema'.
+client/src/pages/daily-activities.tsx(57,15): error TS2305: Module '"@shared/schema"' has no exported member 'DailyActivity'.
+client/src/pages/daily-activities.tsx(57,30): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/daily-activities.tsx(57,39): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/dashboard.tsx(34,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/dashboard.tsx(34,20): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/dashboard.tsx(34,29): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/pages/dashboard.tsx(34,43): error TS2305: Module '"@shared/schema"' has no exported member 'Task'.
+client/src/pages/dashboard.tsx(34,49): error TS2305: Module '"@shared/schema"' has no exported member 'JobScheduleProposal'.
+client/src/pages/dashboard.tsx(34,70): error TS2305: Module '"@shared/schema"' has no exported member 'JobSurvey'.
+client/src/pages/dashboard.tsx(34,81): error TS2305: Module '"@shared/schema"' has no exported member 'PartnerQuote'.
+client/src/pages/emergency-callouts.tsx(44,15): error TS2305: Module '"@shared/schema"' has no exported member 'EmergencyCallout'.
+client/src/pages/emergency-callouts.tsx(44,33): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/pages/emergency-callouts.tsx(45,10): error TS2305: Module '"@shared/schema"' has no exported member 'EMERGENCY_INCIDENT_TYPES'.
+client/src/pages/emergency-callouts.tsx(45,36): error TS2305: Module '"@shared/schema"' has no exported member 'EMERGENCY_PRIORITIES'.
+client/src/pages/emergency-callouts.tsx(242,58): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/pages/emergency-callouts.tsx(274,54): error TS7006: Parameter 'p' implicitly has an 'any' type.
+client/src/pages/emergency-callouts.tsx(295,58): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/pages/emergency-callouts.tsx(411,57): error TS7006: Parameter 'type' implicitly has an 'any' type.
+client/src/pages/emergency-callouts.tsx(435,53): error TS7006: Parameter 'p' implicitly has an 'any' type.
+client/src/pages/emergency-callouts.tsx(552,52): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/pages/emergency-callouts.tsx(558,48): error TS7006: Parameter 'p' implicitly has an 'any' type.
+client/src/pages/emergency-callouts.tsx(597,51): error TS7006: Parameter 'response' implicitly has an 'any' type.
+client/src/pages/employee-portal-admin-view.tsx(8,15): error TS2305: Module '"@shared/schema"' has no exported member 'TimeEntry'.
+client/src/pages/employee-portal-admin-view.tsx(8,26): error TS2305: Module '"@shared/schema"' has no exported member 'Employee'.
+client/src/pages/employee-portal-admin-view.tsx(15,35): error TS2339: Property 'isAuthenticated' does not exist on type '{ user: { name: string; password: string; username: string; id?: number | undefined; role?: string | undefined; createdAt?: Date | null | undefined; } | null | undefined; isLoading: boolean; error: Error | null; loginMutation: UseMutationResult<...>; registerMutation: UseMutationResult<...>; logoutMutation: UseMutat...'.
+client/src/pages/employee-portal-admin-view.tsx(15,52): error TS2339: Property 'hasAdminAccess' does not exist on type '{ user: { name: string; password: string; username: string; id?: number | undefined; role?: string | undefined; createdAt?: Date | null | undefined; } | null | undefined; isLoading: boolean; error: Error | null; loginMutation: UseMutationResult<...>; registerMutation: UseMutationResult<...>; logoutMutation: UseMutat...'.
+client/src/pages/employee-portal-home.tsx(13,15): error TS2305: Module '"@shared/schema"' has no exported member 'TimeEntry'.
+client/src/pages/employee-portal-home.tsx(13,26): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/employees-admin.tsx(16,15): error TS2305: Module '"@shared/schema"' has no exported member 'Employee'.
+client/src/pages/finance.tsx(43,15): error TS2305: Module '"@shared/schema"' has no exported member 'FinancialCategory'.
+client/src/pages/finance.tsx(43,34): error TS2305: Module '"@shared/schema"' has no exported member 'FinancialTransaction'.
+client/src/pages/finance.tsx(43,56): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/finance.tsx(43,61): error TS2305: Module '"@shared/schema"' has no exported member 'SalesCommission'.
+client/src/pages/finance.tsx(43,78): error TS2305: Module '"@shared/schema"' has no exported member 'Employee'.
+client/src/pages/finance.tsx(44,10): error TS2305: Module '"@shared/schema"' has no exported member 'COMMISSION_STATUSES'.
+client/src/pages/finance.tsx(186,40): error TS7006: Parameter 'cs' implicitly has an 'any' type.
+client/src/pages/finance.tsx(191,40): error TS7006: Parameter 'cs' implicitly has an 'any' type.
+client/src/pages/finance.tsx(649,39): error TS2304: Cannot find name 'incomeCategories'.
+client/src/pages/finance.tsx(650,40): error TS2304: Cannot find name 'expenseCategories'.
+client/src/pages/finance.tsx(721,32): error TS2304: Cannot find name 'Receipt'.
+client/src/pages/help-center-admin.tsx(16,15): error TS2305: Module '"@shared/schema"' has no exported member 'HelpCategory'.
+client/src/pages/help-center-admin.tsx(16,29): error TS2305: Module '"@shared/schema"' has no exported member 'HelpArticle'.
+client/src/pages/help-center-admin.tsx(16,42): error TS2305: Module '"@shared/schema"' has no exported member 'InsertHelpCategory'.
+client/src/pages/help-center-admin.tsx(16,62): error TS2305: Module '"@shared/schema"' has no exported member 'InsertHelpArticle'.
+client/src/pages/job-detail.tsx(55,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/job-detail.tsx(55,20): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/job-detail.tsx(55,29): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/pages/job-detail.tsx(55,43): error TS2305: Module '"@shared/schema"' has no exported member 'Task'.
+client/src/pages/job-detail.tsx(55,49): error TS2305: Module '"@shared/schema"' has no exported member 'QuoteItem'.
+client/src/pages/job-detail.tsx(55,60): error TS2305: Module '"@shared/schema"' has no exported member 'Invoice'.
+client/src/pages/job-detail.tsx(55,69): error TS2305: Module '"@shared/schema"' has no exported member 'JobNote'.
+client/src/pages/job-detail.tsx(55,78): error TS2305: Module '"@shared/schema"' has no exported member 'JobNoteAttachment'.
+client/src/pages/job-detail.tsx(55,97): error TS2305: Module '"@shared/schema"' has no exported member 'JobScheduleProposal'.
+client/src/pages/job-detail.tsx(55,118): error TS2305: Module '"@shared/schema"' has no exported member 'JobSurvey'.
+client/src/pages/job-detail.tsx(55,129): error TS2305: Module '"@shared/schema"' has no exported member 'EmergencyCallout'.
+client/src/pages/job-detail.tsx(55,147): error TS2305: Module '"@shared/schema"' has no exported member 'EmergencyCalloutResponse'.
+client/src/pages/job-detail.tsx(55,173): error TS2305: Module '"@shared/schema"' has no exported member 'ConnectionLink'.
+client/src/pages/job-detail.tsx(55,189): error TS2305: Module '"@shared/schema"' has no exported member 'ChangeOrder'.
+client/src/pages/job-detail.tsx(55,202): error TS2305: Module '"@shared/schema"' has no exported member 'ChangeOrderItem'.
+client/src/pages/job-detail.tsx(55,219): error TS2305: Module '"@shared/schema"' has no exported member 'CatalogItem'.
+client/src/pages/job-detail.tsx(56,10): error TS2305: Module '"@shared/schema"' has no exported member 'PIPELINE_STAGES'.
+client/src/pages/job-detail.tsx(56,27): error TS2305: Module '"@shared/schema"' has no exported member 'DELIVERY_TYPES'.
+client/src/pages/job-detail.tsx(56,43): error TS2305: Module '"@shared/schema"' has no exported member 'PARTNER_STATUSES'.
+client/src/pages/job-detail.tsx(56,61): error TS2305: Module '"@shared/schema"' has no exported member 'INVOICE_STATUSES'.
+client/src/pages/job-detail.tsx(56,79): error TS2305: Module '"@shared/schema"' has no exported member 'NOTE_VISIBILITY'.
+client/src/pages/job-detail.tsx(56,96): error TS2305: Module '"@shared/schema"' has no exported member 'SURVEY_STATUSES'.
+client/src/pages/job-detail.tsx(56,113): error TS2305: Module '"@shared/schema"' has no exported member 'EMERGENCY_INCIDENT_TYPES'.
+client/src/pages/job-detail.tsx(56,139): error TS2305: Module '"@shared/schema"' has no exported member 'EMERGENCY_PRIORITIES'.
+client/src/pages/job-detail.tsx(1208,27): error TS2339: Property 'content' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(1209,30): error TS2339: Property 'visibility' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(1234,55): error TS2339: Property 'id' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(1270,44): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(1392,42): error TS7006: Parameter 'stage' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(1976,62): error TS7006: Parameter 's' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(2358,65): error TS7006: Parameter 'v' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(2358,87): error TS2339: Property 'visibility' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2361,35): error TS2339: Property 'id' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2363,55): error TS2339: Property 'id' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2367,60): error TS2339: Property 'visibility' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2374,69): error TS2339: Property 'id' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2383,66): error TS2339: Property 'id' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2386,71): error TS2339: Property 'id' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2392,74): error TS2339: Property 'content' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2411,33): error TS2339: Property 'createdAt' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2411,60): error TS2339: Property 'createdAt' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-detail.tsx(2501,47): error TS7006: Parameter 'status' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(2777,38): error TS2339: Property 'id' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2784,36): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2785,36): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2785,68): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2786,36): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2786,68): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2789,37): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2789,77): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2791,35): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2793,38): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2794,38): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2795,38): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2796,38): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2797,38): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2800,39): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2801,39): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2802,39): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2803,39): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2804,39): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2805,39): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2815,31): error TS2339: Property 'proposedDate' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2818,44): error TS2339: Property 'proposedDate' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2819,35): error TS2339: Property 'proposedTime' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2819,65): error TS2339: Property 'proposedTime' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2820,35): error TS2339: Property 'partnerNotes' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2820,79): error TS2339: Property 'partnerNotes' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2825,31): error TS2339: Property 'clientProposedDate' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2828,44): error TS2339: Property 'clientProposedDate' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2829,35): error TS2339: Property 'clientProposedTime' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2829,71): error TS2339: Property 'clientProposedTime' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2830,35): error TS2339: Property 'clientNotes' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2830,78): error TS2339: Property 'clientNotes' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2835,32): error TS2339: Property 'clientProposedDate' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2835,61): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2835,127): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2838,35): error TS2339: Property 'clientNotes' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2838,78): error TS2339: Property 'clientNotes' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2843,31): error TS2339: Property 'bookingStatus' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2846,35): error TS2339: Property 'clientNotes' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2846,78): error TS2339: Property 'clientNotes' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2850,31): error TS2339: Property 'scheduledDate' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2850,55): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2854,44): error TS2339: Property 'scheduledDate' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2855,35): error TS2339: Property 'scheduledTime' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2855,66): error TS2339: Property 'scheduledTime' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2859,31): error TS2339: Property 'surveyDetails' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2861,35): error TS2339: Property 'surveyDetails' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2865,33): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2870,79): error TS2339: Property 'id' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2871,73): error TS2339: Property 'id' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2876,34): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2876,67): error TS2339: Property 'status' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2881,79): error TS2339: Property 'id' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(2882,73): error TS2339: Property 'id' does not exist on type 'JobSurveyWithPartner'.
+client/src/pages/job-detail.tsx(3018,39): error TS2339: Property 'id' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3021,58): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(3021,83): error TS2339: Property 'incidentType' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3021,115): error TS2339: Property 'incidentType' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3025,37): error TS2339: Property 'priority' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3026,37): error TS2339: Property 'priority' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3027,37): error TS2339: Property 'priority' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3030,56): error TS7006: Parameter 'p' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(3030,81): error TS2339: Property 'priority' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3030,109): error TS2339: Property 'priority' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3033,37): error TS2339: Property 'status' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3033,70): error TS2339: Property 'status' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3034,37): error TS2339: Property 'status' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3037,38): error TS2339: Property 'status' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3037,79): error TS2339: Property 'status' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3042,32): error TS2339: Property 'description' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3043,79): error TS2339: Property 'description' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3046,32): error TS2339: Property 'broadcastAt' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3048,56): error TS2339: Property 'broadcastAt' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3052,32): error TS2339: Property 'assignedPartnerId' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3052,61): error TS2339: Property 'assignedAt' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3054,65): error TS2339: Property 'assignedAt' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3058,32): error TS2339: Property 'status' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3062,78): error TS2339: Property 'id' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3063,73): error TS2339: Property 'id' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3320,41): error TS7006: Parameter 'v' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(3422,52): error TS7006: Parameter 'type' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(3435,48): error TS7006: Parameter 'priority' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(3534,52): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(3534,92): error TS2339: Property 'incidentType' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3534,139): error TS2339: Property 'incidentType' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3539,58): error TS2339: Property 'priority' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3539,108): error TS2339: Property 'priority' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3540,48): error TS7006: Parameter 'p' implicitly has an 'any' type.
+client/src/pages/job-detail.tsx(3540,88): error TS2339: Property 'priority' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3540,131): error TS2339: Property 'priority' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3545,49): error TS2339: Property 'broadcastAt' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3545,95): error TS2339: Property 'broadcastAt' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3549,50): error TS2339: Property 'status' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3553,39): error TS2339: Property 'description' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3555,43): error TS2339: Property 'description' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3613,84): error TS2339: Property 'status' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3618,65): error TS2339: Property 'id' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3634,39): error TS2339: Property 'status' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-detail.tsx(3640,59): error TS2339: Property 'id' does not exist on type 'EmergencyCalloutWithDetails'.
+client/src/pages/job-form.tsx(19,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/job-form.tsx(19,20): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/job-form.tsx(19,29): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/pages/job-form.tsx(19,43): error TS2305: Module '"@shared/schema"' has no exported member 'InsertJob'.
+client/src/pages/job-form.tsx(19,54): error TS2305: Module '"@shared/schema"' has no exported member 'QuoteItem'.
+client/src/pages/job-form.tsx(19,65): error TS2305: Module '"@shared/schema"' has no exported member 'CatalogItem'.
+client/src/pages/job-form.tsx(19,78): error TS2305: Module '"@shared/schema"' has no exported member 'ProductCategory'.
+client/src/pages/job-form.tsx(19,95): error TS2305: Module '"@shared/schema"' has no exported member 'QuoteTemplate'.
+client/src/pages/job-form.tsx(19,110): error TS2305: Module '"@shared/schema"' has no exported member 'QuoteTemplateItem'.
+client/src/pages/job-form.tsx(19,129): error TS2305: Module '"@shared/schema"' has no exported member 'JobPartner'.
+client/src/pages/job-form.tsx(24,3): error TS2305: Module '"@shared/schema"' has no exported member 'insertJobSchema'.
+client/src/pages/job-form.tsx(25,3): error TS2305: Module '"@shared/schema"' has no exported member 'SERVICE_TYPES'.
+client/src/pages/job-form.tsx(26,3): error TS2305: Module '"@shared/schema"' has no exported member 'LEAD_SOURCES'.
+client/src/pages/job-form.tsx(27,3): error TS2305: Module '"@shared/schema"' has no exported member 'DELIVERY_TYPES'.
+client/src/pages/job-form.tsx(28,3): error TS2305: Module '"@shared/schema"' has no exported member 'TRADE_CATEGORIES'.
+client/src/pages/job-form.tsx(29,3): error TS2305: Module '"@shared/schema"' has no exported member 'PIPELINE_STAGES'.
+client/src/pages/job-form.tsx(115,45): error TS2304: Cannot find name 'Employee'.
+client/src/pages/job-form.tsx(580,42): error TS7006: Parameter 'type' implicitly has an 'any' type.
+client/src/pages/job-form.tsx(624,41): error TS7006: Parameter 'source' implicitly has an 'any' type.
+client/src/pages/job-form.tsx(642,46): error TS7006: Parameter 'stage' implicitly has an 'any' type.
+client/src/pages/job-form.tsx(719,37): error TS7006: Parameter 'type' implicitly has an 'any' type.
+client/src/pages/job-form.tsx(755,49): error TS7006: Parameter 'cat' implicitly has an 'any' type.
+client/src/pages/job-hub.tsx(24,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/job-hub.tsx(24,20): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/job-hub.tsx(24,29): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/pages/job-hub.tsx(24,43): error TS2305: Module '"@shared/schema"' has no exported member 'QuoteItem'.
+client/src/pages/job-hub.tsx(24,54): error TS2305: Module '"@shared/schema"' has no exported member 'JobNote'.
+client/src/pages/job-hub.tsx(24,63): error TS2305: Module '"@shared/schema"' has no exported member 'JobNoteAttachment'.
+client/src/pages/job-hub.tsx(258,38): error TS2339: Property 'id' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-hub.tsx(259,54): error TS2339: Property 'content' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-hub.tsx(261,33): error TS2339: Property 'createdAt' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/job-hub.tsx(261,59): error TS2339: Property 'createdAt' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/jobs.tsx(14,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/jobs.tsx(14,20): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/jobs.tsx(14,29): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/pages/jobs.tsx(15,10): error TS2305: Module '"@shared/schema"' has no exported member 'PIPELINE_STAGES'.
+client/src/pages/jobs.tsx(15,27): error TS2305: Module '"@shared/schema"' has no exported member 'DELIVERY_TYPES'.
+client/src/pages/jobs.tsx(87,35): error TS7006: Parameter 'type' implicitly has an 'any' type.
+client/src/pages/jobs.tsx(136,35): error TS7006: Parameter 'stage' implicitly has an 'any' type.
+client/src/pages/jobs.tsx(195,55): error TS7006: Parameter 's' implicitly has an 'any' type.
+client/src/pages/jobs.tsx(200,54): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/pages/map-view.tsx(10,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/map-view.tsx(10,20): error TS2305: Module '"@shared/schema"' has no exported member 'EmployeeLocation'.
+client/src/pages/partner-invoicing.tsx(31,15): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/pages/partner-invoicing.tsx(31,29): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/partner-portal/billing.tsx(28,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/partner-portal/calendar.tsx(25,15): error TS2305: Module '"@shared/schema"' has no exported member 'CalendarEvent'.
+client/src/pages/partner-portal/calendar.tsx(25,30): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/partner-portal/emergency-callouts.tsx(30,15): error TS2305: Module '"@shared/schema"' has no exported member 'EmergencyCallout'.
+client/src/pages/partner-portal/emergency-callouts.tsx(30,33): error TS2305: Module '"@shared/schema"' has no exported member 'EmergencyCalloutResponse'.
+client/src/pages/partner-portal/emergency-callouts.tsx(30,59): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/partner-portal/emergency-callouts.tsx(30,64): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/partner-portal/emergency-callouts.tsx(31,10): error TS2305: Module '"@shared/schema"' has no exported member 'EMERGENCY_INCIDENT_TYPES'.
+client/src/pages/partner-portal/emergency-callouts.tsx(31,36): error TS2305: Module '"@shared/schema"' has no exported member 'EMERGENCY_PRIORITIES'.
+client/src/pages/partner-portal/emergency-callouts.tsx(208,7): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(208,33): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(212,7): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(212,35): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(212,62): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(215,61): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(342,56): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/pages/partner-portal/emergency-callouts.tsx(343,48): error TS7006: Parameter 'p' implicitly has an 'any' type.
+client/src/pages/partner-portal/emergency-callouts.tsx(347,23): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(349,20): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(350,20): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(367,26): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(368,26): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(369,26): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(369,60): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(372,27): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(373,27): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(373,69): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(425,21): error TS2339: Property 'proposedArrivalMinutes' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(428,55): error TS2339: Property 'proposedArrivalMinutes' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(432,21): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(457,21): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(463,21): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(469,22): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(469,55): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(471,25): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(475,70): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(477,63): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(489,57): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(501,57): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(661,50): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/emergency-callouts.tsx(708,50): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/help.tsx(9,15): error TS2305: Module '"@shared/schema"' has no exported member 'HelpCategory'.
+client/src/pages/partner-portal/help.tsx(9,29): error TS2305: Module '"@shared/schema"' has no exported member 'HelpArticle'.
+client/src/pages/partner-portal/job-detail.tsx(19,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/partner-portal/job-detail.tsx(19,20): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/partner-portal/job-detail.tsx(19,29): error TS2305: Module '"@shared/schema"' has no exported member 'Task'.
+client/src/pages/partner-portal/job-detail.tsx(19,35): error TS2305: Module '"@shared/schema"' has no exported member 'QuoteItem'.
+client/src/pages/partner-portal/job-detail.tsx(19,46): error TS2305: Module '"@shared/schema"' has no exported member 'JobNote'.
+client/src/pages/partner-portal/job-detail.tsx(19,55): error TS2305: Module '"@shared/schema"' has no exported member 'JobNoteAttachment'.
+client/src/pages/partner-portal/job-detail.tsx(19,74): error TS2305: Module '"@shared/schema"' has no exported member 'EmergencyCallout'.
+client/src/pages/partner-portal/job-detail.tsx(19,92): error TS2305: Module '"@shared/schema"' has no exported member 'JobScheduleProposal'.
+client/src/pages/partner-portal/job-detail.tsx(20,10): error TS2305: Module '"@shared/schema"' has no exported member 'NOTE_VISIBILITY'.
+client/src/pages/partner-portal/job-detail.tsx(1151,35): error TS2339: Property 'id' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/partner-portal/job-detail.tsx(1153,59): error TS2339: Property 'id' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/partner-portal/job-detail.tsx(1155,74): error TS2339: Property 'content' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/partner-portal/job-detail.tsx(1174,33): error TS2339: Property 'createdAt' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/partner-portal/job-detail.tsx(1174,60): error TS2339: Property 'createdAt' does not exist on type 'JobNoteWithAttachments'.
+client/src/pages/partner-portal/job-detail.tsx(1190,37): error TS7006: Parameter 'task' implicitly has an 'any' type.
+client/src/pages/partner-portal/jobs.tsx(19,15): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/partner-portal/jobs.tsx(19,20): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/partner-portal/jobs.tsx(19,29): error TS2305: Module '"@shared/schema"' has no exported member 'EmergencyCallout'.
+client/src/pages/partner-portal/jobs.tsx(19,47): error TS2305: Module '"@shared/schema"' has no exported member 'EmergencyCalloutResponse'.
+client/src/pages/partner-portal/jobs.tsx(20,10): error TS2305: Module '"@shared/schema"' has no exported member 'EMERGENCY_INCIDENT_TYPES'.
+client/src/pages/partner-portal/jobs.tsx(20,36): error TS2305: Module '"@shared/schema"' has no exported member 'EMERGENCY_PRIORITIES'.
+client/src/pages/partner-portal/jobs.tsx(130,7): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(130,33): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(204,68): error TS7006: Parameter 't' implicitly has an 'any' type.
+client/src/pages/partner-portal/jobs.tsx(205,60): error TS7006: Parameter 'p' implicitly has an 'any' type.
+client/src/pages/partner-portal/jobs.tsx(207,40): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(214,65): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(257,38): error TS2339: Property 'status' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(261,83): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(263,76): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(275,70): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(287,70): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(439,51): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/jobs.tsx(486,51): error TS2339: Property 'id' does not exist on type 'EmergencyResponseWithDetails'.
+client/src/pages/partner-portal/quotes.tsx(19,15): error TS2305: Module '"@shared/schema"' has no exported member 'PartnerQuote'.
+client/src/pages/partner-portal/quotes.tsx(19,29): error TS2305: Module '"@shared/schema"' has no exported member 'PartnerQuoteItem'.
+client/src/pages/partner-portal/quotes.tsx(19,47): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/partner-portal/quotes.tsx(739,55): error TS7006: Parameter 'item' implicitly has an 'any' type.
+client/src/pages/partner-portal/quotes.tsx(739,61): error TS7006: Parameter 'i' implicitly has an 'any' type.
+client/src/pages/partner-portal/surveys.tsx(18,15): error TS2305: Module '"@shared/schema"' has no exported member 'JobSurvey'.
+client/src/pages/partner-portal/surveys.tsx(18,26): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/partner-portal/surveys.tsx(18,31): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/partners.tsx(32,15): error TS2305: Module '"@shared/schema"' has no exported member 'TradePartner'.
+client/src/pages/partners.tsx(32,29): error TS2305: Module '"@shared/schema"' has no exported member 'InsertTradePartner'.
+client/src/pages/partners.tsx(33,10): error TS2305: Module '"@shared/schema"' has no exported member 'insertTradePartnerSchema'.
+client/src/pages/partners.tsx(33,36): error TS2305: Module '"@shared/schema"' has no exported member 'TRADE_CATEGORIES'.
+client/src/pages/partners.tsx(379,45): error TS7006: Parameter 'cat' implicitly has an 'any' type.
+client/src/pages/payroll-detail.tsx(16,15): error TS2305: Module '"@shared/schema"' has no exported member 'PayPeriod'.
+client/src/pages/payroll-detail.tsx(16,26): error TS2305: Module '"@shared/schema"' has no exported member 'PayrollRun'.
+client/src/pages/payroll-detail.tsx(16,38): error TS2305: Module '"@shared/schema"' has no exported member 'Employee'.
+client/src/pages/payroll.tsx(14,15): error TS2305: Module '"@shared/schema"' has no exported member 'PayPeriod'.
+client/src/pages/portal/help.tsx(9,15): error TS2305: Module '"@shared/schema"' has no exported member 'HelpCategory'.
+client/src/pages/portal/help.tsx(9,29): error TS2305: Module '"@shared/schema"' has no exported member 'HelpArticle'.
+client/src/pages/portal/job-detail.tsx(15,10): error TS2305: Module '"@shared/schema"' has no exported member 'PIPELINE_STAGES'.
+client/src/pages/portal/job-detail.tsx(15,27): error TS2305: Module '"@shared/schema"' has no exported member 'PAYMENT_STATUSES'.
+client/src/pages/portal/job-detail.tsx(376,61): error TS7006: Parameter 's' implicitly has an 'any' type.
+client/src/pages/portal/job-detail.tsx(406,46): error TS7006: Parameter 's' implicitly has an 'any' type.
+client/src/pages/portal/job-detail.tsx(504,43): error TS7006: Parameter 'stage' implicitly has an 'any' type.
+client/src/pages/portal/job-detail.tsx(504,50): error TS7006: Parameter 'index' implicitly has an 'any' type.
+client/src/pages/product-finder.tsx(79,15): error TS2305: Module '"@shared/schema"' has no exported member 'CapturedProduct'.
+client/src/pages/product-finder.tsx(79,32): error TS2305: Module '"@shared/schema"' has no exported member 'Supplier'.
+client/src/pages/product-finder.tsx(79,42): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/quote-templates.tsx(49,15): error TS2305: Module '"@shared/schema"' has no exported member 'QuoteTemplate'.
+client/src/pages/quote-templates.tsx(49,30): error TS2305: Module '"@shared/schema"' has no exported member 'CatalogItem'.
+client/src/pages/quote-templates.tsx(49,43): error TS2305: Module '"@shared/schema"' has no exported member 'ProductCategory'.
+client/src/pages/quote-templates.tsx(597,22): error TS18046: 'items' is of type 'unknown'.
+client/src/pages/quote-templates.tsx(597,36): error TS7006: Parameter 'item' implicitly has an 'any' type.
+client/src/pages/quote-templates.tsx(597,65): error TS7006: Parameter 'item' implicitly has an 'any' type.
+client/src/pages/seo.tsx(44,15): error TS2305: Module '"@shared/schema"' has no exported member 'SeoBusinessProfile'.
+client/src/pages/seo.tsx(44,35): error TS2305: Module '"@shared/schema"' has no exported member 'SeoContentPost'.
+client/src/pages/seo.tsx(44,51): error TS2305: Module '"@shared/schema"' has no exported member 'SeoWeeklyFocus'.
+client/src/pages/seo.tsx(44,67): error TS2305: Module '"@shared/schema"' has no exported member 'SeoAutopilotSettings'.
+client/src/pages/seo.tsx(44,89): error TS2305: Module '"@shared/schema"' has no exported member 'SeoAutopilotSlot'.
+client/src/pages/seo.tsx(44,107): error TS2305: Module '"@shared/schema"' has no exported member 'SeoGoogleBusinessLocation'.
+client/src/pages/seo.tsx(44,134): error TS2305: Module '"@shared/schema"' has no exported member 'SeoMediaLibrary'.
+client/src/pages/suppliers.tsx(61,15): error TS2305: Module '"@shared/schema"' has no exported member 'Supplier'.
+client/src/pages/suppliers.tsx(61,25): error TS2305: Module '"@shared/schema"' has no exported member 'InsertSupplier'.
+client/src/pages/tasks.tsx(27,15): error TS2305: Module '"@shared/schema"' has no exported member 'Task'.
+client/src/pages/tasks.tsx(27,21): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+client/src/pages/tasks.tsx(27,26): error TS2305: Module '"@shared/schema"' has no exported member 'InsertTask'.
+client/src/pages/tasks.tsx(27,38): error TS2305: Module '"@shared/schema"' has no exported member 'Employee'.
+client/src/pages/tasks.tsx(27,48): error TS2305: Module '"@shared/schema"' has no exported member 'Contact'.
+client/src/pages/tasks.tsx(28,10): error TS2305: Module '"@shared/schema"' has no exported member 'insertTaskSchema'.
+client/src/pages/timesheets-admin.tsx(10,15): error TS2305: Module '"@shared/schema"' has no exported member 'TimeEntry'.
+client/src/pages/timesheets-admin.tsx(10,26): error TS2305: Module '"@shared/schema"' has no exported member 'Employee'.
+client/src/pages/wellbeing.tsx(40,15): error TS2305: Module '"@shared/schema"' has no exported member 'OwnerWellbeingSettings'.
+client/src/pages/wellbeing.tsx(40,39): error TS2305: Module '"@shared/schema"' has no exported member 'PersonalTask'.
+client/src/pages/wellbeing.tsx(40,53): error TS2305: Module '"@shared/schema"' has no exported member 'DailyFocusTask'.
+client/src/pages/wellbeing.tsx(40,69): error TS2305: Module '"@shared/schema"' has no exported member 'Task'.
+client/src/pages/wellbeing.tsx(40,75): error TS2305: Module '"@shared/schema"' has no exported member 'Job'.
+server/auth.ts(8,10): error TS2305: Module '"@shared/schema"' has no exported member 'User'.
+server/github-knowledge.ts(11,10): error TS2305: Module '"@shared/schema"' has no exported member 'repoKnowledge'.
+server/github-knowledge.ts(11,25): error TS2305: Module '"@shared/schema"' has no exported member 'repoKnowledgeVersions'.
+server/github-knowledge.ts(75,11): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(78,11): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(356,13): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(368,13): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(447,11): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(453,11): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(483,27): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(528,11): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(535,11): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(551,35): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(571,34): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(574,29): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(582,9): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(596,25): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(607,9): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(611,11): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(626,10): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(634,27): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(703,27): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(706,26): error TS18047: 'db' is possibly 'null'.
+server/github-knowledge.ts(728,27): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/auth/replitAuth.ts(76,5): error TS2304: Cannot find name 'updateUserSession'.
+server/replit_integrations/auth/replitAuth.ts(77,11): error TS2304: Cannot find name 'upsertUser'.
+server/replit_integrations/auth/replitAuth.ts(154,5): error TS2304: Cannot find name 'updateUserSession'.
+server/replit_integrations/auth/storage.ts(14,26): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/auth/storage.ts(19,26): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/batch/utils.ts(110,30): error TS2339: Property 'AbortError' does not exist on type '<T>(input: (attemptNumber: number) => T | PromiseLike<T>, options?: Options | undefined) => Promise<T>'.
+server/replit_integrations/batch/utils.ts(159,32): error TS2339: Property 'AbortError' does not exist on type '<T>(input: (attemptNumber: number) => T | PromiseLike<T>, options?: Options | undefined) => Promise<T>'.
+server/replit_integrations/chat/storage.ts(2,10): error TS2305: Module '"@shared/schema"' has no exported member 'conversations'.
+server/replit_integrations/chat/storage.ts(2,25): error TS2305: Module '"@shared/schema"' has no exported member 'messages'.
+server/replit_integrations/chat/storage.ts(16,34): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/chat/storage.ts(21,12): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/chat/storage.ts(25,34): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/chat/storage.ts(30,11): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/chat/storage.ts(31,11): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/chat/storage.ts(35,12): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/chat/storage.ts(39,29): error TS18047: 'db' is possibly 'null'.
+server/replit_integrations/image/client.ts(23,18): error TS18048: 'response.data' is possibly 'undefined'.
+server/replit_integrations/image/client.ts(50,23): error TS18048: 'response.data' is possibly 'undefined'.
+server/replit_integrations/image/routes.ts(20,25): error TS18048: 'response.data' is possibly 'undefined'.
+server/scheduler.ts(3,10): error TS2459: Module '"./index"' declares 'log' locally, but it is not exported.
+server/scheduler.ts(20,36): error TS2339: Property 'getSeoAutopilotSettings' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getSeoAutopilotSettings' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(28,43): error TS2339: Property 'getSeoBusinessProfile' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getSeoBusinessProfile' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(29,38): error TS2339: Property 'getSeoBrandVoice' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getSeoBrandVoice' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(30,37): error TS2339: Property 'getSeoWeeklyFocusList' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getSeoWeeklyFocusList' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(31,40): error TS7006: Parameter 'f' implicitly has an 'any' type.
+server/scheduler.ts(91,47): error TS2339: Property 'getSeoAutopilotSlotsByDateRange' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getSeoAutopilotSlotsByDateRange' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(96,50): error TS7006: Parameter 's' implicitly has an 'any' type.
+server/scheduler.ts(101,38): error TS2339: Property 'createSeoAutopilotSlot' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'createSeoAutopilotSlot' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(146,40): error TS2339: Property 'createSeoContentPost' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'createSeoContentPost' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(158,27): error TS2339: Property 'updateSeoAutopilotSlot' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'updateSeoAutopilotSlot' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(171,19): error TS2339: Property 'createSeoAutopilotRun' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'createSeoAutopilotRun' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(188,19): error TS2339: Property 'createSeoAutopilotRun' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'createSeoAutopilotRun' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(249,34): error TS2339: Property 'getAssets' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getAssets' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(250,36): error TS7006: Parameter 'a' implicitly has an 'any' type.
+server/scheduler.ts(251,37): error TS2339: Property 'getEmployees' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getEmployees' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(252,41): error TS2339: Property 'getTasks' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getTasks' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(253,40): error TS2339: Property 'getAssetReminders' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getAssetReminders' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(270,50): error TS7006: Parameter 't' implicitly has an 'any' type.
+server/scheduler.ts(277,23): error TS2339: Property 'createTask' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'createTask' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(291,41): error TS7006: Parameter 'e' implicitly has an 'any' type.
+server/scheduler.ts(294,52): error TS7006: Parameter 'r' implicitly has an 'any' type.
+server/scheduler.ts(313,29): error TS2339: Property 'createAssetReminder' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'createAssetReminder' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(350,36): error TS2339: Property 'getSeoAutopilotSettings' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getSeoAutopilotSettings' does not exist on type 'DatabaseStorage'.
+server/scheduler.ts(352,35): error TS2339: Property 'getSeoAutopilotSlotsByStatus' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getSeoAutopilotSlotsByStatus' does not exist on type 'DatabaseStorage'.
+server/seed-help-center.ts(1381,44): error TS2339: Property 'getHelpArticles' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'getHelpArticles' does not exist on type 'DatabaseStorage'.
+server/seed-help-center.ts(1392,37): error TS2339: Property 'createHelpCategory' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'createHelpCategory' does not exist on type 'DatabaseStorage'.
+server/seed-help-center.ts(1405,21): error TS2339: Property 'createHelpArticle' does not exist on type 'DatabaseStorage | MemStorage'.
+  Property 'createHelpArticle' does not exist on type 'DatabaseStorage'.
+server/seed.ts(2,10): error TS2305: Module '"@shared/schema"' has no exported member 'employees'.
+server/seed.ts(2,21): error TS2305: Module '"@shared/schema"' has no exported member 'employeeCredentials'.
+server/seed.ts(2,42): error TS2305: Module '"@shared/schema"' has no exported member 'contacts'.
+server/seed.ts(2,52): error TS2305: Module '"@shared/schema"' has no exported member 'jobs'.
+server/seed.ts(2,58): error TS2305: Module '"@shared/schema"' has no exported member 'tradePartners'.
+server/seed.ts(31,36): error TS18047: 'db' is possibly 'null'.
+server/seed.ts(41,35): error TS18047: 'db' is possibly 'null'.
+server/seed.ts(60,39): error TS18047: 'db' is possibly 'null'.
+server/seed.ts(68,13): error TS18047: 'db' is possibly 'null'.
+server/seed.ts(78,13): error TS18047: 'db' is possibly 'null'.
+server/seed.ts(92,33): error TS18047: 'db' is possibly 'null'.
+server/seed.ts(96,32): error TS18047: 'db' is possibly 'null'.
+server/seed.ts(106,11): error TS18047: 'db' is possibly 'null'.
+server/seed.ts(125,33): error TS18047: 'db' is possibly 'null'.
+server/seed.ts(129,11): error TS18047: 'db' is possibly 'null'.
+server/stage-validation.ts(8,3): error TS2305: Module '"@shared/schema"' has no exported member 'jobs'.
+server/stage-validation.ts(9,3): error TS2305: Module '"@shared/schema"' has no exported member 'quoteItems'.
+server/stage-validation.ts(10,3): error TS2305: Module '"@shared/schema"' has no exported member 'jobSurveys'.
+server/stage-validation.ts(11,3): error TS2305: Module '"@shared/schema"' has no exported member 'calendarEvents'.
+server/stage-validation.ts(12,3): error TS2305: Module '"@shared/schema"' has no exported member 'invoices'.
+server/stage-validation.ts(13,3): error TS2305: Module '"@shared/schema"' has no exported member 'jobScheduleProposals'.
+server/stage-validation.ts(14,3): error TS2305: Module '"@shared/schema"' has no exported member 'financialTransactions'.
+server/stage-validation.ts(15,3): error TS2305: Module '"@shared/schema"' has no exported member 'jobClientPayments'.
+server/stage-validation.ts(45,25): error TS18047: 'db' is possibly 'null'.
+server/stage-validation.ts(48,38): error TS18047: 'db' is possibly 'null'.
+server/stage-validation.ts(53,34): error TS18047: 'db' is possibly 'null'.
+server/stage-validation.ts(63,37): error TS18047: 'db' is possibly 'null'.
+server/stage-validation.ts(73,45): error TS18047: 'db' is possibly 'null'.
+server/stage-validation.ts(83,35): error TS18047: 'db' is possibly 'null'.
+server/stage-validation.ts(94,36): error TS18047: 'db' is possibly 'null'.
+server/stage-validation.ts(105,42): error TS18047: 'db' is possibly 'null'.
+server/stage-validation.ts(182,32): error TS2339: Property 'status' does not exist on type '{ hasQuoteItems: boolean; hasSurveyScheduled: boolean; hasWorkScheduled: boolean; hasInvoice: boolean; isPaidInFull: boolean; paidAmount: number; }'.
+server/stage-validation.ts(230,26): error TS2339: Property 'depositRequired' does not exist on type '{ hasQuoteItems: boolean; hasSurveyScheduled: boolean; hasWorkScheduled: boolean; hasInvoice: boolean; isPaidInFull: boolean; paidAmount: number; }'.
+server/stage-validation.ts(253,32): error TS2339: Property 'status' does not exist on type '{ hasQuoteItems: boolean; hasSurveyScheduled: boolean; hasWorkScheduled: boolean; hasInvoice: boolean; isPaidInFull: boolean; paidAmount: number; }'.
+server/stage-validation.ts(269,28): error TS2339: Property 'depositRequired' does not exist on type '{ hasQuoteItems: boolean; hasSurveyScheduled: boolean; hasWorkScheduled: boolean; hasInvoice: boolean; isPaidInFull: boolean; paidAmount: number; }'.
+server/stage-validation.ts(288,28): error TS2339: Property 'quotedValue' does not exist on type '{ hasQuoteItems: boolean; hasSurveyScheduled: boolean; hasWorkScheduled: boolean; hasInvoice: boolean; isPaidInFull: boolean; paidAmount: number; }'.
+server/stage-validation.ts(289,32): error TS2339: Property 'depositRequired' does not exist on type '{ hasQuoteItems: boolean; hasSurveyScheduled: boolean; hasWorkScheduled: boolean; hasInvoice: boolean; isPaidInFull: boolean; paidAmount: number; }'.
+server/stage-validation.ts(290,32): error TS2339: Property 'depositReceived' does not exist on type '{ hasQuoteItems: boolean; hasSurveyScheduled: boolean; hasWorkScheduled: boolean; hasInvoice: boolean; isPaidInFull: boolean; paidAmount: number; }'.
+server/stage-validation.ts(291,30): error TS2339: Property 'quoteResponse' does not exist on type '{ hasQuoteItems: boolean; hasSurveyScheduled: boolean; hasWorkScheduled: boolean; hasInvoice: boolean; isPaidInFull: boolean; paidAmount: number; }'.
+server/storage.ts(31,13): error TS2322: Type 'Pool | null' is not assignable to type 'Pool | undefined'.
+  Type 'null' is not assignable to type 'Pool | undefined'.
+server/storage.ts(37,34): error TS18047: 'db' is possibly 'null'.
+server/storage.ts(42,34): error TS18047: 'db' is possibly 'null'.
+server/storage.ts(47,34): error TS18047: 'db' is possibly 'null'.
+server/storage.ts(52,36): error TS18047: 'db' is possibly 'null'.
+server/storage.ts(57,36): error TS18047: 'db' is possibly 'null'.
+server/storage.ts(62,22): error TS18047: 'db' is possibly 'null'.
+server/storage.ts(66,33): error TS18047: 'db' is possibly 'null'.

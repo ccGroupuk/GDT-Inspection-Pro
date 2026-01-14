@@ -1,0 +1,44 @@
+﻿node.exe : C:\Users\jonat\
+OneDrive\Desktop\GDT-Inspe
+ction-Pro\server\db.ts:9
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpe    cified: 
+(C:\User    
+s\jonat\...\serv    
+er\db.ts:9:Strin    g) 
+[], RemoteExc    eption
+    + FullyQualified    
+ErrorId : Native    
+CommandError
+ 
+    throw new Error(
+          ^
+
+Error: DATABASE_URL must 
+be set. Did you forget to 
+provision a database?
+    at <anonymous> (C:\Use
+rs\jonat\OneDrive\Desktop\
+GDT-Inspection-Pro\server\
+db.ts:9:11)
+    at ModuleJob.run (node
+:internal/modules/esm/modu
+le_job:413:25)
+    at async onImport.trac
+ePromise.__proto__ (node:i
+nternal/modules/esm/loader
+:654:26)
+    at async asyncRunEntry
+PointWithESMLoader (node:i
+nternal/modules/run_main:1
+01:5)
+
+Node.js v25.2.1
