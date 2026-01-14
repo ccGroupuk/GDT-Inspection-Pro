@@ -1,0 +1,11 @@
+android/
+attached_assets/
+.git
+.replit
+replit.md
+error_log.txt
+errors.txt
+start_dev.bat
+test.tsx
+test_ai.js
+package-lock-jons.json
