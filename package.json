@@ -15,8 +15,6 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "bufferutil": "^4.0.8",
-    "utf-8-validate": "^6.0.4",
     "@capacitor/android": "^6.0.0",
     "@capacitor/app": "^6.0.0",
     "@capacitor/camera": "^6.0.0",
