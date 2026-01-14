@@ -5,7 +5,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "npm run server",
-    "heroku-postbuild": "npm run compile:client && npm run compile:server",
+    "build": "npm run compile:client && npm run compile:server",
+    "heroku-postbuild": "npm run build",
     "server": "tsx watch server/index.ts",
     "compile:client": "vite build --config client/vite.config.ts",
     "compile:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
