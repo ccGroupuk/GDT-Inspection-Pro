@@ -7,14 +7,15 @@
     "dev": "npm run server",
     "build": "npm run build:client && npm run build:server",
     "server": "tsx watch server/index.ts",
-    "client": "vite",
-    "build:client": "vite build",
+    "client": "vite --config client/vite.config.ts",
+    "build:client": "vite build --config client/vite.config.ts",
     "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "check-types": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "bufferutil": "^4.0.8",
     "@capacitor/android": "^6.0.0",
     "@capacitor/app": "^6.0.0",
     "@capacitor/camera": "^6.0.0",
