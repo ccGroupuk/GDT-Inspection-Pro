@@ -1,10 +1,9 @@
+
 import express, { type Express } from "express";
 import fs from "fs";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
-import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
-import viteConfig from "../client/vite.config";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,6 +20,10 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+    // Dynamic import to avoid loading 'vite' in production (where it might be missing)
+    const { createServer: createViteServer, createLogger } = await import("vite");
+    const viteConfig = (await import("../client/vite.config")).default;
+
     const vite = await createViteServer({
         ...viteConfig,
         configFile: false,
