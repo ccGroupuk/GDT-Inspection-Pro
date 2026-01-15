@@ -5,6 +5,3 @@ dist
 .env
 android
 ios
-coverage
-build
-.DS_Store
