@@ -26,9 +26,10 @@ const IconMap: Record<string, any> = {
 interface RouteStepProps {
     items: InspectionItem[];
     onItemsChange: (items: InspectionItem[]) => void;
+    allowedItemTypes?: InspectionItemType[]; // Optional filter for allowed item types
 }
 
-export function RouteStep({ items, onItemsChange }: RouteStepProps) {
+export function RouteStep({ items, onItemsChange, allowedItemTypes }: RouteStepProps) {
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [selectedType, setSelectedType] = useState<InspectionItemType | null>(null);
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -40,10 +41,21 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
     // Load custom templates and merge with defaults
     // Note: In a real app we might use React Query or Context, but direct read is fine for now
     const customTemplates = getItemTemplates();
-    const allTemplates: Record<string, ItemTemplate> = { ...ITEM_TEMPLATES };
+    let allTemplates: Record<string, ItemTemplate> = { ...ITEM_TEMPLATES };
     customTemplates.forEach(t => {
         allTemplates[t.type] = t;
     });
+
+    // Filter templates if allowedItemTypes is specified
+    if (allowedItemTypes && allowedItemTypes.length > 0) {
+        const filtered: Record<string, ItemTemplate> = {};
+        allowedItemTypes.forEach(type => {
+            if (allTemplates[type]) {
+                filtered[type] = allTemplates[type];
+            }
+        });
+        allTemplates = filtered;
+    }
 
     const handleAddItemStart = (type: InspectionItemType) => {
         setSelectedType(type);

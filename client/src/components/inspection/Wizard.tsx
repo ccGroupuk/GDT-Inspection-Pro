@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, CheckCircle2, PlayCircle } from "lucide-react";
-import { InspectionTemplate, InspectionItem, DEMO_DATA } from "@/lib/mock-data";
+import { InspectionTemplate, InspectionItem, InspectionItemType, DEMO_DATA } from "@/lib/mock-data";
 import { FormStep } from "./FormStep";
 import { PhotoStep } from "./PhotoStep";
 import { ReviewStep } from "./ReviewStep";
@@ -244,6 +244,7 @@ export function Wizard({ template, initialData, onCancel }: WizardProps) {
                             <RouteStep
                                 items={items}
                                 onItemsChange={setItems}
+                                allowedItemTypes={template.id === "fire-door-survey" ? ["fire_door"] : undefined}
                             />
                         ) : currentStep.component === "photo-upload" ? (
                             <PhotoStep

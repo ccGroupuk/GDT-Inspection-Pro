@@ -13,9 +13,20 @@ interface FormStepProps {
 }
 
 export function FormStep({ fields, values, errors = {}, onChange }: FormStepProps) {
+    // Filter fields based on showWhen conditions
+    const visibleFields = fields.filter((field) => {
+        if (!field.showWhen) return true;
+        const { field: dependsOn, value: requiredValue } = field.showWhen;
+        const currentValue = values[dependsOn];
+        if (Array.isArray(requiredValue)) {
+            return requiredValue.includes(currentValue);
+        }
+        return currentValue === requiredValue;
+    });
+
     return (
         <div className="space-y-6">
-            {fields.map((field) => (
+            {visibleFields.map((field) => (
                 <div key={field.name} className="flex flex-col space-y-2">
                     {field.type === "checkbox" ? (
                         <div className={`flex items-center space-x-2 border rounded-lg p-3 bg-background ${errors[field.name] ? "border-red-500 bg-red-900/20" : ""}`}>

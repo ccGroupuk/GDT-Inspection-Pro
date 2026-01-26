@@ -32,6 +32,7 @@ export interface StepField {
     placeholder?: string;
     required?: boolean;
     options?: string[]; // For select inputs
+    showWhen?: { field: string; value: string | string[] }; // Conditional visibility
 }
 
 export interface InspectionStep {
@@ -157,6 +158,7 @@ export const MOCK_TEMPLATES: InspectionTemplate[] = [
                     { name: "address", label: "Site Address", type: "text", required: true },
                     { name: "job_number", label: "Job Number", type: "text" },
                     { name: "operative", label: "Operative Name", type: "text" },
+                    { name: "drawing_ref", label: "Drawing Reference", type: "text", placeholder: "e.g., Fire Doors 2024" },
                 ],
             },
             {
