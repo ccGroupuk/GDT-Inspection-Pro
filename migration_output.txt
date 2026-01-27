@@ -1,0 +1,38 @@
+﻿Starting Database Migration...
+Source: postgresql://postgres:XsXEXnlnEVxMjyCkiXPXwXdNBJOfzgmT@nozomi.proxy.rlwy.net:14189/railway
+Target: postgresql://postgres:mmOgYvFwHEXXAMXPeoNdCKdsukfrvjxF@yamabiko.proxy.rlwy.net:25734/railway
+--------------------------------
+Step 1: Dumping source database...
+powershell : 
+pg_dump: error: 
+aborting because of 
+server version 
+mismatch
+At line:1 char:1
++ powershell 
+-ExecutionPolicy 
+Bypass -File script/m
+igrate_db.ps1 -Sourc 
+...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (pg_dump   
+ : error:...ersio    
+n mismatch:Strin    
+g) [], RemoteExc    
+eption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+pg_dump: detail: 
+server version: 17.7 
+(Debian 
+17.7-3.pgdg13+1); 
+pg_dump version: 
+16.11
+Error dumping database: pg_dump failed with exit code 1

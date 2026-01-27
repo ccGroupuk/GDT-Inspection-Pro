@@ -1,0 +1,35 @@
+﻿Starting Database Migration...
+Source: postgresql://postgres:XsXEXnlnEVxMjyCkiXPXwXdNBJOfzgmT@nozomi.proxy.rlwy.net:14189/railway
+Target: postgresql://postgres:mmOgYvFwHEXXAMXPeoNdCKdsukfrvjxF@yamabiko.proxy.rlwy.net:25734/railway
+--------------------------------
+Step 1: Dumping source database...
+powershell : 
+pg_dump: error: too 
+many command-line 
+arguments (first is 
+"--no-owner")
+At line:1 char:1
++ powershell 
+-ExecutionPolicy 
+Bypass -File script/m
+igrate_db.ps1 -Sourc 
+...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (pg_dump   
+ : error:...s "--    
+no-owner"):Strin    
+g) [], RemoteExc    
+eption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+pg_dump: hint: Try 
+"pg_dump --help" for 
+more information.
+Error dumping database: pg_dump failed with exit code 1

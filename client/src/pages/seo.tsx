@@ -1,0 +1,2516 @@
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { 
+  Building2, 
+  MessageSquare, 
+  Target, 
+  Image as ImageIcon, 
+  FileText, 
+  Sparkles,
+  Save,
+  Plus,
+  Loader2,
+  Calendar,
+  Facebook,
+  MapPin,
+  RefreshCw,
+  Eye,
+  Send,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Upload,
+  X,
+  Zap,
+  Play,
+  Pause,
+  Check,
+  CalendarDays,
+  Copy,
+  ExternalLink,
+} from "lucide-react";
+import { SiGoogle, SiInstagram, SiFacebook } from "react-icons/si";
+import type { SeoBusinessProfile, SeoContentPost, SeoWeeklyFocus, SeoAutopilotSettings, SeoAutopilotSlot, SeoGoogleBusinessLocation, SeoMediaLibrary } from "@shared/schema";
+import { Trash2, Edit, GripVertical } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
+
+export default function SEOPowerHouse() {
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("profile");
+
+  return (
+    <div className="h-full overflow-auto p-6 space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">SEO Power House</h1>
+          <p className="text-muted-foreground">AI-powered content creation and social media management</p>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:grid-cols-7">
+          <TabsTrigger value="profile" className="gap-2" data-testid="tab-profile">
+            <Building2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Profile</span>
+          </TabsTrigger>
+          <TabsTrigger value="voice" className="gap-2" data-testid="tab-voice">
+            <MessageSquare className="w-4 h-4" />
+            <span className="hidden sm:inline">Brand Voice</span>
+          </TabsTrigger>
+          <TabsTrigger value="focus" className="gap-2" data-testid="tab-focus">
+            <Target className="w-4 h-4" />
+            <span className="hidden sm:inline">Weekly Focus</span>
+          </TabsTrigger>
+          <TabsTrigger value="media" className="gap-2" data-testid="tab-media">
+            <ImageIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Media</span>
+          </TabsTrigger>
+          <TabsTrigger value="autopilot" className="gap-2" data-testid="tab-autopilot">
+            <Zap className="w-4 h-4" />
+            <span className="hidden sm:inline">Autopilot</span>
+          </TabsTrigger>
+          <TabsTrigger value="create" className="gap-2" data-testid="tab-create">
+            <Sparkles className="w-4 h-4" />
+            <span className="hidden sm:inline">Create</span>
+          </TabsTrigger>
+          <TabsTrigger value="posts" className="gap-2" data-testid="tab-posts">
+            <FileText className="w-4 h-4" />
+            <span className="hidden sm:inline">Posts</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile">
+          <BusinessProfileSection />
+        </TabsContent>
+        
+        <TabsContent value="voice">
+          <BrandVoiceSection />
+        </TabsContent>
+        
+        <TabsContent value="focus">
+          <WeeklyFocusSection />
+        </TabsContent>
+        
+        <TabsContent value="media">
+          <MediaLibrarySection />
+        </TabsContent>
+        
+        <TabsContent value="autopilot">
+          <AutopilotSection />
+        </TabsContent>
+        
+        <TabsContent value="create">
+          <ContentCreatorSection />
+        </TabsContent>
+        
+        <TabsContent value="posts">
+          <PostsSection />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function BusinessProfileSection() {
+  const { toast } = useToast();
+  const [formData, setFormData] = useState({
+    businessName: "CCC Group",
+    tradeType: "Carpentry & Home Improvements",
+    brandTone: "professional",
+    contactPhone: "",
+    contactEmail: "",
+    websiteUrl: "",
+    facebookUrl: "",
+    instagramUrl: "",
+  });
+  
+  // Store raw text for comma-separated fields to allow typing commas
+  const [rawInputs, setRawInputs] = useState({
+    servicesOffered: "Bespoke Carpentry, Under-Stairs Storage, Media Walls, Fitted Wardrobes, Kitchens, Bathrooms",
+    serviceLocations: "Cardiff, Caerphilly, Newport, Vale of Glamorgan",
+    primaryGoals: "Generate leads, Showcase work, Build local trust",
+  });
+
+  const { data: profile, isLoading } = useQuery<SeoBusinessProfile | null>({
+    queryKey: ["/api/seo/business-profile"],
+  });
+  
+  // Google Business Locations
+  const { data: googleLocations = [] } = useQuery<SeoGoogleBusinessLocation[]>({
+    queryKey: ["/api/seo/google-business-locations"],
+  });
+  
+  const [locationDialogOpen, setLocationDialogOpen] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<SeoGoogleBusinessLocation | null>(null);
+  const [newLocation, setNewLocation] = useState({
+    name: "",
+    googleBusinessUrl: "",
+    address: "",
+    isDefault: false,
+  });
+  
+  const createLocationMutation = useMutation({
+    mutationFn: async (data: typeof newLocation) => {
+      const res = await apiRequest("POST", "/api/seo/google-business-locations", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/google-business-locations"] });
+      setLocationDialogOpen(false);
+      setNewLocation({ name: "", googleBusinessUrl: "", address: "", isDefault: false });
+      toast({ title: "Location added", description: "Google Business location has been added." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to add location.", variant: "destructive" });
+    },
+  });
+  
+  const updateLocationMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<typeof newLocation> }) => {
+      const res = await apiRequest("PATCH", `/api/seo/google-business-locations/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/google-business-locations"] });
+      setEditingLocation(null);
+      toast({ title: "Location updated", description: "Google Business location has been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update location.", variant: "destructive" });
+    },
+  });
+  
+  const deleteLocationMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/seo/google-business-locations/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/google-business-locations"] });
+      toast({ title: "Location deleted", description: "Google Business location has been removed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete location.", variant: "destructive" });
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: typeof formData & { servicesOffered: string[]; serviceLocations: string[]; primaryGoals: string[] }) => {
+      const res = await apiRequest("POST", "/api/seo/business-profile", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/business-profile"] });
+      toast({ title: "Profile saved", description: "Your business profile has been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save profile.", variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        businessName: profile.businessName || "CCC Group",
+        tradeType: profile.tradeType || "Carpentry & Home Improvements",
+        brandTone: profile.brandTone || "professional",
+        contactPhone: profile.contactPhone || "",
+        contactEmail: profile.contactEmail || "",
+        websiteUrl: profile.websiteUrl || "",
+        facebookUrl: profile.facebookUrl || "",
+        instagramUrl: profile.instagramUrl || "",
+      });
+      setRawInputs({
+        servicesOffered: (profile.servicesOffered || []).join(", "),
+        serviceLocations: (profile.serviceLocations || []).join(", "),
+        primaryGoals: (profile.primaryGoals || []).join(", "),
+      });
+    }
+  }, [profile]);
+
+  const handleRawInputChange = (field: keyof typeof rawInputs, value: string) => {
+    setRawInputs(prev => ({ ...prev, [field]: value }));
+  };
+  
+  const parseArrayField = (value: string): string[] => {
+    return value.split(",").map(s => s.trim()).filter(Boolean);
+  };
+  
+  const handleSave = () => {
+    saveMutation.mutate({
+      ...formData,
+      servicesOffered: parseArrayField(rawInputs.servicesOffered),
+      serviceLocations: parseArrayField(rawInputs.serviceLocations),
+      primaryGoals: parseArrayField(rawInputs.primaryGoals),
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Building2 className="w-5 h-5" />
+          Business Profile
+        </CardTitle>
+        <CardDescription>
+          Configure your business details for AI-generated content
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="businessName">Business Name</Label>
+            <Input
+              id="businessName"
+              data-testid="input-business-name"
+              value={formData.businessName}
+              onChange={(e) => setFormData(prev => ({ ...prev, businessName: e.target.value }))}
+              placeholder="CCC Group"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tradeType">Trade Type</Label>
+            <Input
+              id="tradeType"
+              data-testid="input-trade-type"
+              value={formData.tradeType}
+              onChange={(e) => setFormData(prev => ({ ...prev, tradeType: e.target.value }))}
+              placeholder="Carpentry & Home Improvements"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="servicesOffered">Services Offered (comma-separated)</Label>
+          <Textarea
+            id="servicesOffered"
+            data-testid="input-services"
+            value={rawInputs.servicesOffered}
+            onChange={(e) => handleRawInputChange("servicesOffered", e.target.value)}
+            placeholder="Bespoke Carpentry, Media Walls, Fitted Wardrobes..."
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="serviceLocations">Service Locations (comma-separated)</Label>
+          <Textarea
+            id="serviceLocations"
+            data-testid="input-locations"
+            value={rawInputs.serviceLocations}
+            onChange={(e) => handleRawInputChange("serviceLocations", e.target.value)}
+            placeholder="Cardiff, Caerphilly, Newport..."
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="brandTone">Brand Tone</Label>
+          <Select
+            value={formData.brandTone}
+            onValueChange={(value) => setFormData(prev => ({ ...prev, brandTone: value }))}
+          >
+            <SelectTrigger data-testid="select-brand-tone">
+              <SelectValue placeholder="Select tone" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="professional">Professional</SelectItem>
+              <SelectItem value="friendly">Friendly</SelectItem>
+              <SelectItem value="casual">Casual</SelectItem>
+              <SelectItem value="authoritative">Authoritative</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="primaryGoals">Primary Goals (comma-separated)</Label>
+          <Textarea
+            id="primaryGoals"
+            data-testid="input-goals"
+            value={rawInputs.primaryGoals}
+            onChange={(e) => handleRawInputChange("primaryGoals", e.target.value)}
+            placeholder="Generate leads, Showcase work, Build local trust..."
+          />
+        </div>
+
+        <Separator />
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="contactPhone">Contact Phone</Label>
+            <Input
+              id="contactPhone"
+              data-testid="input-phone"
+              value={formData.contactPhone}
+              onChange={(e) => setFormData(prev => ({ ...prev, contactPhone: e.target.value }))}
+              placeholder="07xxx xxxxxx"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="contactEmail">Contact Email</Label>
+            <Input
+              id="contactEmail"
+              data-testid="input-email"
+              value={formData.contactEmail}
+              onChange={(e) => setFormData(prev => ({ ...prev, contactEmail: e.target.value }))}
+              placeholder="info@cccgroup.co.uk"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="websiteUrl">Website URL</Label>
+            <Input
+              id="websiteUrl"
+              data-testid="input-website"
+              value={formData.websiteUrl}
+              onChange={(e) => setFormData(prev => ({ ...prev, websiteUrl: e.target.value }))}
+              placeholder="https://cccgroup.co.uk"
+            />
+          </div>
+        </div>
+
+        <Separator />
+        
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <SiFacebook className="w-5 h-5 text-blue-600" />
+            Social Media Links
+          </h3>
+          <p className="text-sm text-muted-foreground">Add your social media page URLs for quick posting</p>
+          
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="facebookUrl" className="flex items-center gap-2">
+                <SiFacebook className="w-4 h-4" />
+                Facebook Page URL
+              </Label>
+              <Input
+                id="facebookUrl"
+                data-testid="input-facebook-url"
+                value={formData.facebookUrl}
+                onChange={(e) => setFormData(prev => ({ ...prev, facebookUrl: e.target.value }))}
+                placeholder="https://www.facebook.com/cccgroup"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="instagramUrl" className="flex items-center gap-2">
+                <SiInstagram className="w-4 h-4" />
+                Instagram Profile URL
+              </Label>
+              <Input
+                id="instagramUrl"
+                data-testid="input-instagram-url"
+                value={formData.instagramUrl}
+                onChange={(e) => setFormData(prev => ({ ...prev, instagramUrl: e.target.value }))}
+                placeholder="https://www.instagram.com/cccgroup"
+              />
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <SiGoogle className="w-5 h-5 text-blue-500" />
+                Google Business Locations
+              </h3>
+              <p className="text-sm text-muted-foreground">Manage your Google Business Profile locations for posting</p>
+            </div>
+            <Dialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" data-testid="button-add-location">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Location
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Google Business Location</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="locationName">Location Name</Label>
+                    <Input
+                      id="locationName"
+                      data-testid="input-location-name"
+                      value={newLocation.name}
+                      onChange={(e) => setNewLocation(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g., Cardiff, Caerphilly"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="googleBusinessUrl">Google Business URL</Label>
+                    <Input
+                      id="googleBusinessUrl"
+                      data-testid="input-google-business-url"
+                      value={newLocation.googleBusinessUrl}
+                      onChange={(e) => setNewLocation(prev => ({ ...prev, googleBusinessUrl: e.target.value }))}
+                      placeholder="https://business.google.com/..."
+                    />
+                    <p className="text-xs text-muted-foreground">Paste the URL from your Google Business dashboard</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="locationAddress">Address (optional)</Label>
+                    <Input
+                      id="locationAddress"
+                      data-testid="input-location-address"
+                      value={newLocation.address}
+                      onChange={(e) => setNewLocation(prev => ({ ...prev, address: e.target.value }))}
+                      placeholder="Full address"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="isDefault"
+                      checked={newLocation.isDefault}
+                      onCheckedChange={(checked) => setNewLocation(prev => ({ ...prev, isDefault: checked as boolean }))}
+                    />
+                    <Label htmlFor="isDefault">Set as default location</Label>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setLocationDialogOpen(false)}>Cancel</Button>
+                  <Button 
+                    onClick={() => createLocationMutation.mutate(newLocation)}
+                    disabled={createLocationMutation.isPending || !newLocation.name || !newLocation.googleBusinessUrl}
+                    data-testid="button-save-location"
+                  >
+                    {createLocationMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    Save Location
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {googleLocations.length === 0 ? (
+            <Card className="bg-muted/30">
+              <CardContent className="py-6 text-center text-muted-foreground">
+                <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>No Google Business locations added yet</p>
+                <p className="text-sm">Add your locations to enable quick posting to Google Business</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {googleLocations.map((location) => (
+                <Card key={location.id} className="bg-muted/30">
+                  <CardContent className="py-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <SiGoogle className="w-5 h-5 text-blue-500" />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{location.name}</span>
+                            {location.isDefault && (
+                              <Badge variant="secondary" className="text-xs">Default</Badge>
+                            )}
+                          </div>
+                          {location.address && (
+                            <p className="text-sm text-muted-foreground">{location.address}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => window.open(location.googleBusinessUrl, '_blank')}
+                          data-testid={`button-open-location-${location.id}`}
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteLocationMutation.mutate(location.id)}
+                          disabled={deleteLocationMutation.isPending}
+                          data-testid={`button-delete-location-${location.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <Separator />
+
+        <Button
+          onClick={handleSave}
+          disabled={saveMutation.isPending}
+          data-testid="button-save-profile"
+        >
+          {saveMutation.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          ) : (
+            <Save className="w-4 h-4 mr-2" />
+          )}
+          Save Profile
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BrandVoiceSection() {
+  const { toast } = useToast();
+  const [formData, setFormData] = useState({
+    emojiStyle: "moderate",
+  });
+  
+  // Store raw text for comma-separated fields
+  const [rawInputs, setRawInputs] = useState({
+    customPhrases: "Quality craftsmanship, Local experts, Trusted since",
+    blacklistedPhrases: "Cheap, Budget, Discount",
+    preferredCtas: "Get in touch today, Call for a free quote, Transform your space",
+    hashtagPreferences: "#CardiffCarpentry, #CCCGroup, #BespokeStorage",
+    locationKeywords: "Cardiff, Caerphilly, South Wales, local",
+  });
+
+  const { data: voice, isLoading } = useQuery({
+    queryKey: ["/api/seo/brand-voice"],
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/seo/brand-voice", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/brand-voice"] });
+      toast({ title: "Brand voice saved", description: "Your brand voice settings have been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save brand voice.", variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    if (voice) {
+      const v = voice as { customPhrases?: string[]; blacklistedPhrases?: string[]; preferredCtas?: string[]; emojiStyle?: string; hashtagPreferences?: string[]; locationKeywords?: string[] };
+      setFormData({
+        emojiStyle: v.emojiStyle || "moderate",
+      });
+      setRawInputs({
+        customPhrases: (v.customPhrases || ["Quality craftsmanship", "Local experts", "Trusted since"]).join(", "),
+        blacklistedPhrases: (v.blacklistedPhrases || ["Cheap", "Budget", "Discount"]).join(", "),
+        preferredCtas: (v.preferredCtas || ["Get in touch today", "Call for a free quote", "Transform your space"]).join(", "),
+        hashtagPreferences: (v.hashtagPreferences || ["#CardiffCarpentry", "#CCCGroup", "#BespokeStorage"]).join(", "),
+        locationKeywords: (v.locationKeywords || ["Cardiff", "Caerphilly", "South Wales", "local"]).join(", "),
+      });
+    }
+  }, [voice]);
+
+  const handleRawInputChange = (field: keyof typeof rawInputs, value: string) => {
+    setRawInputs(prev => ({ ...prev, [field]: value }));
+  };
+  
+  const parseArrayField = (value: string): string[] => {
+    return value.split(",").map(s => s.trim()).filter(Boolean);
+  };
+  
+  const handleSave = () => {
+    saveMutation.mutate({
+      ...formData,
+      customPhrases: parseArrayField(rawInputs.customPhrases),
+      blacklistedPhrases: parseArrayField(rawInputs.blacklistedPhrases),
+      preferredCtas: parseArrayField(rawInputs.preferredCtas),
+      hashtagPreferences: parseArrayField(rawInputs.hashtagPreferences),
+      locationKeywords: parseArrayField(rawInputs.locationKeywords),
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquare className="w-5 h-5" />
+          Brand Voice
+        </CardTitle>
+        <CardDescription>
+          Define your brand&apos;s language preferences and style
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label>Custom Phrases to Use (comma-separated)</Label>
+          <Textarea
+            data-testid="input-custom-phrases"
+            value={rawInputs.customPhrases}
+            onChange={(e) => handleRawInputChange("customPhrases", e.target.value)}
+            placeholder="Quality craftsmanship, Local experts..."
+          />
+          <p className="text-xs text-muted-foreground">Phrases the AI will try to incorporate</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Blacklisted Phrases (comma-separated)</Label>
+          <Textarea
+            data-testid="input-blacklisted-phrases"
+            value={rawInputs.blacklistedPhrases}
+            onChange={(e) => handleRawInputChange("blacklistedPhrases", e.target.value)}
+            placeholder="Cheap, Budget, Discount..."
+          />
+          <p className="text-xs text-muted-foreground">Words the AI should never use</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Preferred Calls-to-Action (comma-separated)</Label>
+          <Textarea
+            data-testid="input-ctas"
+            value={rawInputs.preferredCtas}
+            onChange={(e) => handleRawInputChange("preferredCtas", e.target.value)}
+            placeholder="Get in touch today, Call for a free quote..."
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Emoji Style</Label>
+          <Select
+            value={formData.emojiStyle}
+            onValueChange={(value) => setFormData(prev => ({ ...prev, emojiStyle: value }))}
+          >
+            <SelectTrigger data-testid="select-emoji-style">
+              <SelectValue placeholder="Select emoji style" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No Emojis</SelectItem>
+              <SelectItem value="minimal">Minimal</SelectItem>
+              <SelectItem value="moderate">Moderate</SelectItem>
+              <SelectItem value="heavy">Heavy</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Hashtag Preferences (comma-separated)</Label>
+          <Textarea
+            data-testid="input-hashtags"
+            value={rawInputs.hashtagPreferences}
+            onChange={(e) => handleRawInputChange("hashtagPreferences", e.target.value)}
+            placeholder="#CardiffCarpentry, #CCCGroup..."
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Location Keywords (comma-separated)</Label>
+          <Textarea
+            data-testid="input-location-keywords"
+            value={rawInputs.locationKeywords}
+            onChange={(e) => handleRawInputChange("locationKeywords", e.target.value)}
+            placeholder="Cardiff, Caerphilly, South Wales..."
+          />
+        </div>
+
+        <Button
+          onClick={handleSave}
+          disabled={saveMutation.isPending}
+          data-testid="button-save-voice"
+        >
+          {saveMutation.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          ) : (
+            <Save className="w-4 h-4 mr-2" />
+          )}
+          Save Brand Voice
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WeeklyFocusSection() {
+  const { toast } = useToast();
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({
+    weekStartDate: new Date().toISOString().split("T")[0],
+    weekEndDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    primaryService: "Bespoke Carpentry",
+    primaryLocation: "Cardiff",
+    supportingKeywords: ["quality", "bespoke", "handcrafted"],
+    seasonalTheme: "",
+    recommendedPostCount: 6,
+    notes: "",
+    focusImageUrl: "",
+    focusImageCaption: "",
+  });
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const res = await apiRequest("POST", "/api/uploads/request-url", {
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      });
+      const { uploadURL, objectPath } = await res.json();
+      
+      await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      
+      setFormData(prev => ({ ...prev, focusImageUrl: objectPath }));
+      setImagePreview(URL.createObjectURL(file));
+      toast({ title: "Image uploaded", description: "Your focus image is ready for AI content generation." });
+    } catch (error) {
+      toast({ title: "Upload failed", description: "Could not upload the image.", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removeImage = () => {
+    setFormData(prev => ({ ...prev, focusImageUrl: "", focusImageCaption: "" }));
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const { data: focusList = [], isLoading } = useQuery<SeoWeeklyFocus[]>({
+    queryKey: ["/api/seo/weekly-focus"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const res = await apiRequest("POST", "/api/seo/weekly-focus", {
+        ...data,
+        weekStartDate: new Date(data.weekStartDate),
+        weekEndDate: new Date(data.weekEndDate),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/weekly-focus"] });
+      toast({ title: "Weekly focus created", description: "Your content focus for this week has been set." });
+      setShowForm(false);
+      setImagePreview(null);
+      setFormData(prev => ({ ...prev, focusImageUrl: "", focusImageCaption: "" }));
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create weekly focus.", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="w-5 h-5" />
+                Weekly Focus
+              </CardTitle>
+              <CardDescription>
+                Set your content focus for each week
+              </CardDescription>
+            </div>
+            <Button onClick={() => setShowForm(!showForm)} data-testid="button-new-focus">
+              <Plus className="w-4 h-4 mr-2" />
+              New Week
+            </Button>
+          </div>
+        </CardHeader>
+        {showForm && (
+          <CardContent className="border-t">
+            <div className="space-y-4 pt-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Week Start</Label>
+                  <Input
+                    type="date"
+                    data-testid="input-week-start"
+                    value={formData.weekStartDate}
+                    onChange={(e) => setFormData(prev => ({ ...prev, weekStartDate: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Week End</Label>
+                  <Input
+                    type="date"
+                    data-testid="input-week-end"
+                    value={formData.weekEndDate}
+                    onChange={(e) => setFormData(prev => ({ ...prev, weekEndDate: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Primary Service</Label>
+                  <Select
+                    value={formData.primaryService}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, primaryService: value }))}
+                  >
+                    <SelectTrigger data-testid="select-primary-service">
+                      <SelectValue placeholder="Select service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Bespoke Carpentry">Bespoke Carpentry</SelectItem>
+                      <SelectItem value="Under-Stairs Storage">Under-Stairs Storage</SelectItem>
+                      <SelectItem value="Media Walls">Media Walls</SelectItem>
+                      <SelectItem value="Fitted Wardrobes">Fitted Wardrobes</SelectItem>
+                      <SelectItem value="Kitchens / Joinery">Kitchens / Joinery</SelectItem>
+                      <SelectItem value="Bathrooms">Bathrooms</SelectItem>
+                      <SelectItem value="Full Home Project">Full Home Project</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Primary Location</Label>
+                  <Input
+                    data-testid="input-primary-location"
+                    value={formData.primaryLocation}
+                    onChange={(e) => setFormData(prev => ({ ...prev, primaryLocation: e.target.value }))}
+                    placeholder="Cardiff"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Seasonal Theme (optional)</Label>
+                <Input
+                  data-testid="input-seasonal-theme"
+                  value={formData.seasonalTheme}
+                  onChange={(e) => setFormData(prev => ({ ...prev, seasonalTheme: e.target.value }))}
+                  placeholder="e.g., Spring refresh, Christmas prep..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  data-testid="input-focus-notes"
+                  value={formData.notes}
+                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Any specific themes or projects to highlight..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Focus Image (for AI-powered posts)</Label>
+                <div className="border-2 border-dashed rounded-md p-4">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    data-testid="input-focus-image"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImageUpload(file);
+                    }}
+                  />
+                  {imagePreview ? (
+                    <div className="space-y-3">
+                      <div className="relative inline-block">
+                        <img
+                          src={imagePreview}
+                          alt="Focus image preview"
+                          className="max-h-48 rounded-md object-contain"
+                        />
+                        <Button
+                          size="icon"
+                          variant="destructive"
+                          className="absolute -top-2 -right-2"
+                          onClick={removeImage}
+                          data-testid="button-remove-image"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Image Description (helps AI understand the image)</Label>
+                        <Input
+                          data-testid="input-image-caption"
+                          value={formData.focusImageCaption}
+                          onChange={(e) => setFormData(prev => ({ ...prev, focusImageCaption: e.target.value }))}
+                          placeholder="e.g., Completed under-stairs storage unit with oak finish"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="flex flex-col items-center justify-center py-6 cursor-pointer"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {isUploading ? (
+                        <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground text-center">
+                            Click to upload an image for this week's content focus
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            AI will use this image to generate relevant social posts
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => createMutation.mutate(formData)}
+                  disabled={createMutation.isPending}
+                  data-testid="button-create-focus"
+                >
+                  {createMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Plus className="w-4 h-4 mr-2" />
+                  )}
+                  Create Focus
+                </Button>
+                <Button variant="outline" onClick={() => setShowForm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {focusList.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {focusList.map((focus) => (
+            <Card key={focus.id} className={focus.status === "active" ? "border-primary" : ""}>
+              <CardContent className="pt-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">{focus.primaryService}</h3>
+                      <Badge variant={focus.status === "active" ? "default" : "secondary"}>
+                        {focus.status}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                      <MapPin className="w-3 h-3" />
+                      {focus.primaryLocation}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {new Date(focus.weekStartDate).toLocaleDateString()} - {new Date(focus.weekEndDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge variant="outline">{focus.recommendedPostCount} posts</Badge>
+                </div>
+                {focus.seasonalTheme && (
+                  <p className="text-sm mt-2 text-muted-foreground">{focus.seasonalTheme}</p>
+                )}
+                {focus.focusImageUrl && (
+                  <div className="mt-3 space-y-2">
+                    <img
+                      src={focus.focusImageUrl}
+                      alt={focus.focusImageCaption || "Focus image"}
+                      className="w-full max-h-32 object-cover rounded-md"
+                    />
+                    {focus.focusImageCaption && (
+                      <p className="text-xs text-muted-foreground">{focus.focusImageCaption}</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MEDIA_CATEGORIES = [
+  { value: "general", label: "General" },
+  { value: "job_photos", label: "Job Photos" },
+  { value: "team", label: "Team Photos" },
+  { value: "promotional", label: "Promotional" },
+  { value: "seasonal", label: "Seasonal" },
+  { value: "before_after", label: "Before/After" },
+  { value: "logo", label: "Logo & Branding" },
+];
+
+function MediaLibrarySection() {
+  const { toast } = useToast();
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [newMedia, setNewMedia] = useState({
+    filename: "",
+    url: "",
+    category: "general",
+    title: "",
+    description: "",
+  });
+
+  const { data: mediaItems = [], isLoading } = useQuery<SeoMediaLibrary[]>({
+    queryKey: ["/api/seo/media-library"],
+  });
+
+  const filteredMedia = categoryFilter === "all" 
+    ? mediaItems 
+    : mediaItems.filter(m => m.category === categoryFilter);
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof newMedia) => {
+      const res = await apiRequest("POST", "/api/seo/media-library", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/media-library"] });
+      setUploadDialogOpen(false);
+      setNewMedia({ filename: "", url: "", category: "general", title: "", description: "" });
+      toast({ title: "Media added", description: "Image has been added to your library." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to add media.", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/seo/media-library/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/media-library"] });
+      toast({ title: "Deleted", description: "Media has been removed from your library." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete media.", variant: "destructive" });
+    },
+  });
+
+  const copyUrlToClipboard = (url: string) => {
+    navigator.clipboard.writeText(url);
+    toast({ title: "URL copied", description: "Image URL copied to clipboard." });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ImageIcon className="w-5 h-5" />
+              Media Library
+            </CardTitle>
+            <CardDescription>
+              Manage your marketing images for social media posts
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-40" data-testid="select-media-category-filter">
+                <SelectValue placeholder="Filter by category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {MEDIA_CATEGORIES.map(cat => (
+                  <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-media">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Image
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Image to Library</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaUrl">Image URL</Label>
+                    <Input
+                      id="mediaUrl"
+                      data-testid="input-media-url"
+                      value={newMedia.url}
+                      onChange={(e) => setNewMedia(prev => ({ ...prev, url: e.target.value }))}
+                      placeholder="https://example.com/image.jpg"
+                    />
+                    <p className="text-xs text-muted-foreground">Enter the URL of an image, or use Object Storage to upload</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaFilename">Filename</Label>
+                    <Input
+                      id="mediaFilename"
+                      data-testid="input-media-filename"
+                      value={newMedia.filename}
+                      onChange={(e) => setNewMedia(prev => ({ ...prev, filename: e.target.value }))}
+                      placeholder="kitchen-project-01.jpg"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaTitle">Title (optional)</Label>
+                    <Input
+                      id="mediaTitle"
+                      data-testid="input-media-title"
+                      value={newMedia.title}
+                      onChange={(e) => setNewMedia(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Beautiful Kitchen Renovation"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaCategory">Category</Label>
+                    <Select 
+                      value={newMedia.category} 
+                      onValueChange={(v) => setNewMedia(prev => ({ ...prev, category: v }))}
+                    >
+                      <SelectTrigger data-testid="select-media-category">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MEDIA_CATEGORIES.map(cat => (
+                          <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mediaDescription">Description (optional)</Label>
+                    <Textarea
+                      id="mediaDescription"
+                      data-testid="input-media-description"
+                      value={newMedia.description}
+                      onChange={(e) => setNewMedia(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Describe this image for AI context..."
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>Cancel</Button>
+                  <Button 
+                    onClick={() => createMutation.mutate(newMedia)}
+                    disabled={createMutation.isPending || !newMedia.url || !newMedia.filename}
+                    data-testid="button-save-media"
+                  >
+                    {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    Add to Library
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {filteredMedia.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+            <ImageIcon className="w-10 h-10 mb-4 opacity-50" />
+            <p>No media items yet</p>
+            <p className="text-sm">Add images to use in your social media posts</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {filteredMedia.map((item) => (
+              <Card key={item.id} className="bg-muted/30 overflow-hidden">
+                <div className="aspect-square relative">
+                  <img 
+                    src={item.url} 
+                    alt={item.title || item.filename}
+                    className="w-full h-full object-cover"
+                  />
+                  {item.isAiGenerated && (
+                    <Badge className="absolute top-2 left-2" variant="secondary">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      AI
+                    </Badge>
+                  )}
+                </div>
+                <CardContent className="p-3">
+                  <p className="text-sm font-medium truncate">{item.title || item.filename}</p>
+                  <Badge variant="outline" className="mt-1 text-xs">
+                    {MEDIA_CATEGORIES.find(c => c.value === item.category)?.label || item.category}
+                  </Badge>
+                  <div className="flex items-center gap-1 mt-2">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => copyUrlToClipboard(item.url)}
+                      data-testid={`button-copy-media-url-${item.id}`}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => window.open(item.url, '_blank')}
+                      data-testid={`button-view-media-${item.id}`}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => deleteMutation.mutate(item.id)}
+                      disabled={deleteMutation.isPending}
+                      data-testid={`button-delete-media-${item.id}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ContentCreatorSection() {
+  const { toast } = useToast();
+  const [platform, setPlatform] = useState("facebook");
+  const [postType, setPostType] = useState("project_showcase");
+  const [service, setService] = useState("Bespoke Carpentry");
+  const [location, setLocation] = useState("Cardiff");
+  const [mediaContext, setMediaContext] = useState("");
+  const [generatedContent, setGeneratedContent] = useState("");
+  const [selectedFocusId, setSelectedFocusId] = useState<string>("");
+
+  const { data: focusList = [] } = useQuery<SeoWeeklyFocus[]>({
+    queryKey: ["/api/seo/weekly-focus"],
+  });
+
+  const selectedFocus = focusList.find(f => f.id === selectedFocusId);
+
+  const handleFocusSelect = (focusId: string) => {
+    if (focusId === "none") {
+      setSelectedFocusId("");
+      return;
+    }
+    setSelectedFocusId(focusId);
+    const focus = focusList.find(f => f.id === focusId);
+    if (focus) {
+      setService(focus.primaryService);
+      setLocation(focus.primaryLocation);
+      if (focus.focusImageCaption) {
+        setMediaContext(focus.focusImageCaption);
+      }
+    }
+  };
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/seo/generate-content", {
+        platform,
+        postType,
+        service,
+        location,
+        mediaContext,
+        imageUrl: selectedFocus?.focusImageUrl || undefined,
+        imageCaption: selectedFocus?.focusImageCaption || undefined,
+      });
+      return res.json() as Promise<{ content: string; usedImage?: boolean; imageUrlUsed?: string }>;
+    },
+    onSuccess: (data: { content: string; usedImage?: boolean; imageUrlUsed?: string }) => {
+      setGeneratedContent(data.content);
+      let description = "AI has created your post content.";
+      if (data.usedImage && data.imageUrlUsed) {
+        description = "AI analyzed your uploaded image and created matching content.";
+      } else if (selectedFocus?.focusImageCaption) {
+        description = "AI used your image description to create relevant content.";
+      }
+      toast({ title: "Content generated", description });
+    },
+    onError: (error: Error) => {
+      // Error message format from apiRequest: "${status}: ${responseBody}"
+      let description = "Failed to generate content. Please try again.";
+      try {
+        const colonIndex = error.message.indexOf(": ");
+        if (colonIndex > 0) {
+          const jsonPart = error.message.slice(colonIndex + 2);
+          const errorData = JSON.parse(jsonPart);
+          if (errorData.message) {
+            description = errorData.message;
+          }
+        }
+      } catch {
+        // Use default message if parsing fails
+      }
+      toast({ title: "Error", description, variant: "destructive" });
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/seo/content-posts", {
+        platform,
+        postType,
+        content: generatedContent,
+        status: "draft",
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/content-posts"] });
+      toast({ title: "Post saved", description: "Your draft has been saved." });
+      setGeneratedContent("");
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save post.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5" />
+            AI Content Generator
+          </CardTitle>
+          <CardDescription>
+            Generate platform-specific content for your posts
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {focusList.length > 0 && (
+            <div className="space-y-2">
+              <Label>Weekly Focus (optional)</Label>
+              <Select value={selectedFocusId || "none"} onValueChange={handleFocusSelect}>
+                <SelectTrigger data-testid="select-weekly-focus">
+                  <SelectValue placeholder="Select a weekly focus to use its settings" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {focusList.map((focus) => (
+                    <SelectItem key={focus.id} value={focus.id}>
+                      <div className="flex items-center gap-2">
+                        {focus.focusImageUrl && <ImageIcon className="w-4 h-4 text-primary" />}
+                        <span>{focus.primaryService} - {focus.primaryLocation}</span>
+                        {focus.status === "active" && <Badge variant="secondary" className="ml-1 text-xs">Active</Badge>}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedFocus?.focusImageUrl && (
+                <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                  <img 
+                    src={selectedFocus.focusImageUrl} 
+                    alt="Focus image" 
+                    className="w-12 h-12 object-cover rounded"
+                  />
+                  <div className="text-sm">
+                    <p className="font-medium flex items-center gap-1">
+                      <ImageIcon className="w-3 h-3" />
+                      AI will use this image
+                    </p>
+                    {selectedFocus.focusImageCaption && (
+                      <p className="text-muted-foreground text-xs">{selectedFocus.focusImageCaption}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Platform</Label>
+            <Select value={platform} onValueChange={setPlatform}>
+              <SelectTrigger data-testid="select-platform">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="google_business">
+                  <div className="flex items-center gap-2">
+                    <SiGoogle className="w-4 h-4" />
+                    Google Business Profile
+                  </div>
+                </SelectItem>
+                <SelectItem value="facebook">
+                  <div className="flex items-center gap-2">
+                    <SiFacebook className="w-4 h-4" />
+                    Facebook
+                  </div>
+                </SelectItem>
+                <SelectItem value="instagram">
+                  <div className="flex items-center gap-2">
+                    <SiInstagram className="w-4 h-4" />
+                    Instagram
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Post Type</Label>
+            <Select value={postType} onValueChange={setPostType}>
+              <SelectTrigger data-testid="select-post-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="project_showcase">Project Showcase</SelectItem>
+                <SelectItem value="before_after">Before & After</SelectItem>
+                <SelectItem value="tip">Tips & Advice</SelectItem>
+                <SelectItem value="testimonial">Customer Testimonial</SelectItem>
+                <SelectItem value="update">Business Update</SelectItem>
+                <SelectItem value="seasonal">Seasonal Promotion</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Service to Highlight</Label>
+            <Select value={service} onValueChange={setService}>
+              <SelectTrigger data-testid="select-service">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Bespoke Carpentry">Bespoke Carpentry</SelectItem>
+                <SelectItem value="Under-Stairs Storage">Under-Stairs Storage</SelectItem>
+                <SelectItem value="Media Walls">Media Walls</SelectItem>
+                <SelectItem value="Fitted Wardrobes">Fitted Wardrobes</SelectItem>
+                <SelectItem value="Kitchens / Joinery">Kitchens / Joinery</SelectItem>
+                <SelectItem value="Bathrooms">Bathrooms</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Location</Label>
+            <Input
+              data-testid="input-location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Cardiff"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Image Context (optional)</Label>
+            <Textarea
+              data-testid="input-media-context"
+              value={mediaContext}
+              onChange={(e) => setMediaContext(e.target.value)}
+              placeholder="Describe the image you'll use, e.g., 'White oak fitted wardrobe with mirrored doors'"
+            />
+          </div>
+
+          <Button
+            onClick={() => generateMutation.mutate()}
+            disabled={generateMutation.isPending}
+            className="w-full"
+            data-testid="button-generate"
+          >
+            {generateMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Sparkles className="w-4 h-4 mr-2" />
+            )}
+            Generate Content
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Generated Content
+          </CardTitle>
+          <CardDescription>
+            Review and edit your AI-generated post
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {generatedContent ? (
+            <>
+              <div className="flex items-center gap-2 mb-2">
+                {platform === "google_business" && <SiGoogle className="w-4 h-4" />}
+                {platform === "facebook" && <SiFacebook className="w-4 h-4" />}
+                {platform === "instagram" && <SiInstagram className="w-4 h-4" />}
+                <span className="text-sm font-medium capitalize">{platform.replace("_", " ")}</span>
+                <Badge variant="outline">{postType.replace("_", " ")}</Badge>
+              </div>
+              <Textarea
+                value={generatedContent}
+                onChange={(e) => setGeneratedContent(e.target.value)}
+                rows={10}
+                className="font-mono text-sm"
+                data-testid="textarea-generated-content"
+              />
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => saveMutation.mutate()}
+                  disabled={saveMutation.isPending}
+                  data-testid="button-save-draft"
+                >
+                  {saveMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Save as Draft
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => generateMutation.mutate()}
+                  disabled={generateMutation.isPending}
+                  data-testid="button-regenerate"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Regenerate
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+              <Sparkles className="w-10 h-10 mb-4" />
+              <p>Generated content will appear here</p>
+              <p className="text-sm">Configure your post and click Generate</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PostsSection() {
+  const { toast } = useToast();
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedPost, setSelectedPost] = useState<SeoContentPost | null>(null);
+
+  const { data: posts = [], isLoading } = useQuery<SeoContentPost[]>({
+    queryKey: ["/api/seo/content-posts"],
+  });
+  
+  // Get profile for social media URLs
+  const { data: profile } = useQuery<SeoBusinessProfile | null>({
+    queryKey: ["/api/seo/business-profile"],
+  });
+  
+  // Get Google Business locations for posting
+  const { data: googleLocations = [] } = useQuery<SeoGoogleBusinessLocation[]>({
+    queryKey: ["/api/seo/google-business-locations"],
+  });
+
+  const filteredPosts = statusFilter === "all" 
+    ? posts 
+    : posts.filter(p => p.status === statusFilter);
+  
+  // Mutation to update post status
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/seo/content-posts/${id}`, { 
+        status,
+        publishedAt: status === "published" ? new Date().toISOString() : undefined
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/content-posts"] });
+      toast({ title: "Post updated", description: "Post status has been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update post.", variant: "destructive" });
+    },
+  });
+  
+  // Get the posting URL for a platform
+  const getPostingUrl = (platform: string, targetLocationId?: string | null) => {
+    switch (platform) {
+      case "facebook":
+        return profile?.facebookUrl || "https://www.facebook.com";
+      case "instagram":
+        return profile?.instagramUrl || "https://www.instagram.com";
+      case "google_business":
+        if (targetLocationId) {
+          const location = googleLocations.find(l => l.id === targetLocationId);
+          if (location) return location.googleBusinessUrl;
+        }
+        // Return default location or first available
+        const defaultLocation = googleLocations.find(l => l.isDefault) || googleLocations[0];
+        return defaultLocation?.googleBusinessUrl || "https://business.google.com";
+      default:
+        return "#";
+    }
+  };
+  
+  // Handle post now action - copies content and opens platform
+  const handlePostNow = (post: SeoContentPost) => {
+    navigator.clipboard.writeText(post.content);
+    const url = getPostingUrl(post.platform, post.targetLocationId);
+    window.open(url, '_blank');
+    toast({ 
+      title: "Content copied!", 
+      description: `Opening ${post.platform.replace("_", " ")} - paste your content there.`
+    });
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "draft": return <Clock className="w-4 h-4" />;
+      case "pending_review": return <Eye className="w-4 h-4" />;
+      case "approved": return <CheckCircle2 className="w-4 h-4" />;
+      case "scheduled": return <Calendar className="w-4 h-4" />;
+      case "published": return <Send className="w-4 h-4" />;
+      case "rejected": return <XCircle className="w-4 h-4" />;
+      default: return null;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "draft": return "secondary";
+      case "pending_review": return "outline";
+      case "approved": return "default";
+      case "scheduled": return "default";
+      case "published": return "default";
+      case "rejected": return "destructive";
+      default: return "secondary";
+    }
+  };
+
+  const getPlatformIcon = (platform: string) => {
+    switch (platform) {
+      case "google_business": return <SiGoogle className="w-4 h-4" />;
+      case "facebook": return <SiFacebook className="w-4 h-4" />;
+      case "instagram": return <SiInstagram className="w-4 h-4" />;
+      default: return null;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Content Posts
+            </CardTitle>
+            <CardDescription>
+              Manage your content queue
+            </CardDescription>
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-40" data-testid="select-status-filter">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Posts</SelectItem>
+              <SelectItem value="draft">Drafts</SelectItem>
+              <SelectItem value="pending_review">Pending Review</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {filteredPosts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+            <FileText className="w-10 h-10 mb-4" />
+            <p>No posts yet</p>
+            <p className="text-sm">Generate content to start building your queue</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredPosts.map((post) => (
+              <Card key={post.id} className="bg-muted/30">
+                <CardContent className="pt-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div 
+                      className="flex-1 min-w-0 cursor-pointer hover-elevate rounded-md p-2 -m-2"
+                      onClick={() => setSelectedPost(post)}
+                      data-testid={`button-view-post-${post.id}`}
+                    >
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        {getPlatformIcon(post.platform)}
+                        <span className="text-sm font-medium capitalize">
+                          {post.platform.replace("_", " ")}
+                        </span>
+                        <Badge variant="outline">{post.postType.replace("_", " ")}</Badge>
+                        <Badge variant={getStatusColor(post.status) as "default" | "secondary" | "destructive" | "outline"} className="flex items-center gap-1">
+                          {getStatusIcon(post.status)}
+                          {post.status.replace("_", " ")}
+                        </Badge>
+                      </div>
+                      <p className="text-sm line-clamp-3">{post.content}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Click to view full content</p>
+                      {post.scheduledFor && (
+                        <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          Scheduled: {new Date(post.scheduledFor).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          navigator.clipboard.writeText(post.content);
+                          toast({ title: "Copied!", description: "Content copied to clipboard" });
+                        }}
+                        data-testid={`button-copy-post-${post.id}`}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                      
+                      {/* Post Now button - opens platform with content copied */}
+                      {post.status !== "published" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handlePostNow(post)}
+                          data-testid={`button-post-now-${post.id}`}
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Post Now
+                        </Button>
+                      )}
+                      
+                      {/* Mark as Published button */}
+                      {post.status !== "published" && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => updateStatusMutation.mutate({ id: post.id, status: "published" })}
+                          disabled={updateStatusMutation.isPending}
+                          data-testid={`button-mark-published-${post.id}`}
+                        >
+                          {updateStatusMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                          )}
+                          Mark Published
+                        </Button>
+                      )}
+                      
+                      {/* Published indicator */}
+                      {post.status === "published" && post.publishedAt && (
+                        <span className="text-xs text-muted-foreground">
+                          Published {new Date(post.publishedAt).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </CardContent>
+      
+      {/* Post Detail Dialog */}
+      <Dialog open={!!selectedPost} onOpenChange={(open) => !open && setSelectedPost(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedPost && getPlatformIcon(selectedPost.platform)}
+              <span className="capitalize">{selectedPost?.platform.replace("_", " ")} Post</span>
+              {selectedPost && (
+                <Badge variant={getStatusColor(selectedPost.status) as "default" | "secondary" | "destructive" | "outline"} className="ml-2">
+                  {selectedPost.status.replace("_", " ")}
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedPost && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="outline">{selectedPost.postType.replace("_", " ")}</Badge>
+                {selectedPost.scheduledFor && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    Scheduled: {new Date(selectedPost.scheduledFor).toLocaleDateString()}
+                  </span>
+                )}
+                {selectedPost.publishedAt && (
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Published: {new Date(selectedPost.publishedAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              
+              <div className="bg-muted/50 p-4 rounded-md">
+                <p className="text-sm whitespace-pre-wrap">{selectedPost.content}</p>
+              </div>
+              
+              {selectedPost.hashtags && (
+                <p className="text-sm text-muted-foreground">{selectedPost.hashtags}</p>
+              )}
+              
+              <DialogFooter className="flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedPost.content);
+                    toast({ title: "Copied!", description: "Content copied to clipboard" });
+                  }}
+                  data-testid="button-dialog-copy"
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy Content
+                </Button>
+                
+                {selectedPost.status !== "published" && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        handlePostNow(selectedPost);
+                        setSelectedPost(null);
+                      }}
+                      data-testid="button-dialog-post-now"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Post Now
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        updateStatusMutation.mutate({ id: selectedPost.id, status: "published" });
+                        setSelectedPost(null);
+                      }}
+                      disabled={updateStatusMutation.isPending}
+                      data-testid="button-dialog-mark-published"
+                    >
+                      {updateStatusMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                      )}
+                      Mark Published
+                    </Button>
+                  </>
+                )}
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+function AutopilotSection() {
+  const { toast } = useToast();
+  const [settings, setSettings] = useState<Partial<SeoAutopilotSettings>>({
+    enabled: false,
+    facebookEnabled: true,
+    facebookPostsPerWeek: 3,
+    facebookPreferredDays: ["monday", "wednesday", "friday"],
+    facebookPreferredTime: "09:00",
+    instagramEnabled: true,
+    instagramPostsPerWeek: 3,
+    instagramPreferredDays: ["tuesday", "thursday", "saturday"],
+    instagramPreferredTime: "18:00",
+    googleEnabled: true,
+    googlePostsPerWeek: 2,
+    googlePreferredDays: ["monday", "thursday"],
+    googlePreferredTime: "12:00",
+    projectShowcaseWeight: 40,
+    beforeAfterWeight: 20,
+    tipsWeight: 15,
+    testimonialWeight: 15,
+    seasonalWeight: 10,
+    autoGenerateAhead: 7,
+    requireApproval: true,
+    useWeeklyFocusImages: true,
+  });
+
+  const { data: existingSettings, isLoading: isLoadingSettings } = useQuery<SeoAutopilotSettings | null>({
+    queryKey: ["/api/seo/autopilot/settings"],
+  });
+
+  const { data: slots = [], isLoading: isLoadingSlots } = useQuery<SeoAutopilotSlot[]>({
+    queryKey: ["/api/seo/autopilot/slots"],
+  });
+
+  const { data: posts = [] } = useQuery<SeoContentPost[]>({
+    queryKey: ["/api/seo/content-posts"],
+  });
+
+  useEffect(() => {
+    if (existingSettings) {
+      setSettings(existingSettings);
+    }
+  }, [existingSettings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/seo/autopilot/settings", settings);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/autopilot/settings"] });
+      toast({ title: "Settings saved", description: "Autopilot settings have been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
+    },
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/seo/autopilot/generate", {});
+      return res.json();
+    },
+    onSuccess: (data: { slotsCreated: number; postsCreated: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/autopilot/slots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/content-posts"] });
+      toast({ 
+        title: "Content generated", 
+        description: `Created ${data.slotsCreated} scheduled slots and ${data.postsCreated} posts.`
+      });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Autopilot must be enabled first.", variant: "destructive" });
+    },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async (slotId: string) => {
+      const res = await apiRequest("POST", `/api/seo/autopilot/slots/${slotId}/approve`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/autopilot/slots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/content-posts"] });
+      toast({ title: "Approved", description: "Post has been approved for publishing." });
+    },
+  });
+
+  const markPostedMutation = useMutation({
+    mutationFn: async (slotId: string) => {
+      const res = await apiRequest("POST", `/api/seo/autopilot/slots/${slotId}/mark-posted`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/autopilot/slots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/seo/content-posts"] });
+      toast({ title: "Posted", description: "Slot marked as posted." });
+    },
+  });
+
+  const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+  const toggleDay = (platform: "facebook" | "instagram" | "google", day: string) => {
+    const key = `${platform}PreferredDays` as keyof SeoAutopilotSettings;
+    const currentDays = (settings[key] as string[]) || [];
+    if (currentDays.includes(day)) {
+      setSettings({ ...settings, [key]: currentDays.filter((d: string) => d !== day) });
+    } else {
+      setSettings({ ...settings, [key]: [...currentDays, day] });
+    }
+  };
+
+  const pendingSlots = slots.filter(s => s.status === "pending" || s.status === "generated");
+  const approvedSlots = slots.filter(s => s.status === "approved");
+  const postedSlots = slots.filter(s => s.status === "posted");
+
+  const getPostForSlot = (slot: SeoAutopilotSlot) => {
+    return posts.find(p => p.id === slot.contentPostId);
+  };
+
+  const getPlatformIcon = (platform: string) => {
+    switch (platform) {
+      case "facebook": return <SiFacebook className="w-4 h-4 text-blue-600" />;
+      case "instagram": return <SiInstagram className="w-4 h-4 text-pink-500" />;
+      case "google_business": return <SiGoogle className="w-4 h-4 text-red-500" />;
+      default: return null;
+    }
+  };
+
+  if (isLoadingSettings) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="w-5 h-5" />
+                Autopilot Mode
+              </CardTitle>
+              <CardDescription>
+                Let AI automatically create and schedule content for you
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="autopilot-toggle">Enable Autopilot</Label>
+                <Switch
+                  id="autopilot-toggle"
+                  checked={settings.enabled || false}
+                  onCheckedChange={(checked) => setSettings({ ...settings, enabled: checked })}
+                  data-testid="switch-autopilot-enable"
+                />
+              </div>
+              <Button 
+                onClick={() => saveMutation.mutate()} 
+                disabled={saveMutation.isPending}
+                data-testid="button-save-autopilot"
+              >
+                {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                Save Settings
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-3">
+            <Card className={`border-2 ${settings.facebookEnabled ? "border-blue-500" : "border-muted"}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <SiFacebook className="w-5 h-5 text-blue-600" />
+                    <CardTitle className="text-base">Facebook</CardTitle>
+                  </div>
+                  <Switch
+                    checked={settings.facebookEnabled || false}
+                    onCheckedChange={(checked) => setSettings({ ...settings, facebookEnabled: checked })}
+                    data-testid="switch-facebook-enable"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="text-sm">Posts per week: {settings.facebookPostsPerWeek}</Label>
+                  <Slider
+                    value={[settings.facebookPostsPerWeek || 3]}
+                    onValueChange={([val]) => setSettings({ ...settings, facebookPostsPerWeek: val })}
+                    min={1}
+                    max={7}
+                    step={1}
+                    className="mt-2"
+                    data-testid="slider-facebook-posts"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Posting Days</Label>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {days.map(day => (
+                      <Badge
+                        key={day}
+                        variant={(settings.facebookPreferredDays || []).includes(day) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleDay("facebook", day)}
+                        data-testid={`badge-facebook-day-${day}`}
+                      >
+                        {day.slice(0, 3)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm">Post Time</Label>
+                  <Input
+                    type="time"
+                    value={settings.facebookPreferredTime || "09:00"}
+                    onChange={(e) => setSettings({ ...settings, facebookPreferredTime: e.target.value })}
+                    className="mt-1"
+                    data-testid="input-facebook-time"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={`border-2 ${settings.instagramEnabled ? "border-pink-500" : "border-muted"}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <SiInstagram className="w-5 h-5 text-pink-500" />
+                    <CardTitle className="text-base">Instagram</CardTitle>
+                  </div>
+                  <Switch
+                    checked={settings.instagramEnabled || false}
+                    onCheckedChange={(checked) => setSettings({ ...settings, instagramEnabled: checked })}
+                    data-testid="switch-instagram-enable"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="text-sm">Posts per week: {settings.instagramPostsPerWeek}</Label>
+                  <Slider
+                    value={[settings.instagramPostsPerWeek || 3]}
+                    onValueChange={([val]) => setSettings({ ...settings, instagramPostsPerWeek: val })}
+                    min={1}
+                    max={7}
+                    step={1}
+                    className="mt-2"
+                    data-testid="slider-instagram-posts"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Posting Days</Label>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {days.map(day => (
+                      <Badge
+                        key={day}
+                        variant={(settings.instagramPreferredDays || []).includes(day) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleDay("instagram", day)}
+                        data-testid={`badge-instagram-day-${day}`}
+                      >
+                        {day.slice(0, 3)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm">Post Time</Label>
+                  <Input
+                    type="time"
+                    value={settings.instagramPreferredTime || "18:00"}
+                    onChange={(e) => setSettings({ ...settings, instagramPreferredTime: e.target.value })}
+                    className="mt-1"
+                    data-testid="input-instagram-time"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={`border-2 ${settings.googleEnabled ? "border-red-500" : "border-muted"}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <SiGoogle className="w-5 h-5 text-red-500" />
+                    <CardTitle className="text-base">Google Business</CardTitle>
+                  </div>
+                  <Switch
+                    checked={settings.googleEnabled || false}
+                    onCheckedChange={(checked) => setSettings({ ...settings, googleEnabled: checked })}
+                    data-testid="switch-google-enable"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="text-sm">Posts per week: {settings.googlePostsPerWeek}</Label>
+                  <Slider
+                    value={[settings.googlePostsPerWeek || 2]}
+                    onValueChange={([val]) => setSettings({ ...settings, googlePostsPerWeek: val })}
+                    min={1}
+                    max={7}
+                    step={1}
+                    className="mt-2"
+                    data-testid="slider-google-posts"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Posting Days</Label>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {days.map(day => (
+                      <Badge
+                        key={day}
+                        variant={(settings.googlePreferredDays || []).includes(day) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleDay("google", day)}
+                        data-testid={`badge-google-day-${day}`}
+                      >
+                        {day.slice(0, 3)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm">Post Time</Label>
+                  <Input
+                    type="time"
+                    value={settings.googlePreferredTime || "12:00"}
+                    onChange={(e) => setSettings({ ...settings, googlePreferredTime: e.target.value })}
+                    className="mt-1"
+                    data-testid="input-google-time"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Separator />
+
+          <div>
+            <h3 className="font-semibold mb-4">Content Mix</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Adjust how often each type of content should appear (percentages should total 100%)
+            </p>
+            <div className="grid gap-4 md:grid-cols-5">
+              {[
+                { key: "projectShowcaseWeight", label: "Project Showcase" },
+                { key: "beforeAfterWeight", label: "Before & After" },
+                { key: "tipsWeight", label: "Tips & Advice" },
+                { key: "testimonialWeight", label: "Testimonials" },
+                { key: "seasonalWeight", label: "Seasonal" },
+              ].map(({ key, label }) => (
+                <div key={key}>
+                  <Label className="text-sm">{label}: {settings[key as keyof SeoAutopilotSettings] as number}%</Label>
+                  <Slider
+                    value={[(settings[key as keyof SeoAutopilotSettings] as number) || 20]}
+                    onValueChange={([val]) => setSettings({ ...settings, [key]: val })}
+                    min={0}
+                    max={100}
+                    step={5}
+                    className="mt-2"
+                    data-testid={`slider-${key}`}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="require-approval"
+                  checked={settings.requireApproval || false}
+                  onCheckedChange={(checked) => setSettings({ ...settings, requireApproval: checked as boolean })}
+                  data-testid="checkbox-require-approval"
+                />
+                <Label htmlFor="require-approval">Require approval before posting</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="use-images"
+                  checked={settings.useWeeklyFocusImages || false}
+                  onCheckedChange={(checked) => setSettings({ ...settings, useWeeklyFocusImages: checked as boolean })}
+                  data-testid="checkbox-use-images"
+                />
+                <Label htmlFor="use-images">Use weekly focus images when available</Label>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label>Generate ahead:</Label>
+              <Select 
+                value={String(settings.autoGenerateAhead || 7)} 
+                onValueChange={(val) => setSettings({ ...settings, autoGenerateAhead: parseInt(val) })}
+              >
+                <SelectTrigger className="w-32" data-testid="select-generate-ahead">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 days</SelectItem>
+                  <SelectItem value="7">7 days</SelectItem>
+                  <SelectItem value="14">14 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="w-5 h-5" />
+                Scheduled Content Queue
+              </CardTitle>
+              <CardDescription>
+                {pendingSlots.length} pending approval, {approvedSlots.length} ready to post, {postedSlots.length} posted
+              </CardDescription>
+            </div>
+            <Button 
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending || !settings.enabled}
+              data-testid="button-generate-content"
+            >
+              {generateMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Play className="w-4 h-4 mr-2" />
+              )}
+              Generate Content
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoadingSlots ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : slots.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+              <CalendarDays className="w-10 h-10 mb-4" />
+              <p>No scheduled content yet</p>
+              <p className="text-sm">Enable autopilot and click Generate Content to start</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {slots.slice(0, 10).map((slot) => {
+                const post = getPostForSlot(slot);
+                return (
+                  <Card key={slot.id} className="bg-muted/30">
+                    <CardContent className="pt-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            {getPlatformIcon(slot.platform)}
+                            <span className="text-sm font-medium capitalize">
+                              {slot.platform.replace("_", " ")}
+                            </span>
+                            <Badge variant="outline">{slot.contentType.replace("_", " ")}</Badge>
+                            <Badge 
+                              variant={
+                                slot.status === "approved" ? "default" : 
+                                slot.status === "posted" ? "secondary" : 
+                                "outline"
+                              }
+                            >
+                              {slot.status}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(slot.scheduledFor).toLocaleDateString()} at {new Date(slot.scheduledFor).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          {post && (
+                            <p className="text-sm line-clamp-2">{post.content}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {post && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                navigator.clipboard.writeText(post.content);
+                                toast({ title: "Copied!", description: "Content copied to clipboard" });
+                              }}
+                              data-testid={`button-copy-slot-${slot.id}`}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {(slot.status === "pending" || slot.status === "generated") && (
+                            <Button
+                              size="sm"
+                              onClick={() => approveMutation.mutate(slot.id)}
+                              disabled={approveMutation.isPending}
+                              data-testid={`button-approve-${slot.id}`}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Approve
+                            </Button>
+                          )}
+                          {slot.status === "approved" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => markPostedMutation.mutate(slot.id)}
+                              disabled={markPostedMutation.isPending}
+                              data-testid={`button-mark-posted-${slot.id}`}
+                            >
+                              <Send className="w-4 h-4 mr-1" />
+                              Mark Posted
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              {slots.length > 10 && (
+                <p className="text-sm text-muted-foreground text-center">
+                  Showing 10 of {slots.length} scheduled items
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
