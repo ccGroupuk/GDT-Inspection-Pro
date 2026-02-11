@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Fan, Box, DoorOpen, SlidersHorizontal, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Plus, Fan, Box, DoorOpen, SlidersHorizontal, AlertCircle, CheckCircle2, Copy } from "lucide-react";
 import {
     Sheet,
     SheetContent,
@@ -62,6 +62,23 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
         setNewItemPhotos([...item.photos]);
         setIsSheetOpen(true);
         setErrors({});
+    };
+
+    const handleDuplicateItem = (e: React.MouseEvent, item: InspectionItem) => {
+        e.stopPropagation(); // Prevent opening edit modal
+
+        // Deep copy data to avoid reference issues
+        const duplicatedData = JSON.parse(JSON.stringify(item.data));
+
+        // Create new item based on existing one
+        setSelectedType(item.type);
+        setEditingItemId(null); // New ID will be generated on save
+        setNewItemData(duplicatedData);
+        setNewItemPhotos([]); // Reset photos
+        setErrors({});
+
+        // Open sheet immediately for review/editing of the new clone
+        setIsSheetOpen(true);
     };
 
     const validateItem = (template: ItemTemplate, data: Record<string, any>) => {
@@ -167,6 +184,15 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-muted-foreground hover:text-primary z-10"
+                                            onClick={(e) => handleDuplicateItem(e, item)}
+                                            title="Duplicate Item"
+                                        >
+                                            <Copy className="h-4 w-4" />
+                                        </Button>
                                         {item.photos.length > 0 && (
                                             <span className="text-xs bg-secondary px-2 py-1 rounded-full text-secondary-foreground">
                                                 {item.photos.length} 📷

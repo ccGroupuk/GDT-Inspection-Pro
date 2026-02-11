@@ -71,6 +71,8 @@ var db = process.env.DATABASE_URL ? drizzle(pool, { schema: schema_exports }) : 
 import { eq } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import createMemoryStore from "memorystore";
+import fs from "fs/promises";
+import path from "path";
 var PostgresSessionStore = connectPg(session);
 var MemoryStore = createMemoryStore(session);
 var DatabaseStorage = class {
@@ -109,12 +111,14 @@ var DatabaseStorage = class {
     return updated;
   }
 };
-var MemStorage = class {
+var FileStorage = class {
   engineers;
   inspections;
   currentId;
   currentInspectionId;
   sessionStore;
+  dataDir;
+  dataFile;
   constructor() {
     this.engineers = /* @__PURE__ */ new Map();
     this.inspections = /* @__PURE__ */ new Map();
@@ -123,6 +127,50 @@ var MemStorage = class {
     this.sessionStore = new MemoryStore({
       checkPeriod: 864e5
     });
+    this.dataDir = path.join(process.cwd(), "data");
+    this.dataFile = path.join(this.dataDir, "db.json");
+    this.init();
+  }
+  async init() {
+    try {
+      await fs.mkdir(this.dataDir, { recursive: true });
+      try {
+        const data = await fs.readFile(this.dataFile, "utf-8");
+        const json = JSON.parse(data);
+        if (json.engineers) {
+          this.engineers = new Map(json.engineers);
+          this.currentId = Math.max(0, ...Array.from(this.engineers.keys())) + 1;
+        }
+        if (json.inspections) {
+          this.inspections = new Map(json.inspections);
+          for (const [id, inspection] of this.inspections) {
+            if (inspection.createdAt) inspection.createdAt = new Date(inspection.createdAt);
+            if (inspection.date) inspection.date = new Date(inspection.date);
+          }
+          this.currentInspectionId = Math.max(0, ...Array.from(this.inspections.keys())) + 1;
+        }
+        console.log(`[Storage] Hydrated from ${this.dataFile}. ${this.inspections.size} inspections loaded.`);
+      } catch (e) {
+        if (e.code !== "ENOENT") {
+          console.error("[Storage] Failed to load data", e);
+        } else {
+          console.log("[Storage] No existing data file found, starting fresh.");
+        }
+      }
+    } catch (e) {
+      console.error("[Storage] Failed to init", e);
+    }
+  }
+  async persist() {
+    try {
+      const data = {
+        engineers: Array.from(this.engineers.entries()),
+        inspections: Array.from(this.inspections.entries())
+      };
+      await fs.writeFile(this.dataFile, JSON.stringify(data, null, 2));
+    } catch (e) {
+      console.error("[Storage] Failed to persist data", e);
+    }
   }
   async getEngineer(id) {
     return this.engineers.get(id);
@@ -141,6 +189,7 @@ var MemStorage = class {
       createdAt: /* @__PURE__ */ new Date()
     };
     this.engineers.set(id, engineer);
+    await this.persist();
     return engineer;
   }
   async createInspection(insertInspection) {
@@ -151,9 +200,12 @@ var MemStorage = class {
       createdAt: /* @__PURE__ */ new Date(),
       date: insertInspection.date ? new Date(insertInspection.date) : /* @__PURE__ */ new Date(),
       status: insertInspection.status ?? "pending",
-      data: insertInspection.data ?? null
+      data: insertInspection.data ?? null,
+      engineerId: insertInspection.engineerId ?? 1
+      // Hack: Default to 1 if missing in partial
     };
     this.inspections.set(id, inspection);
+    await this.persist();
     return inspection;
   }
   async getInspection(id) {
@@ -169,10 +221,11 @@ var MemStorage = class {
     if (!existing) return void 0;
     const updated = { ...existing, ...inspection };
     this.inspections.set(id, updated);
+    await this.persist();
     return updated;
   }
 };
-var storage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
+var storage = process.env.DATABASE_URL ? new DatabaseStorage() : new FileStorage();
 
 // server/auth.ts
 var scryptAsync = promisify(scrypt);
@@ -287,21 +340,38 @@ async function registerRoutes(app2) {
     const updated = await storage.updateInspection(id, req.body);
     res.json(updated);
   });
+  app2.post("/api/backup-inspection", async (req, res) => {
+    try {
+      const data = req.body;
+      if (!data || !data.id) return res.status(400).send("Missing data or ID");
+      const fs3 = await import("fs/promises");
+      const path4 = await import("path");
+      const dataDir = path4.join(process.cwd(), "data", "backups");
+      await fs3.mkdir(dataDir, { recursive: true });
+      const filename = path4.join(dataDir, `inspection_${data.id}.json`);
+      await fs3.writeFile(filename, JSON.stringify(data, null, 2));
+      console.log(`[Backup] Saved inspection ${data.id} to ${filename}`);
+      res.json({ success: true, path: filename });
+    } catch (e) {
+      console.error("[Backup] Failed to save", e);
+      res.status(500).json({ error: String(e) });
+    }
+  });
   const httpServer = createServer(app2);
   return httpServer;
 }
 
 // server/vite.ts
 import express from "express";
-import fs from "fs";
-import path2, { dirname as dirname2 } from "path";
+import fs2 from "fs";
+import path3, { dirname as dirname2 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 import { createServer as createViteServer, createLogger } from "vite";
 
-// vite.config.ts
+// client/vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path, { dirname } from "path";
+import path2, { dirname } from "path";
 import { fileURLToPath } from "url";
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = dirname(__filename);
@@ -309,13 +379,13 @@ var vite_config_default = defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "client", "src"),
-      "@shared": path.resolve(__dirname, "shared")
+      "@": path2.resolve(__dirname, "src"),
+      "@shared": path2.resolve(__dirname, "../shared")
     }
   },
-  root: path.resolve(__dirname, "client"),
+  root: __dirname,
   build: {
-    outDir: path.resolve(__dirname, "dist/public"),
+    outDir: path2.resolve(__dirname, "../dist/public"),
     emptyOutDir: true
   },
   server: {
@@ -370,13 +440,13 @@ async function setupVite(app2, server) {
   app2.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      const clientTemplate = path2.resolve(
+      const clientTemplate = path3.resolve(
         __dirname2,
         "..",
         "client",
         "index.html"
       );
-      let template = fs.readFileSync(clientTemplate, "utf-8");
+      let template = fs2.readFileSync(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
         `src="/src/main.tsx"`
@@ -390,15 +460,15 @@ async function setupVite(app2, server) {
   });
 }
 function serveStatic(app2) {
-  const distPath = path2.resolve(__dirname2, "public");
-  if (!fs.existsSync(distPath)) {
+  const distPath = path3.resolve(__dirname2, "public");
+  if (!fs2.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
   app2.use(express.static(distPath));
   app2.use("*", (_req, res) => {
-    res.sendFile(path2.resolve(distPath, "index.html"));
+    res.sendFile(path3.resolve(distPath, "index.html"));
   });
 }
 
@@ -408,7 +478,7 @@ app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   const start = Date.now();
-  const path3 = req.path;
+  const path4 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -417,8 +487,8 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path3.startsWith("/api")) {
-      let logLine = `${req.method} ${path3} ${res.statusCode} in ${duration}ms`;
+    if (path4.startsWith("/api")) {
+      let logLine = `${req.method} ${path4} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
@@ -443,7 +513,7 @@ app.use((req, res, next) => {
   } else {
     serveStatic(app);
   }
-  const PORT = 5004;
+  const PORT = Number(process.env.PORT) || 5004;
   server.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);
   });
