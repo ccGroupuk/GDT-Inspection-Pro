@@ -4,13 +4,15 @@ import { getInspections, saveInspection } from "@/lib/local-storage";
 import { useAuth } from "./use-auth";
 import { useToast } from "@/hooks/use-toast";
 
+export type InspectionWithSync = Inspection & { isSynced?: boolean };
+
 export function useInspections() {
     const { user } = useAuth();
     const queryClient = useQueryClient();
     const { toast } = useToast();
 
     // Fetch Inspections (List)
-    const { data: inspections = [], isLoading } = useQuery<Inspection[]>({
+    const { data: inspections = [], isLoading } = useQuery<InspectionWithSync[]>({
         queryKey: ["inspections", user?.id],
         queryFn: async () => {
             if (!user || (user as any).isGuest) {
@@ -24,7 +26,8 @@ export function useInspections() {
                     date: new Date(i.timestamp), // Map timestamp to date
                     engineerId: 0,
                     clientName: i.title.split(' - ')[0] || "Unknown Client", // Heuristic
-                })) as unknown as Inspection[];
+                    isSynced: i.isSynced,
+                })) as unknown as InspectionWithSync[];
             }
 
             const res = await fetch("/api/inspections");

@@ -57,10 +57,10 @@ export const ITEM_TEMPLATES: Record<string, ItemTemplate> = {
         icon: 'Fan',
         fields: [
             { name: "location", label: "Location/ID", type: "text", required: true },
-            { name: "belt_condition", label: "Belt Condition", type: "select", options: ["Good", "Worn", "Cracked", "Loose"] },
-            { name: "motor_amps", label: "Motor Amps", type: "number" },
-            { name: "bearings", label: "Bearings/Noise", type: "checkbox" },
-            { name: "cleanliness", label: "Impeller Cleanliness", type: "select", options: ["Clean", "Dusty", "Dirty", "Clogged"] },
+            { name: "belt_condition", label: "Belt Condition", type: "select", options: ["Good", "Worn", "Cracked", "Loose"], required: true },
+            { name: "motor_amps", label: "Motor Amps", type: "number", required: true },
+            { name: "bearings", label: "Bearings/Noise", type: "checkbox" }, // Checkbox always has value
+            { name: "cleanliness", label: "Impeller Cleanliness", type: "select", options: ["Clean", "Dusty", "Dirty", "Clogged"], required: true },
         ]
     },
     hatch: {
@@ -80,7 +80,7 @@ export const ITEM_TEMPLATES: Record<string, ItemTemplate> = {
         icon: 'Box',
         fields: [
             { name: "location", label: "Area/Zone", type: "text", required: true },
-            { name: "cleanliness", label: "Internal Cleanliness", type: "select", options: ["Clean", "Light Dust", "Heavy Dust", "Debris"] },
+            { name: "cleanliness", label: "Internal Cleanliness", type: "select", options: ["Clean", "Light Dust", "Heavy Dust", "Debris"], required: true },
             { name: "damage", label: "Physical Damage", type: "checkbox" },
             { name: "leaks", label: "Air Leaks Detected", type: "checkbox" },
         ]
@@ -107,8 +107,8 @@ export const ITEM_TEMPLATES: Record<string, ItemTemplate> = {
         fields: [
             { name: "item_name", label: "Item Name / Type", type: "text", placeholder: "e.g. EC Unit, Pump, Etc.", required: true },
             { name: "location", label: "Location", type: "text", required: true },
-            { name: "condition", label: "Condition", type: "select", options: ["Good", "Average", "Poor", "Damaged"] },
-            { name: "notes", label: "Inspection Notes", type: "text" }, // FormStep handles text as Input, maybe need Textarea if long? we added Textarea support
+            { name: "condition", label: "Condition", type: "select", options: ["Good", "Average", "Poor", "Damaged"], required: true },
+            { name: "notes", label: "Inspection Notes", type: "text" }, // Notes can be optional
             { name: "action_required", label: "Action Required?", type: "checkbox" }
         ]
     }

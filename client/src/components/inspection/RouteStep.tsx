@@ -45,11 +45,14 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
         allTemplates[t.type] = t;
     });
 
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
     const handleAddItemStart = (type: InspectionItemType) => {
         setSelectedType(type);
         setEditingItemId(null);
         setNewItemData({});
         setNewItemPhotos([]);
+        setErrors({});
     };
 
     const handleEditItem = (item: InspectionItem) => {
@@ -58,12 +61,40 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
         setNewItemData({ ...item.data });
         setNewItemPhotos([...item.photos]);
         setIsSheetOpen(true);
+        setErrors({});
+    };
+
+    const validateItem = (template: ItemTemplate, data: Record<string, any>) => {
+        const newErrors: Record<string, string> = {};
+        let isValid = true;
+
+        template.fields.forEach(field => {
+            if (field.required) {
+                const value = data[field.name];
+                // Check if empty string, null, or undefined.
+                // Note: 0 is valid for numbers, false is valid for checkboxes (but checkboxes usually don't have 'required' unless they MUST be checked, which is rare for 'is broken?')
+                // For select/text, usually empty string is invalid.
+                if (value === undefined || value === null || value === "") {
+                    newErrors[field.name] = "This field is required";
+                    isValid = false;
+                }
+            }
+        });
+
+        setErrors(newErrors);
+        return isValid;
     };
 
     const handleSaveItem = () => {
         if (!selectedType) return;
 
         const template = allTemplates[selectedType];
+
+        // Validate
+        if (!validateItem(template, newItemData)) {
+            // Toast or just show inline errors? Inline errors are set in validateItem
+            return;
+        }
 
         if (editingItemId) {
             // Update existing item
@@ -210,8 +241,14 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
                                     <FormStep
                                         fields={allTemplates[selectedType].fields}
                                         values={newItemData}
-                                        onChange={(name, val) => setNewItemData(prev => ({ ...prev, [name]: val }))}
-                                        errors={{}}
+                                        onChange={(name, val) => {
+                                            setNewItemData(prev => ({ ...prev, [name]: val }));
+                                            // Clear error on change
+                                            if (errors[name]) {
+                                                setErrors(prev => ({ ...prev, [name]: '' }));
+                                            }
+                                        }}
+                                        errors={errors}
                                     />
                                 </section>
 
