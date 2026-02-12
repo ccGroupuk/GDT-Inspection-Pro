@@ -31,6 +31,7 @@ export default function ReportView() {
     const params = useParams();
     const [inspection, setInspection] = useState<SavedInspection | null>(null);
     const [badges, setBadges] = useState<string[]>([]);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [bannerUrl, setBannerUrl] = useState<string | null>(null);
     const { toast } = useToast();
 
@@ -55,7 +56,8 @@ export default function ReportView() {
             }
 
             const settings = getSettings();
-            if (settings.trustBadges) setBadges(settings.trustBadges);
+            if (settings.trustBadges && settings.trustBadges.length > 0) setBadges(settings.trustBadges);
+            if (settings.logoUrl) setLogoUrl(settings.logoUrl);
             if (settings.bannerUrl) setBannerUrl(settings.bannerUrl);
         }
     }, [params.id]);
@@ -184,13 +186,11 @@ export default function ReportView() {
 
                     {/* Banner Image Placeholder */}
                     <div className="absolute inset-0 bg-gradient-to-r from-slate-900 to-slate-700 opacity-90">
-                        {(customBanner || bannerUrl) ? (
-                            <img src={customBanner || bannerUrl || ""} alt="Banner" className="w-full h-full object-cover opacity-60" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-white/20 text-4xl font-bold uppercase tracking-widest">
-                                Banner Image
-                            </div>
-                        )}
+                        <img
+                            src={customBanner || bannerUrl || "/assets/banner.jpg"}
+                            alt="Banner"
+                            className="w-full h-full object-cover opacity-60"
+                        />
                     </div>
 
                     {/* Edit Overlay Button */}
@@ -202,11 +202,18 @@ export default function ReportView() {
                         <Upload className="w-5 h-5" />
                     </label>
 
-                    {/* Large GDT Logo Overlay */}
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 text-center">
-                        <div className="bg-white/10 backdrop-blur-md p-8 rounded-2xl border border-white/20 shadow-2xl">
-                            <h1 className="text-7xl font-black tracking-tighter mb-2 text-white drop-shadow-md">GDT</h1>
-                            <p className="text-2xl font-light tracking-[0.5em] uppercase text-white drop-shadow-md">Envirocare</p>
+                    {/* Large GDT Logo Overlay (Global Setting or Default) */}
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 text-center w-full max-w-2xl px-4">
+                        <div className="bg-white/10 backdrop-blur-xl p-10 rounded-3xl border border-white/30 shadow-[0_20px_50px_rgba(0,0,0,0.5)] bg-gradient-to-b from-white/10 to-transparent">
+                            {logoUrl ? (
+                                <img src={logoUrl} alt="Company Logo" className="max-h-40 mx-auto object-contain drop-shadow-2xl filter brightness-110" />
+                            ) : (
+                                <div className="flex flex-col items-center">
+                                    <h1 className="text-8xl font-black tracking-tighter mb-4 text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">GDT</h1>
+                                    <div className="h-1 w-32 bg-gradient-to-r from-transparent via-white/50 to-transparent mb-4"></div>
+                                    <p className="text-3xl font-light tracking-[0.6em] uppercase text-white drop-shadow-md">Envirocare</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -299,13 +306,21 @@ export default function ReportView() {
                         </div>
 
                         {/* Accreditation Logos Row */}
-                        <div className="flex justify-center items-center gap-6 opacity-80 hover:opacity-100 transition-opacity">
-                            {/* Placeholders - Replace src with actual layout */}
-                            {['CHAS', 'NAADUK', 'Constructionline', 'CSCS', 'IPAF'].map(logo => (
-                                <div key={logo} className="h-10 w-24 bg-gray-50 border border-gray-200 flex items-center justify-center rounded">
-                                    <span className="text-[10px] font-bold text-gray-400">{logo}</span>
-                                </div>
-                            ))}
+                        {/* Accreditation Logos Row */}
+                        <div className="flex justify-center items-center gap-6 opacity-80 hover:opacity-100 transition-opacity flex-wrap px-4">
+                            {badges && badges.length > 0 ? (
+                                badges.map((badge, idx) => (
+                                    <img key={idx} src={badge} alt="Accreditation" className="h-10 object-contain grayscale hover:grayscale-0 transition-all" />
+                                ))
+                            ) : (
+                                <>
+                                    <img src="/assets/chas.png" alt="CHAS" className="h-10 object-contain grayscale hover:grayscale-0 transition-all" />
+                                    <img src="/assets/naaduk.jpg" alt="NAADUK" className="h-10 object-contain mix-blend-multiply grayscale hover:grayscale-0 transition-all" />
+                                    <img src="/assets/constructionline.png" alt="Constructionline" className="h-10 object-contain grayscale hover:grayscale-0 transition-all" />
+                                    <img src="/assets/cscs.png" alt="CSCS" className="h-10 object-contain grayscale hover:grayscale-0 transition-all" />
+                                    <img src="/assets/ipaf.png" alt="IPAF" className="h-10 object-contain grayscale hover:grayscale-0 transition-all" />
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
