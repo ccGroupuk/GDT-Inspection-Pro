@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Plus, Fan, Box, DoorOpen, SlidersHorizontal, AlertCircle, CheckCircle2, Copy } from "lucide-react";
 import {
@@ -29,6 +30,7 @@ interface RouteStepProps {
 }
 
 export function RouteStep({ items, onItemsChange }: RouteStepProps) {
+    const { toast } = useToast();
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [selectedType, setSelectedType] = useState<InspectionItemType | null>(null);
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -110,6 +112,16 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
         // Validate
         if (!validateItem(template, newItemData)) {
             // Toast or just show inline errors? Inline errors are set in validateItem
+            return;
+        }
+
+        // Mandatory Photos Logic
+        if (newItemPhotos.length === 0) {
+            toast({
+                variant: "destructive",
+                title: "Evidence Required",
+                description: "You must attach at least one photo before saving.",
+            });
             return;
         }
 
@@ -268,7 +280,54 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
                                         fields={allTemplates[selectedType].fields}
                                         values={newItemData}
                                         onChange={(name, val) => {
-                                            setNewItemData(prev => ({ ...prev, [name]: val }));
+                                            setNewItemData(prev => {
+                                                const newData = { ...prev, [name]: val };
+
+                                                // Auto-Calculation for Fire Doors
+                                                if (selectedType === 'fire_door') {
+                                                    let autoFail = false;
+                                                    let failreason = "";
+
+                                                    // Check Gaps > 4mm (Hinge, Top, Leading)
+                                                    const gapHingeTop = Number(newData['gap_hinge_top']);
+                                                    const gapTop = Number(newData['gap_top']);
+                                                    const gapLeading = Number(newData['gap_leading']);
+
+                                                    if (gapHingeTop > 4 || gapTop > 4 || gapLeading > 4) {
+                                                        autoFail = true;
+                                                        failreason = "Excessive Gaps (>4mm)";
+                                                    }
+
+                                                    // Check "Select" fields for negative answers
+                                                    // Logic: If any critical field is "No" (where Yes is expected) or "Fail"
+                                                    // Adjust based on specific field logic. 
+                                                    // E.g., 'certification_visible': "No" -> FAIL? Maybe.
+                                                    // 'closer_op': "No - Fails to close" -> FAIL
+                                                    if (newData['closer_op'] === 'No - Fails to close' || newData['closer_op'] === 'No - slams') {
+                                                        autoFail = true;
+                                                        failreason = "Door Closer Fault";
+                                                    }
+                                                    if (newData['latch_op'] === 'No') {
+                                                        autoFail = true;
+                                                        failreason = "Latch Fault";
+                                                    }
+                                                    if (newData['frame_fixed'] === 'No') {
+                                                        autoFail = true;
+                                                        failreason = "Frame Not Secure";
+                                                    }
+
+
+                                                    // Lock Compliant Status
+                                                    if (autoFail) {
+                                                        newData['compliant'] = 'No (Fail)';
+                                                        // Optionally set remedial suggestion if empty
+                                                        if (!newData['remedials']) newData['remedials'] = `Auto-Fail: ${failreason}`;
+                                                    }
+                                                }
+
+                                                return newData;
+                                            });
+
                                             // Clear error on change
                                             if (errors[name]) {
                                                 setErrors(prev => ({ ...prev, [name]: '' }));

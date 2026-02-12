@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+android
+ios
+attached_assets
+*.log
+*.lock
+*.psd
+*.zip
+*.tar
+*.gz
+dump.rdb

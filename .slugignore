@@ -1,0 +1,7 @@
+android/
+ios/
+attached_assets/
+*.apk
+*.log
+*.lock
+package-lock.json

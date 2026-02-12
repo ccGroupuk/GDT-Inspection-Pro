@@ -152,9 +152,20 @@ export default function ReportView() {
 
                 {/* Header */}
                 <div className="border-b-2 border-primary pb-6 mb-8 flex justify-between items-start relative z-10 bg-white/90 p-4 rounded-b-lg backdrop-blur-sm">
-                    <div>
-                        <h1 className="text-3xl font-bold text-primary mb-1">GDT Inspection Pro</h1>
-                        <p className="text-sm text-gray-500">HVAC Maintenance & Certification</p>
+                    <div className="flex gap-4 items-center">
+                        <div className="flex flex-col gap-2">
+                            {/* Logo Placeholders - User to Replace */}
+                            <div className="h-12 w-32 bg-gray-200 flex items-center justify-center text-[10px] text-gray-500 border border-dashed rounded">
+                                LOGO 1
+                            </div>
+                            <div className="h-12 w-32 bg-gray-200 flex items-center justify-center text-[10px] text-gray-500 border border-dashed rounded">
+                                LOGO 2
+                            </div>
+                        </div>
+                        <div>
+                            <h1 className="text-3xl font-bold text-primary mb-1">GDT Inspection Pro</h1>
+                            <p className="text-sm text-gray-500">HVAC Maintenance & Certification</p>
+                        </div>
                     </div>
                     <div className="text-right">
                         <div className="flex items-center justify-end gap-2 mb-1">
@@ -268,48 +279,71 @@ export default function ReportView() {
                 <div className="mb-8">
                     {data.items && data.items.some((i: any) => i.type === 'fire_door') ? (
                         /* FIRE DOOR SCHEDULE */
+                        /* DETAILED FIRE DOOR REPORT */
                         <>
-                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Fire Door Schedule</h3>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-xs text-left">
-                                    <thead className="bg-gray-100 text-gray-700 font-semibold print:bg-gray-200">
-                                        <tr>
-                                            <th className="p-2 border-b">ID / Ref</th>
-                                            <th className="p-2 border-b">Location</th>
-                                            <th className="p-2 border-b">Type</th>
-                                            <th className="p-2 border-b text-center">Rating</th>
-                                            <th className="p-2 border-b text-center">Gaps</th>
-                                            <th className="p-2 border-b text-center">Stat</th>
-                                            <th className="p-2 border-b">Remedials / Notes</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {data.items.filter((i: any) => i.type === 'fire_door').map((door: any) => {
-                                            const d = door.data;
-                                            return (
-                                                <tr key={door.id} className="break-inside-avoid">
-                                                    <td className="p-2 font-medium border-l border-b">{d.door_id}</td>
-                                                    <td className="p-2 border-b">{d.location_ref}</td>
-                                                    <td className="p-2 border-b">{d.door_type}</td>
-                                                    <td className="p-2 text-center border-b">{d.resistance_rating}</td>
-                                                    <td className="p-2 text-center border-b">
-                                                        {/* Check key gaps - simple summary */}
-                                                        {(d.gap_top > 4 || d.gap_leading > 4 || d.gap_hinge_top > 4) ?
-                                                            <span className="text-red-600 font-bold">Fail</span> :
-                                                            <span className="text-green-600">OK</span>
-                                                        }
-                                                    </td>
-                                                    <td className="p-2 text-center border-b">
-                                                        <Badge status={d.compliant?.includes('Yes') ? 'pass' : 'fail'} />
-                                                    </td>
-                                                    <td className="p-2 text-gray-500 border-r border-b break-words max-w-[200px]">
-                                                        {d.remedials || "None"}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 border-b pb-2">Fire Door Inspection Detail</h3>
+                            <div className="space-y-6">
+                                {data.items.filter((i: any) => i.type === 'fire_door').map((door: any, idx: number) => {
+                                    const d = door.data;
+                                    const isFail = d.compliant?.includes('No') || door.status === 'fail';
+
+                                    return (
+                                        <div key={door.id} className="break-inside-avoid border rounded-lg p-4 bg-gray-50/50">
+                                            {/* Header */}
+                                            <div className="flex justify-between items-start mb-4 border-b pb-2">
+                                                <div>
+                                                    <h4 className="font-bold text-lg text-gray-900">Door #{d.door_id}</h4>
+                                                    <p className="text-sm text-gray-600">{d.location_ref} ({d.door_type})</p>
+                                                </div>
+                                                <Badge status={isFail ? 'Fail' : 'Pass'} />
+                                            </div>
+
+                                            {/* Specifications Grid */}
+                                            <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-sm mb-4">
+                                                <div><span className="text-gray-500 block text-xs">Rating</span> {d.resistance_rating}</div>
+                                                <div><span className="text-gray-500 block text-xs">Dimensions</span> {d.door_height}x{d.door_width} mm</div>
+                                                <div><span className="text-gray-500 block text-xs">Thickness</span> {d.door_thickness} mm</div>
+
+                                                <div><span className="text-gray-500 block text-xs">Frame</span> {d.frame_material}</div>
+                                                <div><span className="text-gray-500 block text-xs">Glazing</span> {d.glazing_type}</div>
+                                                <div><span className="text-gray-500 block text-xs">Seals</span> {d.intumescent_seals}</div>
+                                            </div>
+
+                                            {/* Critical Checks (Gaps & Hardware) */}
+                                            <div className="bg-white p-3 rounded border mb-4">
+                                                <h5 className="font-semibold text-xs uppercase text-gray-500 mb-2">Critical Checks</h5>
+                                                <div className="grid grid-cols-4 gap-2 text-sm">
+                                                    <div className={Number(d.gap_top) > 4 ? "text-red-600 font-bold" : ""}>Top Gap: {d.gap_top}mm</div>
+                                                    <div className={Number(d.gap_leading) > 4 ? "text-red-600 font-bold" : ""}>Leading Gap: {d.gap_leading}mm</div>
+                                                    <div className={Number(d.gap_hinge_top) > 4 ? "text-red-600 font-bold" : ""}>Hinge Gap: {d.gap_hinge_top}mm</div>
+                                                    <div className={Number(d.gap_bottom) > 10 ? "text-amber-600" : ""}>Bottom Gap: {d.gap_bottom}mm</div> {/* 10mm advisory for bottom usually? */}
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 text-sm mt-2 border-t pt-2">
+                                                    <div>Closer: <span className={d.closer_op?.includes('No') ? "text-red-600 font-bold" : "text-green-600"}>{d.closer_op}</span></div>
+                                                    <div>Latch: <span className={d.latch_op?.includes('No') ? "text-red-600 font-bold" : "text-green-600"}>{d.latch_op}</span></div>
+                                                </div>
+                                            </div>
+
+                                            {/* Remedials */}
+                                            {d.remedials && (
+                                                <div className="mb-4 text-sm bg-red-50 text-red-900 p-2 rounded border border-red-100">
+                                                    <span className="font-bold">Remedial Action:</span> {d.remedials}
+                                                </div>
+                                            )}
+
+                                            {/* Inline Photos */}
+                                            {door.photos && door.photos.length > 0 && (
+                                                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                                                    {door.photos.map((p: any, pIdx: number) => (
+                                                        <div key={pIdx} className="aspect-video bg-gray-200 rounded overflow-hidden border">
+                                                            <img src={p.url} alt="Evidence" className="w-full h-full object-cover" />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </>
                     ) : (
