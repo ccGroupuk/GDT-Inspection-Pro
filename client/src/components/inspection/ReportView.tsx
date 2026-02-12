@@ -174,7 +174,7 @@ export default function ReportView() {
             <div className="max-w-[210mm] mx-auto bg-white shadow-lg print:shadow-none print:w-full print:max-w-none min-h-[297mm] flex flex-col relative print:break-after-always p-0 overflow-hidden mb-8 print:mb-0">
 
                 {/* Top Banner with Logo Overlay */}
-                <div className="h-[35%] w-full bg-slate-800 relative group">
+                <div className="h-[90mm] w-full bg-slate-800 relative group overflow-hidden">
                     {/* Hidden Input for Banner */}
                     <input
                         type="file"
@@ -190,6 +190,10 @@ export default function ReportView() {
                             src={customBanner || bannerUrl || "/assets/banner.jpg"}
                             alt="Banner"
                             className="w-full h-full object-cover opacity-60"
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).src = "/assets/banner.jpg"; // Fallback
+                                (e.target as HTMLImageElement).onerror = null;
+                            }}
                         />
                     </div>
 
@@ -264,6 +268,10 @@ export default function ReportView() {
                                 src={customCover || (typeof data.items?.[0]?.photos?.[0] === 'string' ? data.items[0].photos[0] : data.items[0].photos[0]?.url)}
                                 alt="Site"
                                 className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none'; // Hide if broken
+                                    // Also show the placeholder text sibling if possible, but for now just hide to avoid ugly icon
+                                }}
                             />
                         ) : (
                             <div className="text-center p-8">
