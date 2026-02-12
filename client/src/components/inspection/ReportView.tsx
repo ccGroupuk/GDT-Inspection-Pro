@@ -213,7 +213,7 @@ export default function ReportView() {
                 </div>
 
                 {/* Main Site Photo */}
-                <div className="flex-grow px-12 pb-8 flex items-center justify-center group relative">
+                <div className="flex-grow px-0 pb-0 flex items-center justify-center group relative mt-4 mb-4">
                     <input
                         type="file"
                         id="cover-upload"
@@ -222,7 +222,7 @@ export default function ReportView() {
                         onChange={(e) => handleImageUpload(e, 'cover')}
                     />
 
-                    <div className="w-full h-64 bg-gray-100 border-2 border-gray-200 rounded-lg flex items-center justify-center overflow-hidden shadow-inner relative">
+                    <div className="w-full h-[80mm] bg-gray-100 flex items-center justify-center overflow-hidden shadow-md relative">
                         {(customCover || data.items?.[0]?.photos?.[0]) ? (
                             <img
                                 src={customCover || (typeof data.items?.[0]?.photos?.[0] === 'string' ? data.items[0].photos[0] : data.items[0].photos[0]?.url)}
