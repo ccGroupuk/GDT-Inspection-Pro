@@ -173,6 +173,12 @@ export default function ReportView() {
             {/* A4 Page Container - Page 1 (Cover) */}
             <div className="max-w-[210mm] mx-auto bg-white shadow-lg print:shadow-none print:w-full print:max-w-none min-h-[297mm] flex flex-col relative print:break-after-always p-0 overflow-hidden mb-8 print:mb-0">
 
+                {/* Slim Header Bar */}
+                <div className="h-12 w-full bg-slate-900 flex items-center justify-between px-8 text-white z-20 relative print:bg-slate-900 print:-webkit-print-color-adjust-exact">
+                    <span className="font-bold tracking-[0.2em] text-sm uppercase">GDT Envirocare</span>
+                    <span className="text-[10px] tracking-wider opacity-70">Kitchen Extract Cleaning Report</span>
+                </div>
+
                 {/* Top Banner with Logo Overlay */}
                 <div className="h-[90mm] w-full bg-slate-800 relative group overflow-hidden">
                     {/* Hidden Input for Banner */}
@@ -207,7 +213,7 @@ export default function ReportView() {
                     </label>
 
                     {/* Large GDT Logo Overlay (Global Setting or Default) */}
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 text-center w-full max-w-2xl px-4">
+                    <div className="absolute top-[40%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 text-center w-full max-w-2xl px-4">
                         <div className="bg-white/10 backdrop-blur-xl p-10 rounded-3xl border border-white/30 shadow-[0_20px_50px_rgba(0,0,0,0.5)] bg-gradient-to-b from-white/10 to-transparent">
                             {logoUrl ? (
                                 <img src={logoUrl} alt="Company Logo" className="max-h-40 mx-auto object-contain drop-shadow-2xl filter brightness-110" />
