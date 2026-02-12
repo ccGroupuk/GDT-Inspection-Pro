@@ -1,7 +1,7 @@
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { getInspections, getSettings, saveInspection, SavedInspection } from "@/lib/local-storage";
-import { Printer, ArrowLeft, CheckCircle2, XCircle, AlertCircle, Pencil, Check, Share2, Copy } from "lucide-react";
+import { Printer, ArrowLeft, CheckCircle2, XCircle, AlertCircle, Pencil, Check, Share2, Copy, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -38,6 +38,10 @@ export default function ReportView() {
     const [title, setTitle] = useState("Certificate of Inspection");
     const [isEditingTitle, setIsEditingTitle] = useState(false);
 
+    // Custom Assets State
+    const [customBanner, setCustomBanner] = useState<string | null>(null);
+    const [customCover, setCustomCover] = useState<string | null>(null);
+
     useEffect(() => {
         if (params.id) {
             const all = getInspections();
@@ -45,6 +49,9 @@ export default function ReportView() {
             if (found) {
                 setInspection(found);
                 if (found.reportTitle) setTitle(found.reportTitle);
+                // Load custom assets if they exist
+                if (found.data?.reportBannerUrl) setCustomBanner(found.data.reportBannerUrl);
+                if (found.data?.reportCoverPhotoUrl) setCustomCover(found.data.reportCoverPhotoUrl);
             }
 
             const settings = getSettings();
@@ -52,6 +59,32 @@ export default function ReportView() {
             if (settings.bannerUrl) setBannerUrl(settings.bannerUrl);
         }
     }, [params.id]);
+
+    const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>, target: 'banner' | 'cover') => {
+        const file = event.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64 = reader.result as string;
+                if (target === 'banner') {
+                    setCustomBanner(base64);
+                    if (inspection) {
+                        const updated = { ...inspection, data: { ...inspection.data, reportBannerUrl: base64 } };
+                        saveInspection(updated);
+                        setInspection(updated);
+                    }
+                } else {
+                    setCustomCover(base64);
+                    if (inspection) {
+                        const updated = { ...inspection, data: { ...inspection.data, reportCoverPhotoUrl: base64 } };
+                        saveInspection(updated);
+                        setInspection(updated);
+                    }
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    };
 
     const handleSaveTitle = () => {
         if (inspection) {
@@ -135,144 +168,198 @@ export default function ReportView() {
                 </div>
             </div>
 
-            {/* A4 Page Container */}
-            <div className="max-w-[210mm] mx-auto bg-white shadow-lg p-[15mm] min-h-[297mm] print:shadow-none print:w-full print:max-w-none relative overflow-hidden">
+            {/* A4 Page Container - Page 1 (Cover) */}
+            <div className="max-w-[210mm] mx-auto bg-white shadow-lg print:shadow-none print:w-full print:max-w-none min-h-[297mm] flex flex-col relative print:break-after-always p-0 overflow-hidden mb-8 print:mb-0">
 
-                {/* Report Banner */}
-                <div className="absolute top-0 left-0 right-0 h-[30mm] overflow-hidden -z-0">
-                    {bannerUrl ? (
-                        <img src={bannerUrl} alt="Report Banner" className="w-full h-full object-cover" />
+                {/* Top Banner with Logo Overlay */}
+                <div className="h-[35%] w-full bg-slate-800 relative group">
+                    {/* Hidden Input for Banner */}
+                    <input
+                        type="file"
+                        id="banner-upload"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, 'banner')}
+                    />
+
+                    {/* Banner Image Placeholder */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-slate-900 to-slate-700 opacity-90">
+                        {(customBanner || bannerUrl) ? (
+                            <img src={customBanner || bannerUrl || ""} alt="Banner" className="w-full h-full object-cover opacity-60" />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-white/20 text-4xl font-bold uppercase tracking-widest">
+                                Banner Image
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Edit Overlay Button */}
+                    <label
+                        htmlFor="banner-upload"
+                        className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white p-2 rounded-lg cursor-pointer transition-all opacity-0 group-hover:opacity-100 print:hidden z-20 border border-white/20 shadow-lg"
+                        title="Change Banner Image"
+                    >
+                        <Upload className="w-5 h-5" />
+                    </label>
+
+                    {/* Large GDT Logo Overlay */}
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 text-center">
+                        <div className="bg-white/10 backdrop-blur-md p-8 rounded-2xl border border-white/20 shadow-2xl">
+                            <h1 className="text-7xl font-black tracking-tighter mb-2 text-white drop-shadow-md">GDT</h1>
+                            <p className="text-2xl font-light tracking-[0.5em] uppercase text-white drop-shadow-md">Envirocare</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Report Title */}
+                <div className="text-center py-10 px-8">
+                    {isEditingTitle ? (
+                        <div className="flex justify-center items-center gap-2">
+                            <Input
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                className="text-center text-2xl font-serif text-slate-800 tracking-widest uppercase w-full max-w-lg"
+                            />
+                            <Button size="icon" variant="ghost" onClick={handleSaveTitle}>
+                                <Check className="w-5 h-5 text-green-600" />
+                            </Button>
+                        </div>
                     ) : (
-                        <div className="w-full h-full bg-gradient-to-r from-blue-600 to-cyan-500"></div>
+                        <div className="group relative inline-block">
+                            <h2 className="text-3xl font-serif text-slate-800 tracking-widest uppercase border-b-2 border-slate-300 pb-4 mb-2">
+                                {title}
+                            </h2>
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="absolute -right-10 top-0 opacity-0 group-hover:opacity-100 transition-opacity print:hidden"
+                                onClick={() => setIsEditingTitle(true)}
+                            >
+                                <Pencil className="w-4 h-4 text-gray-400" />
+                            </Button>
+                        </div>
                     )}
                 </div>
 
-                {/* Spacing for Banner */}
-                <div className="h-[20mm] mb-6"></div>
+                {/* Main Site Photo */}
+                <div className="flex-grow px-12 pb-8 flex items-center justify-center group relative">
+                    <input
+                        type="file"
+                        id="cover-upload"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, 'cover')}
+                    />
 
-                {/* Header */}
-                <div className="border-b-2 border-primary pb-6 mb-8 flex justify-between items-start relative z-10 bg-white/90 p-4 rounded-b-lg backdrop-blur-sm">
-                    <div className="flex gap-4 items-center">
-                        <div className="flex flex-col gap-2">
-                            {/* Logo Placeholders - User to Replace */}
-                            <div className="h-12 w-32 bg-gray-200 flex items-center justify-center text-[10px] text-gray-500 border border-dashed rounded">
-                                LOGO 1
+                    <div className="w-full h-64 bg-gray-100 border-2 border-gray-200 rounded-lg flex items-center justify-center overflow-hidden shadow-inner relative">
+                        {(customCover || data.items?.[0]?.photos?.[0]) ? (
+                            <img
+                                src={customCover || (typeof data.items?.[0]?.photos?.[0] === 'string' ? data.items[0].photos[0] : data.items[0].photos[0]?.url)}
+                                alt="Site"
+                                className="w-full h-full object-cover"
+                            />
+                        ) : (
+                            <div className="text-center p-8">
+                                <p className="text-gray-400 text-sm mb-2">No Site Photo Available</p>
+                                <p className="text-xs text-gray-300">Take a photo for the first item to appear here</p>
                             </div>
-                            <div className="h-12 w-32 bg-gray-200 flex items-center justify-center text-[10px] text-gray-500 border border-dashed rounded">
-                                LOGO 2
+                        )}
+
+                        {/* Edit Overlay */}
+                        <label
+                            htmlFor="cover-upload"
+                            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer print:hidden"
+                        >
+                            <div className="bg-white text-slate-900 px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 transform translate-y-4 group-hover:translate-y-0 transition-transform">
+                                <Upload className="w-4 h-4" />
+                                <span>Change Cover Photo</span>
                             </div>
-                        </div>
-                        <div>
-                            <h1 className="text-3xl font-bold text-primary mb-1">GDT Inspection Pro</h1>
-                            <p className="text-sm text-gray-500">HVAC Maintenance & Certification</p>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <div className="flex items-center justify-end gap-2 mb-1">
-                            {isEditingTitle ? (
-                                <>
-                                    <Input
-                                        value={title}
-                                        onChange={(e) => setTitle(e.target.value)}
-                                        className="h-8 w-64 text-right font-semibold text-gray-900"
-                                    />
-                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleSaveTitle}>
-                                        <Check className="w-4 h-4 text-green-600" />
-                                    </Button>
-                                </>
-                            ) : (
-                                <>
-                                    <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
-                                    <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-6 w-6 print:hidden opacity-50 hover:opacity-100"
-                                        onClick={() => setIsEditingTitle(true)}
-                                    >
-                                        <Pencil className="w-3 h-3" />
-                                    </Button>
-                                </>
-                            )}
-                        </div>
-                        <p className="text-sm text-gray-500 mt-1">Ref: {inspection.id.toUpperCase().slice(0, 8)}</p>
-                        <p className="text-sm text-gray-500">Date: {dateStr}</p>
+                        </label>
                     </div>
                 </div>
 
-                {/* Certification Status Banner & Defects Summary */}
-                {(() => {
-                    const failedItems = data.items ? data.items.filter((i: any) => i.status === 'fail' || i.status === 'needs-attention') : [];
-                    const hasDefects = failedItems.length > 0;
+                {/* Footer / Client Details */}
+                <div className="mt-auto px-12 pb-12">
+                    <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm text-slate-700 mb-12 border-l-4 border-slate-300 pl-6">
+                        <span className="font-bold text-slate-900 uppercase tracking-wide">Site Name:</span>
+                        <span className="font-medium text-lg">{data.clientName || "Unknown Site"}</span>
 
-                    return (
-                        <div className="mb-8 space-y-6">
-                            {/* Status Banner */}
-                            <div className={`p-4 rounded-lg border-l-4 flex items-center justify-between ${hasDefects
-                                ? "bg-red-50 border-red-500 text-red-900"
-                                : "bg-green-50 border-green-500 text-green-900"
-                                }`}>
-                                <div>
-                                    <h3 className="font-bold text-lg uppercase tracking-wide">
-                                        Certification Status: {hasDefects ? "ACTION REQUIRED" : "PASS"}
-                                    </h3>
-                                    <p className="text-sm opacity-90">
-                                        {hasDefects
-                                            ? "One or more items require remedial attention before final certification."
-                                            : "All inspected items meet the required standards."}
-                                    </p>
-                                </div>
-                                {hasDefects ? <AlertCircle className="w-8 h-8 text-red-600" /> : <CheckCircle2 className="w-8 h-8 text-green-600" />}
-                            </div>
+                        <span className="font-bold text-slate-900 uppercase tracking-wide">Site Address:</span>
+                        <span>{data.siteAddress || "Unknown Address"}</span>
 
-                            {/* Defects List */}
-                            {hasDefects && (
-                                <div className="border border-red-200 rounded-lg overflow-hidden">
-                                    <div className="bg-red-100/50 p-3 border-b border-red-200">
-                                        <h3 className="font-bold text-red-900 flex items-center gap-2">
-                                            <XCircle className="w-4 h-4" />
-                                            Defects / Remedials Required
-                                        </h3>
-                                    </div>
-                                    <div className="divide-y divide-red-100">
-                                        {failedItems.map((item: any) => (
-                                            <div key={item.id} className="p-3 bg-red-50/30 flex justify-between items-start">
-                                                <div>
-                                                    <span className="font-semibold text-gray-900 text-sm block">{item.label}</span>
-                                                    <span className="text-xs text-red-700 font-medium uppercase mt-0.5 block">{item.status.replace('-', ' ')}</span>
-                                                </div>
-                                                <div className="text-right text-sm text-gray-600 max-w-[60%]">
-                                                    {item.status === 'fail' && item.type === 'fire_door'
-                                                        ? `${item.data?.gap_check || "Visual failure"}`
-                                                        : item.data?.notes || "Requires maintenance or repair."}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                        <span className="font-bold text-slate-900 uppercase tracking-wide">Date of clean:</span>
+                        <span>{data.inspectionDate ? new Date(data.inspectionDate).toLocaleDateString() : dateStr}</span>
+                    </div>
+
+                    {/* Corporate Footer with Logos */}
+                    <div className="border-t-2 border-slate-300 pt-6 text-center">
+                        <div className="text-slate-600 font-serif mb-6">
+                            <p className="text-lg font-bold text-slate-800">GDT Envirocare, 44 Clos Mancheldowne, Barry, CF62 5AB</p>
+                            <p className="text-sm tracking-wider">VAT No: 433714507 &nbsp;<span className="text-slate-300">|</span>&nbsp; COMPANY No: 11048398</p>
                         </div>
-                    );
-                })()}
 
-                {/* Client & Job Details */}
-                <div className="grid grid-cols-2 gap-8 mb-8">
-                    <div>
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Client Details</h3>
-                        <div className="bg-gray-50 p-4 rounded-md print:bg-transparent print:p-0 print:border">
-                            <p className="font-medium text-gray-900">{data["Client Name"] || "N/A"}</p>
-                            <p className="text-gray-600">{data.address}</p>
-                            <p className="text-gray-600">{data["Contact Phone"]}</p>
+                        {/* Accreditation Logos Row */}
+                        <div className="flex justify-center items-center gap-6 opacity-80 hover:opacity-100 transition-opacity">
+                            {/* Placeholders - Replace src with actual layout */}
+                            {['CHAS', 'NAADUK', 'Constructionline', 'CSCS', 'IPAF'].map(logo => (
+                                <div key={logo} className="h-10 w-24 bg-gray-50 border border-gray-200 flex items-center justify-center rounded">
+                                    <span className="text-[10px] font-bold text-gray-400">{logo}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {/* --- REST OF REPORT (Page 2+) --- */}
+            <div className="max-w-[210mm] mx-auto bg-white shadow-lg p-[15mm] min-h-[297mm] print:shadow-none print:w-full print:max-w-none relative overflow-hidden print:break-before-always">
+
+                {/* Header for Page 2 */}
+                <div className="flex justify-between items-end border-b-2 border-slate-200 pb-4 mb-8">
                     <div>
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Equipment</h3>
-                        <div className="bg-gray-50 p-4 rounded-md print:bg-transparent print:p-0 print:border">
-                            <p><span className="text-gray-500">Make/Brand:</span> {data["Make/Brand"] || "N/A"}</p>
-                            <p><span className="text-gray-500">Model:</span> {data["Model Number"] || "N/A"}</p>
-                            <p><span className="text-gray-500">Serial:</span> {data["Serial Number"] || "N/A"}</p>
-                            <p><span className="text-gray-500">Age:</span> {data["Approximate Age (Years)"] || "0"} Years</p>
-                        </div>
+                        <h3 className="text-2xl font-bold text-slate-800">Introduction</h3>
                     </div>
+                    <div className="text-right text-xs text-slate-500">
+                        Page 2
+                    </div>
+                </div>
+
+                {/* Standard Text Block */}
+                <div className="prose max-w-none text-justify text-sm text-slate-700 mb-12 leading-relaxed">
+                    <p className="mb-4">
+                        Over time, cooking in a commercial kitchen causes deposits of airborne grease, dust, grime and steam to gather on the inner walls of kitchen extraction ducting. When regular professional cleaning of these ventilation systems is not carried out, this build-up can cause health and safety risks such as reduced airflow, fire hazards and unwanted odours.
+                    </p>
+                    <p className="mb-4">
+                        Kitchen extraction cleaning removes the build-up of grease and grime from the inner walls of ducts, fans, vents and hoods in commercial kitchens. The process typically consists of removing the contaminants through a combination of scraping, brushing, vacuuming, caustic chemicals and hot water pressure washing.
+                    </p>
+                    <p>
+                        In addition, water damaged, or bio-contaminated materials can be treated or removed during the cleaning process and broken parts replaced. There is also the opportunity to upgrade the system’s grease filters during cleaning. Higher quality filters trap grease particles more efficiently than lower grades, meaning it takes longer for the grease build-up to negatively affect the rest of the extraction system.
+                    </p>
+                </div>
+
+                {/* Summary Section */}
+                <div className="mb-12">
+                    <h3 className="text-2xl font-bold text-slate-800 mb-4 border-b pb-2">Summary</h3>
+                    <p className="text-sm text-slate-700">
+                        Internally, all accessible ducting has now been cleaned to BESA TR19 standards.
+                    </p>
+                </div>
+
+                {/* Advisories Section */}
+                <div className="mb-12">
+                    <h3 className="text-2xl font-bold text-slate-800 mb-4 border-b pb-2">Advisories</h3>
+                    <p className="text-sm text-slate-700 italic">
+                        Nothing to note.
+                    </p>
+                </div>
+
+                {/* Job / Staff Details */}
+                <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 text-xs text-slate-700 grid grid-cols-2 gap-4 mb-12">
+                    <div><span className="font-bold">SITE NAME:</span> {data.clientName}</div>
+                    <div><span className="font-bold">DATE:</span> {data.inspectionDate ? new Date(data.inspectionDate).toLocaleDateString() : dateStr}</div>
+                    <div><span className="font-bold">START TIME:</span> 09:00</div>
+                    <div><span className="font-bold">END TIME:</span> 17:00</div>
+                    <div className="col-span-2"><span className="font-bold">STAFF ON SITE:</span> GARETH, BILLY, RAMZI & KEVIN</div>
                 </div>
 
                 {/* Inspection Checklist / Schedules */}
@@ -529,23 +616,25 @@ export default function ReportView() {
                 })()}
 
                 {/* Footer / Signature */}
-                <div className="mt-12 pt-8 border-t border-gray-200 page-break-inside-avoid">
+                <div className="mt-12 pt-8 border-t-2 border-slate-200 page-break-inside-avoid">
                     <div className="grid grid-cols-2 gap-12">
                         {/* Engineer Signature */}
                         <div>
-                            <p className="mb-4 text-xs font-semibold uppercase text-gray-400">Engineer Signature</p>
-                            <div className="min-h-[64px] mb-2">
+                            <p className="mb-4 text-xs font-bold uppercase text-slate-400 tracking-wider">Lead Engineer</p>
+                            <div className="min-h-[80px] mb-2">
                                 {inspection.signatures?.engineer ? (
-                                    <img
-                                        src={inspection.signatures.engineer}
-                                        alt="Engineer Signature"
-                                        className="h-16 object-contain"
-                                    />
+                                    <div className="border rounded-lg bg-white p-4 inline-block shadow-sm">
+                                        <img
+                                            src={inspection.signatures.engineer}
+                                            alt="Engineer Signature"
+                                            className="h-16 object-contain"
+                                        />
+                                    </div>
                                 ) : (
                                     <Dialog>
                                         <DialogTrigger asChild>
-                                            <div className="h-16 border-b-2 border-dashed border-gray-300 flex items-end pb-1 cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 transition-colors group print:hidden">
-                                                <span className="text-sm text-gray-400 flex items-center group-hover:text-blue-600">
+                                            <div className="h-20 w-48 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-slate-500 hover:bg-slate-50 transition-colors group print:hidden">
+                                                <span className="text-sm text-slate-400 flex items-center font-medium group-hover:text-slate-600">
                                                     <PenTool className="w-4 h-4 mr-2" />
                                                     Sign Here
                                                 </span>
@@ -553,7 +642,7 @@ export default function ReportView() {
                                         </DialogTrigger>
                                         <DialogContent>
                                             <DialogHeader>
-                                                <DialogTitle>Engineer Signature</DialogTitle>
+                                                <DialogTitle>Lead Engineer Signature</DialogTitle>
                                                 <DialogDescription>
                                                     Please sign below to certify this inspection.
                                                 </DialogDescription>
@@ -567,36 +656,34 @@ export default function ReportView() {
                                                     };
                                                     saveInspection(updated);
                                                     setInspection(updated);
-                                                    // Close dialog via simply re-rendering or user action (Dialog auto-closes on unmount if we controlled it, but here we can just let user click outside or we could control open state. 
-                                                    // For simplicity in this step, user can click outside or hit Esc. 
-                                                    // But better to auto close. We will need state control for that. 
-                                                    // For now let's just save.
                                                 }}
                                             />
                                         </DialogContent>
                                     </Dialog>
                                 )}
                             </div>
-                            <p className="font-semibold text-gray-900">John Doe (Lead Engineer)</p>
-                            <p className="text-xs text-gray-500">Technician ID: GDT-8821</p>
+                            <p className="font-bold text-slate-900 border-t border-slate-200 pt-2 inline-block min-w-[200px]">Gareth Jones</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Lead Technician | GDT Envirocare</p>
                         </div>
 
                         {/* Client Signature */}
                         <div className="text-right">
                             <div className="flex flex-col items-end">
-                                <p className="mb-4 text-xs font-semibold uppercase text-gray-400 self-end">Client Signature</p>
-                                <div className="min-h-[64px] mb-2 w-full max-w-[200px]">
+                                <p className="mb-4 text-xs font-bold uppercase text-slate-400 tracking-wider">Client Representative</p>
+                                <div className="min-h-[80px] mb-2">
                                     {inspection.signatures?.client ? (
-                                        <img
-                                            src={inspection.signatures.client}
-                                            alt="Client Signature"
-                                            className="h-16 object-contain ml-auto"
-                                        />
+                                        <div className="border rounded-lg bg-white p-4 inline-block shadow-sm">
+                                            <img
+                                                src={inspection.signatures.client}
+                                                alt="Client Signature"
+                                                className="h-16 object-contain ml-auto"
+                                            />
+                                        </div>
                                     ) : (
                                         <Dialog>
                                             <DialogTrigger asChild>
-                                                <div className="h-16 border-b-2 border-dashed border-gray-300 flex items-end justify-end pb-1 cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 transition-colors group print:hidden">
-                                                    <span className="text-sm text-gray-400 flex items-center group-hover:text-blue-600">
+                                                <div className="h-20 w-48 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-slate-500 hover:bg-slate-50 transition-colors group print:hidden">
+                                                    <span className="text-sm text-slate-400 flex items-center font-medium group-hover:text-slate-600">
                                                         <PenTool className="w-4 h-4 mr-2" />
                                                         Sign Here
                                                     </span>
@@ -624,18 +711,14 @@ export default function ReportView() {
                                         </Dialog>
                                     )}
                                 </div>
-                                <p className="font-semibold text-gray-900">{data["Client Name"] || "Client"}</p>
-                                <p className="text-xs text-gray-500">{dateStr}</p>
+                                <p className="font-bold text-slate-900 border-t border-slate-200 pt-2 inline-block min-w-[200px]">{data["Client Name"] || "Client Representative"}</p>
+                                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Site Manager / Owner</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Disclaimer */}
-                <div className="mt-8 text-[10px] text-gray-400 text-center leading-tight">
-                    <p>This certificate confirms that the equipment described above has been inspected in accordance with company standards. This report is limited to visual and accessible components only. It does not guarantee future performance or life expectancy of the unit settings.</p>
-                </div>
-
+                {/* --- END CONTENT CONTAINER --- */}
             </div>
         </div >
     );
