@@ -216,7 +216,7 @@ export default function ReportView() {
                 </div>
 
                 {/* Report Title */}
-                <div className="text-center py-10 px-8 flex-grow flex items-center justify-center">
+                <div className="text-center py-8 px-8 mb-4">
                     {isEditingTitle ? (
                         <div className="flex justify-center items-center gap-2 w-full">
                             <Input
@@ -275,10 +275,10 @@ export default function ReportView() {
                             ) : (
                                 <>
                                     <img src="/assets/chas.png" alt="CHAS" className="h-10 object-contain grayscale hover:grayscale-0 transition-all" />
-                                    <img src="/assets/naaduk.jpg" alt="NAADUK" className="h-10 object-contain mix-blend-multiply grayscale hover:grayscale-0 transition-all" />
-                                    <img src="/assets/constructionline.png" alt="Constructionline" className="h-10 object-contain grayscale hover:grayscale-0 transition-all" />
-                                    <img src="/assets/cscs.png" alt="CSCS" className="h-10 object-contain grayscale hover:grayscale-0 transition-all" />
-                                    <img src="/assets/ipaf.png" alt="IPAF" className="h-10 object-contain grayscale hover:grayscale-0 transition-all" />
+                                    <img src="/assets/naaduk.png" alt="NAADUK" className="h-10 object-contain mix-blend-multiply grayscale hover:grayscale-0 transition-all" />
+                                    <img src="/assets/constructionline.jpg" alt="Constructionline" className="h-10 object-contain mix-blend-multiply grayscale hover:grayscale-0 transition-all" />
+                                    <img src="/assets/cscs.jpg" alt="CSCS" className="h-10 object-contain mix-blend-multiply grayscale hover:grayscale-0 transition-all" />
+                                    <img src="/assets/ipaf.jpg" alt="IPAF" className="h-10 object-contain mix-blend-multiply grayscale hover:grayscale-0 transition-all" />
                                 </>
                             )}
                         </div>
