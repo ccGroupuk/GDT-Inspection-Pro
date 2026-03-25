@@ -182,10 +182,43 @@ export default function ReportView() {
                 {/* Top Banner - REMOVED per user request (Step 862) */}
                 {/* <div className="h-[90mm] w-full bg-slate-800 relative group overflow-hidden"> ... </div> */}
 
+                {/* Main Site Photo */}
+                <div className="w-full group relative border-b-4 border-slate-900">
+                    <input
+                        type="file"
+                        id="cover-upload"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, 'cover')}
+                    />
+
+                    <div className="w-full h-[80mm] bg-gray-100 flex items-center justify-center overflow-hidden relative">
+                        <img
+                            src={customCover || (data.items?.[0]?.photos?.[0] ? (typeof data.items?.[0]?.photos?.[0] === 'string' ? data.items[0].photos[0] : data.items[0].photos[0]?.url) : null) || "/assets/gdt-cover.png"}
+                            alt="Site Cover"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).src = '/assets/gdt-cover.png';
+                            }}
+                        />
+
+                        {/* Edit Overlay */}
+                        <label
+                            htmlFor="cover-upload"
+                            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer print:hidden"
+                        >
+                            <div className="bg-white text-slate-900 px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 transform translate-y-4 group-hover:translate-y-0 transition-transform">
+                                <Upload className="w-4 h-4" />
+                                <span>Change Cover Photo</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
                 {/* Report Title */}
-                <div className="text-center py-10 px-8">
+                <div className="text-center py-10 px-8 flex-grow flex items-center justify-center">
                     {isEditingTitle ? (
-                        <div className="flex justify-center items-center gap-2">
+                        <div className="flex justify-center items-center gap-2 w-full">
                             <Input
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
@@ -210,39 +243,6 @@ export default function ReportView() {
                             </Button>
                         </div>
                     )}
-                </div>
-
-                {/* Main Site Photo */}
-                <div className="flex-grow px-0 pb-0 flex items-center justify-center group relative mt-4 mb-4">
-                    <input
-                        type="file"
-                        id="cover-upload"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e, 'cover')}
-                    />
-
-                    <div className="w-full h-[80mm] bg-gray-100 flex items-center justify-center overflow-hidden shadow-md relative">
-                        <img
-                            src={customCover || (data.items?.[0]?.photos?.[0] ? (typeof data.items?.[0]?.photos?.[0] === 'string' ? data.items[0].photos[0] : data.items[0].photos[0]?.url) : null) || "/assets/gdt-cover.png"}
-                            alt="Site Cover"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                                (e.target as HTMLImageElement).src = '/assets/gdt-cover.png';
-                            }}
-                        />
-
-                        {/* Edit Overlay */}
-                        <label
-                            htmlFor="cover-upload"
-                            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer print:hidden"
-                        >
-                            <div className="bg-white text-slate-900 px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 transform translate-y-4 group-hover:translate-y-0 transition-transform">
-                                <Upload className="w-4 h-4" />
-                                <span>Change Cover Photo</span>
-                            </div>
-                        </label>
-                    </div>
                 </div>
 
                 {/* Footer / Client Details */}
