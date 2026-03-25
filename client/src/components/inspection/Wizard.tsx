@@ -244,6 +244,7 @@ export function Wizard({ template, initialData, onCancel }: WizardProps) {
                             <RouteStep
                                 items={items}
                                 onItemsChange={setItems}
+                                templateId={template.id}
                             />
                         ) : currentStep.component === "photo-upload" ? (
                             <PhotoStep

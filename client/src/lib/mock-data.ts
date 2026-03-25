@@ -32,6 +32,7 @@ export interface StepField {
     placeholder?: string;
     required?: boolean;
     options?: string[]; // For select inputs
+    condition?: { field: string; equals?: string; notEquals?: string };
 }
 
 export interface InspectionStep {

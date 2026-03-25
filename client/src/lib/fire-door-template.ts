@@ -1,5 +1,6 @@
 import { ItemTemplate, StepField } from "./mock-data";
 
+const YES_NO = ["Yes", "No"];
 const YES_NO_NA = ["Yes", "No", "N/A"];
 const CONDITION = ["Good", "Minor Defect", "Major Defect", "Missing"];
 const PASS_FAIL = ["Pass", "Fail"];
@@ -34,7 +35,7 @@ export const FIRE_DOOR_FIELDS: StepField[] = [
     // C. Frame
     { name: "frame_material", label: "Frame Material", type: "select", options: ["Timber", "Metal", "Composite", "Other"], required: true },
     { name: "frame_condition", label: "Frame Condition", type: "select", options: CONDITION, required: true },
-    { name: "frame_fixed", label: "Frame Securely Fixed?", type: "select", options: YES_NO_NA, required: true },
+    { name: "frame_fixed", label: "Frame Securely Fixed?", type: "select", options: YES_NO, required: true }, // removed n/a
 
     // D. Seals & Signage
     { name: "signage", label: "Signage Installed", type: "select", options: ["None", "FDKS (Keep Shut)", "FDKL (Keep Locked)", "Automatic FDKC", "Incorrect Signage"], required: true },
@@ -48,7 +49,7 @@ export const FIRE_DOOR_FIELDS: StepField[] = [
 
     // F. Glazing
     { name: "glazing_type", label: "Glazing Type", type: "select", options: ["N/A - Solid Door", "Georgian Wired", "Clear Fire Glass", "Obscure"], required: true },
-    { name: "glazing_beads", label: "Glazing Beads/System", type: "select", options: ["Good / Intact", "Loose / Damaged", "Non-compliant"], required: true },
+    { name: "glazing_beads", label: "Glazing Beads/System", type: "select", options: ["Good / Intact", "Loose / Damaged", "Non-compliant"], required: true, condition: { field: "glazing_type", notEquals: "N/A - Solid Door" } },
 
     // G. Outcome
     { name: "compliant", label: "Is Door Compliant?", type: "select", options: ["Yes (Pass)", "No (Fail)"], required: true },

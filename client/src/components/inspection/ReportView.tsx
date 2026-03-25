@@ -223,22 +223,14 @@ export default function ReportView() {
                     />
 
                     <div className="w-full h-[80mm] bg-gray-100 flex items-center justify-center overflow-hidden shadow-md relative">
-                        {(customCover || data.items?.[0]?.photos?.[0]) ? (
-                            <img
-                                src={customCover || (typeof data.items?.[0]?.photos?.[0] === 'string' ? data.items[0].photos[0] : data.items[0].photos[0]?.url)}
-                                alt="Site"
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = 'none'; // Hide if broken
-                                    // Also show the placeholder text sibling if possible, but for now just hide to avoid ugly icon
-                                }}
-                            />
-                        ) : (
-                            <div className="text-center p-8">
-                                <p className="text-gray-400 text-sm mb-2">No Site Photo Available</p>
-                                <p className="text-xs text-gray-300">Take a photo for the first item to appear here</p>
-                            </div>
-                        )}
+                        <img
+                            src={customCover || (data.items?.[0]?.photos?.[0] ? (typeof data.items?.[0]?.photos?.[0] === 'string' ? data.items[0].photos[0] : data.items[0].photos[0]?.url) : null) || "/assets/gdt-cover.png"}
+                            alt="Site Cover"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).src = '/assets/gdt-cover.png';
+                            }}
+                        />
 
                         {/* Edit Overlay */}
                         <label

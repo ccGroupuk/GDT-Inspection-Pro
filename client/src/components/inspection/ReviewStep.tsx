@@ -109,18 +109,25 @@ export function ReviewStep({ steps, data, items = [], onChange }: ReviewStepProp
                         <div className="space-y-2">
                             {step.fields ? (
                                 // Display Standard Fields
-                                step.fields.map((field) => (
-                                    <div key={field.name} className="flex justify-between text-sm">
-                                        <span className="text-muted-foreground">{field.label}</span>
-                                        <span className="font-medium text-foreground">
-                                            {field.type === "checkbox"
-                                                ? data[field.name]
-                                                    ? "Pass"
-                                                    : "Not Checked"
-                                                : data[field.name] || "-"}
-                                        </span>
-                                    </div>
-                                ))
+                                step.fields.map((field) => {
+                                    if (field.condition) {
+                                        const val = data[field.condition.field];
+                                        if (field.condition.equals !== undefined && val !== field.condition.equals) return null;
+                                        if (field.condition.notEquals !== undefined && val === field.condition.notEquals) return null;
+                                    }
+                                    return (
+                                        <div key={field.name} className="flex justify-between text-sm">
+                                            <span className="text-muted-foreground">{field.label}</span>
+                                            <span className="font-medium text-foreground">
+                                                {field.type === "checkbox"
+                                                    ? data[field.name]
+                                                        ? "Pass"
+                                                        : "Not Checked"
+                                                    : data[field.name] || "-"}
+                                            </span>
+                                        </div>
+                                    );
+                                })
                             ) : step.component === "photo-upload" ? (
                                 // Display Photos Section
                                 <div className="text-sm">

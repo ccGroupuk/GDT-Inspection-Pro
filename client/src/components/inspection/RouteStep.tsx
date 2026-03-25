@@ -27,9 +27,10 @@ const IconMap: Record<string, any> = {
 interface RouteStepProps {
     items: InspectionItem[];
     onItemsChange: (items: InspectionItem[]) => void;
+    templateId?: string;
 }
 
-export function RouteStep({ items, onItemsChange }: RouteStepProps) {
+export function RouteStep({ items, onItemsChange, templateId }: RouteStepProps) {
     const { toast } = useToast();
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [selectedType, setSelectedType] = useState<InspectionItemType | null>(null);
@@ -42,10 +43,14 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
     // Load custom templates and merge with defaults
     // Note: In a real app we might use React Query or Context, but direct read is fine for now
     const customTemplates = getItemTemplates();
-    const allTemplates: Record<string, ItemTemplate> = { ...ITEM_TEMPLATES };
+    let allTemplates: Record<string, ItemTemplate> = { ...ITEM_TEMPLATES };
     customTemplates.forEach(t => {
         allTemplates[t.type] = t;
     });
+
+    if (templateId === 'fire-door-survey' && allTemplates['fire_door']) {
+        allTemplates = { fire_door: allTemplates['fire_door'] };
+    }
 
     const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -286,42 +291,58 @@ export function RouteStep({ items, onItemsChange }: RouteStepProps) {
                                                 // Auto-Calculation for Fire Doors
                                                 if (selectedType === 'fire_door') {
                                                     let autoFail = false;
-                                                    let failreason = "";
+                                                    let failReasons: string[] = [];
 
-                                                    // Check Gaps > 4mm (Hinge, Top, Leading)
-                                                    const gapHingeTop = Number(newData['gap_hinge_top']);
-                                                    const gapTop = Number(newData['gap_top']);
-                                                    const gapLeading = Number(newData['gap_leading']);
+                                                    const gaps4mm = ['gap_hinge_top', 'gap_hinge_mid', 'gap_hinge_bot', 'gap_leading', 'gap_top'];
+                                                    gaps4mm.forEach(g => {
+                                                        if (Number(newData[g]) > 4) { autoFail = true; failReasons.push(`Excessive Gap (>4mm) on ${g.replace('gap_', '')}`); }
+                                                    });
 
-                                                    if (gapHingeTop > 4 || gapTop > 4 || gapLeading > 4) {
-                                                        autoFail = true;
-                                                        failreason = "Excessive Gaps (>4mm)";
+                                                    if (Number(newData['gap_bottom']) > 10) { autoFail = true; failReasons.push('Excessive Bottom Gap (>10mm)'); }
+
+                                                    if (['Minor Defect', 'Major Defect', 'Missing'].includes(newData['frame_condition'])) {
+                                                        autoFail = true; failReasons.push('Frame Condition Defective');
                                                     }
 
-                                                    // Check "Select" fields for negative answers
-                                                    // Logic: If any critical field is "No" (where Yes is expected) or "Fail"
-                                                    // Adjust based on specific field logic. 
-                                                    // E.g., 'certification_visible': "No" -> FAIL? Maybe.
-                                                    // 'closer_op': "No - Fails to close" -> FAIL
-                                                    if (newData['closer_op'] === 'No - Fails to close' || newData['closer_op'] === 'No - slams') {
-                                                        autoFail = true;
-                                                        failreason = "Door Closer Fault";
-                                                    }
-                                                    if (newData['latch_op'] === 'No') {
-                                                        autoFail = true;
-                                                        failreason = "Latch Fault";
-                                                    }
                                                     if (newData['frame_fixed'] === 'No') {
-                                                        autoFail = true;
-                                                        failreason = "Frame Not Secure";
+                                                        autoFail = true; failReasons.push('Frame Not Securely Fixed');
                                                     }
 
+                                                    if (['None', 'Incorrect Signage'].includes(newData['signage'])) {
+                                                        autoFail = true; failReasons.push('Incorrect/Missing Signage');
+                                                    }
 
-                                                    // Lock Compliant Status
+                                                    if (['Paint Bound', 'Missing/Damaged', 'Wrong Size', 'N/A'].includes(newData['intumescent_seals'])) {
+                                                        autoFail = true; failReasons.push('Intumescent Seals Fault');
+                                                    }
+
+                                                    if (['Damaged', 'Missing'].includes(newData['smoke_seals'])) {
+                                                        autoFail = true; failReasons.push('Cold Smoke Seals Fault');
+                                                    }
+
+                                                    if (['Worn/Leaking', 'Missing Screws', 'Non-compliant'].includes(newData['hinges_grade'])) {
+                                                        autoFail = true; failReasons.push('Hinges Fault');
+                                                    }
+
+                                                    if (['No - Fails to close', 'No - slams', 'N/A'].includes(newData['closer_op'])) {
+                                                        autoFail = true; failReasons.push('Door Closer Fault');
+                                                    }
+
+                                                    if (['No', 'N/A'].includes(newData['latch_op'])) {
+                                                        autoFail = true; failReasons.push('Latch/Lock Fault');
+                                                    }
+
+                                                    if (newData['glazing_type'] !== 'N/A - Solid Door') {
+                                                        if (['Loose / Damaged', 'Non-compliant'].includes(newData['glazing_beads'])) {
+                                                            autoFail = true; failReasons.push('Glazing Beads Fault');
+                                                        }
+                                                    }
+
                                                     if (autoFail) {
                                                         newData['compliant'] = 'No (Fail)';
-                                                        // Optionally set remedial suggestion if empty
-                                                        if (!newData['remedials']) newData['remedials'] = `Auto-Fail: ${failreason}`;
+                                                        if (!newData['remedials'] || newData['remedials'].startsWith('Auto-Fail:')) {
+                                                            newData['remedials'] = `Auto-Fail: ${failReasons.join(', ')}.`;
+                                                        }
                                                     }
                                                 }
 
