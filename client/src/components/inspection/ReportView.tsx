@@ -173,6 +173,11 @@ export default function ReportView() {
             {/* A4 Page Container - Page 1 (Cover) */}
             <div className="max-w-[210mm] mx-auto bg-white shadow-lg print:shadow-none print:w-full print:max-w-none min-h-[297mm] flex flex-col relative print:break-after-always p-0 overflow-hidden mb-8 print:mb-0">
 
+                {/* Background Watermark Overlay */}
+                <div className="absolute inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden opacity-[0.06] mix-blend-multiply">
+                    <img src="/assets/gdt-logo.png" alt="Watermark" className="w-[80%] max-w-[600px] object-contain -rotate-[15deg] grayscale" />
+                </div>
+
                 {/* Slim Header Bar */}
                 <div className="h-12 w-full bg-slate-900 flex items-center justify-between px-8 text-white z-20 relative print:bg-slate-900 print:-webkit-print-color-adjust-exact">
                     <span className="font-bold tracking-[0.2em] text-sm uppercase">GDT Envirocare</span>
@@ -216,21 +221,21 @@ export default function ReportView() {
                 </div>
 
                 {/* Report Title */}
-                <div className="text-center py-8 px-8 mb-4">
+                <div className="text-center py-10 px-8 mb-4 relative z-10 w-full flex-grow flex items-center justify-center">
                     {isEditingTitle ? (
                         <div className="flex justify-center items-center gap-2 w-full">
                             <Input
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
-                                className="text-center text-2xl font-serif text-slate-800 tracking-widest uppercase w-full max-w-lg"
+                                className="text-center text-3xl font-black text-slate-900 tracking-[0.2em] uppercase w-full max-w-lg border-b-4 border-slate-900 rounded-none bg-transparent"
                             />
                             <Button size="icon" variant="ghost" onClick={handleSaveTitle}>
                                 <Check className="w-5 h-5 text-green-600" />
                             </Button>
                         </div>
                     ) : (
-                        <div className="group relative inline-block">
-                            <h2 className="text-3xl font-serif text-slate-800 tracking-widest uppercase border-b-2 border-slate-300 pb-4 mb-2">
+                        <div className="group relative inline-block w-full">
+                            <h2 className="text-4xl font-black text-slate-900 tracking-[0.2em] uppercase border-b-4 border-slate-900 pb-4 mb-2 mx-auto inline-block">
                                 {title}
                             </h2>
                             <Button
@@ -246,8 +251,8 @@ export default function ReportView() {
                 </div>
 
                 {/* Footer / Client Details */}
-                <div className="mt-auto px-12 pb-12">
-                    <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm text-slate-700 mb-12 border-l-4 border-slate-300 pl-6">
+                <div className="mt-auto px-12 pb-12 relative z-10">
+                    <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm text-slate-700 mb-12 border-l-4 border-slate-900 pl-6 bg-white/50 backdrop-blur-sm p-4 rounded-r-lg">
                         <span className="font-bold text-slate-900 uppercase tracking-wide">Site Name:</span>
                         <span className="font-medium text-lg">{data.clientName || "Unknown Site"}</span>
 
@@ -259,9 +264,9 @@ export default function ReportView() {
                     </div>
 
                     {/* Corporate Footer with Logos */}
-                    <div className="border-t-2 border-slate-300 pt-6 text-center">
-                        <div className="text-slate-600 font-serif mb-6">
-                            <p className="text-lg font-bold text-slate-800">GDT Envirocare, 44 Clos Mancheldowne, Barry, CF62 5AB</p>
+                    <div className="border-t-4 border-slate-900 pt-6 text-center">
+                        <div className="text-slate-600 font-bold mb-6">
+                            <p className="text-lg font-black text-slate-900 tracking-wider">GDT Envirocare, 44 Clos Mancheldowne, Barry, CF62 5AB</p>
                             <p className="text-sm tracking-wider">VAT No: 433714507 &nbsp;<span className="text-slate-300">|</span>&nbsp; COMPANY No: 11048398</p>
                         </div>
 
@@ -289,10 +294,15 @@ export default function ReportView() {
             {/* --- REST OF REPORT (Page 2+) --- */}
             <div className="max-w-[210mm] mx-auto bg-white shadow-lg p-[15mm] min-h-[297mm] print:shadow-none print:w-full print:max-w-none relative overflow-hidden print:break-before-always">
 
+                {/* Background Watermark Overlay */}
+                <div className="absolute inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden opacity-[0.04] mix-blend-multiply">
+                    <img src="/assets/gdt-logo.png" alt="Watermark" className="w-[70%] max-w-[500px] object-contain -rotate-[15deg] grayscale" />
+                </div>
+
                 {/* Header for Page 2 */}
-                <div className="flex justify-between items-end border-b-2 border-slate-200 pb-4 mb-8">
+                <div className="flex justify-between items-end border-b-4 border-slate-900 pb-4 mb-8 relative z-10">
                     <div>
-                        <h3 className="text-2xl font-bold text-slate-800">Introduction</h3>
+                        <h3 className="text-3xl font-black text-slate-900 uppercase tracking-widest">Introduction</h3>
                     </div>
                     <div className="text-right text-xs text-slate-500">
                         Page 2
@@ -300,7 +310,7 @@ export default function ReportView() {
                 </div>
 
                 {/* Standard Text Block */}
-                <div className="prose max-w-none text-justify text-sm text-slate-700 mb-12 leading-relaxed">
+                <div className="prose max-w-none text-justify text-sm text-slate-800 font-medium mb-12 leading-relaxed relative z-10 bg-white/60 p-4 rounded-lg backdrop-blur-sm">
                     <p className="mb-4">
                         Over time, cooking in a commercial kitchen causes deposits of airborne grease, dust, grime and steam to gather on the inner walls of kitchen extraction ducting. When regular professional cleaning of these ventilation systems is not carried out, this build-up can cause health and safety risks such as reduced airflow, fire hazards and unwanted odours.
                     </p>
@@ -313,23 +323,23 @@ export default function ReportView() {
                 </div>
 
                 {/* Summary Section */}
-                <div className="mb-12">
-                    <h3 className="text-2xl font-bold text-slate-800 mb-4 border-b pb-2">Summary</h3>
+                <div className="mb-12 relative z-10 bg-white/60 p-4 rounded-lg backdrop-blur-sm">
+                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-wider mb-4 border-b-2 border-slate-900 pb-2">Summary</h3>
                     <p className="text-sm text-slate-700">
                         Internally, all accessible ducting has now been cleaned to BESA TR19 standards.
                     </p>
                 </div>
 
                 {/* Advisories Section */}
-                <div className="mb-12">
-                    <h3 className="text-2xl font-bold text-slate-800 mb-4 border-b pb-2">Advisories</h3>
+                <div className="mb-12 relative z-10 bg-white/60 p-4 rounded-lg backdrop-blur-sm">
+                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-wider mb-4 border-b-2 border-slate-900 pb-2">Advisories</h3>
                     <p className="text-sm text-slate-700 italic">
                         Nothing to note.
                     </p>
                 </div>
 
                 {/* Job / Staff Details */}
-                <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 text-xs text-slate-700 grid grid-cols-2 gap-4 mb-12">
+                <div className="bg-white/80 backdrop-blur-sm p-6 rounded-lg border-2 border-slate-900 text-xs text-slate-800 font-bold grid grid-cols-2 gap-4 mb-12 relative z-10 shadow-sm">
                     <div><span className="font-bold">SITE NAME:</span> {data.clientName}</div>
                     <div><span className="font-bold">DATE:</span> {data.inspectionDate ? new Date(data.inspectionDate).toLocaleDateString() : dateStr}</div>
                     <div><span className="font-bold">START TIME:</span> 09:00</div>
@@ -338,7 +348,7 @@ export default function ReportView() {
                 </div>
 
                 {/* Inspection Checklist / Schedules */}
-                <div className="mb-8">
+                <div className="mb-8 relative z-10 bg-white/80 p-6 rounded-lg backdrop-blur-sm border-2 border-slate-900">
                     {data.items && data.items.some((i: any) => i.type === 'fire_door') ? (
                         /* FIRE DOOR SCHEDULE */
                         /* DETAILED FIRE DOOR REPORT */
