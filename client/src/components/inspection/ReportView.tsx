@@ -42,6 +42,7 @@ export default function ReportView() {
     // Custom Assets State
     const [customBanner, setCustomBanner] = useState<string | null>(null);
     const [customCover, setCustomCover] = useState<string | null>(null);
+    const [clientLogo, setClientLogo] = useState<string | null>(null);
 
     useEffect(() => {
         if (params.id) {
@@ -53,6 +54,7 @@ export default function ReportView() {
                 // Load custom assets if they exist
                 if (found.data?.reportBannerUrl) setCustomBanner(found.data.reportBannerUrl);
                 if (found.data?.reportCoverPhotoUrl) setCustomCover(found.data.reportCoverPhotoUrl);
+                if (found.data?.clientLogoUrl) setClientLogo(found.data.clientLogoUrl);
             }
 
             const settings = getSettings();
@@ -62,7 +64,7 @@ export default function ReportView() {
         }
     }, [params.id]);
 
-    const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>, target: 'banner' | 'cover') => {
+    const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>, target: 'banner' | 'cover' | 'logo') => {
         const file = event.target.files?.[0];
         if (file) {
             const reader = new FileReader();
@@ -72,6 +74,13 @@ export default function ReportView() {
                     setCustomBanner(base64);
                     if (inspection) {
                         const updated = { ...inspection, data: { ...inspection.data, reportBannerUrl: base64 } };
+                        saveInspection(updated);
+                        setInspection(updated);
+                    }
+                } else if (target === 'logo') {
+                    setClientLogo(base64);
+                    if (inspection) {
+                        const updated = { ...inspection, data: { ...inspection.data, clientLogoUrl: base64 } };
                         saveInspection(updated);
                         setInspection(updated);
                     }
@@ -221,7 +230,7 @@ export default function ReportView() {
                 </div>
 
                 {/* Report Title */}
-                <div className="text-center py-10 px-8 mb-4 relative z-10 w-full flex-grow flex items-center justify-center">
+                <div className="text-center py-6 px-8 mb-0 relative z-10 w-full">
                     {isEditingTitle ? (
                         <div className="flex justify-center items-center gap-2 w-full">
                             <Input
@@ -251,16 +260,44 @@ export default function ReportView() {
                 </div>
 
                 {/* Footer / Client Details */}
-                <div className="mt-auto px-12 pb-12 relative z-10">
-                    <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm text-slate-700 mb-12 border-l-4 border-slate-900 pl-6 bg-white/50 backdrop-blur-sm p-4 rounded-r-lg">
-                        <span className="font-bold text-slate-900 uppercase tracking-wide">Site Name:</span>
-                        <span className="font-medium text-lg">{data.clientName || "Unknown Site"}</span>
+                <div className="mt-auto px-12 pb-12 relative z-10 flex flex-col justify-end">
+                    
+                    {/* Site Details & Upload Client Property Logo */}
+                    <div className="flex justify-between items-end mb-12 w-full">
+                        <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm text-slate-700 border-l-4 border-slate-900 pl-6 bg-white/50 backdrop-blur-sm p-4 rounded-r-lg shadow-sm">
+                            <span className="font-bold text-slate-900 uppercase tracking-wide">Site Name:</span>
+                            <span className="font-medium text-lg">{data.clientName || "Unknown Site"}</span>
 
-                        <span className="font-bold text-slate-900 uppercase tracking-wide">Site Address:</span>
-                        <span>{data.siteAddress || "Unknown Address"}</span>
+                            <span className="font-bold text-slate-900 uppercase tracking-wide">Site Address:</span>
+                            <span>{data.siteAddress || "Unknown Address"}</span>
 
-                        <span className="font-bold text-slate-900 uppercase tracking-wide">Date of clean:</span>
-                        <span>{data.inspectionDate ? new Date(data.inspectionDate).toLocaleDateString() : dateStr}</span>
+                            <span className="font-bold text-slate-900 uppercase tracking-wide">Date of clean:</span>
+                            <span>{data.inspectionDate ? new Date(data.inspectionDate).toLocaleDateString() : dateStr}</span>
+                        </div>
+
+                        {/* Client Property Logo Placeholder */}
+                        <div className="relative group w-[180px] h-[100px] border-2 border-dashed border-slate-300 bg-white ml-8 flex items-center justify-center overflow-hidden hover:border-slate-400 transition-colors">
+                            <input
+                                type="file"
+                                id="client-logo-upload"
+                                className="hidden"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'logo')}
+                            />
+                            {clientLogo ? (
+                                <img src={clientLogo} alt="Client Logo" className="w-full h-full object-contain p-2" />
+                            ) : (
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest px-4 text-center group-hover:hidden">
+                                    ADD PROPERTY<br/>OR CLIENT LOGO
+                                </span>
+                            )}
+                            <label
+                                htmlFor="client-logo-upload"
+                                className="absolute inset-0 flex items-center justify-center bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer print:hidden text-white"
+                            >
+                                <Upload className="w-6 h-6" />
+                            </label>
+                        </div>
                     </div>
 
                     {/* Corporate Footer with Logos */}
