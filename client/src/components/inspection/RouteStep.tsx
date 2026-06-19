@@ -50,6 +50,12 @@ export function RouteStep({ items, onItemsChange, templateId }: RouteStepProps) 
 
     if (templateId === 'fire-door-survey' && allTemplates['fire_door']) {
         allTemplates = { fire_door: allTemplates['fire_door'] };
+    } else if (templateId === 'eicr-report') {
+        const allowed = ['consumer_unit', 'circuit_test', 'rcd_test', 'custom'];
+        allTemplates = Object.fromEntries(Object.entries(allTemplates).filter(([k]) => allowed.includes(k)));
+    } else if (templateId === 'hvac-maintenance-general') {
+        const allowed = ['fan', 'duct', 'hatch', 'damper', 'custom'];
+        allTemplates = Object.fromEntries(Object.entries(allTemplates).filter(([k]) => allowed.includes(k)));
     }
 
     const [errors, setErrors] = useState<Record<string, string>>({});
