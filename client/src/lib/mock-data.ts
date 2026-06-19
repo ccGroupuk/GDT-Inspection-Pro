@@ -252,59 +252,61 @@ export const MOCK_TEMPLATES: InspectionTemplate[] = [
 
 export const DEMO_DATA = {
     formData: {
-        clientName: "Acme Corp Ltd",
-        address: "123 Industrial Way, Tech Park, London, E1 6AN",
-        job_number: "JOB-2026-001",
-        operative: "John Smith",
+        clientName: "Smith & Sons Manufacturing",
+        address: "Unit 4, Industrial Estate, Cardiff, CF10 1EP",
+        job_number: "EICR-2026-089",
+        operative: "Gareth Jones",
+        installation_type: "Commercial"
     },
     items: [
         {
-            id: "demo-1",
-            type: "fan",
-            label: "AHU-1 Supply Fan",
-            status: "fail",
+            id: "demo-elec-1",
+            type: "consumer_unit",
+            label: "Main Distribution Board",
+            status: "pass",
             data: {
-                location: "Roof Plant Room",
-                belt_condition: "Snapped",
-                motor_amps: 0,
-                bearings: false,
-                cleanliness: "Dusty",
-                notes: "Belt snapped, checks failed."
-            },
-            photos: ["https://images.unsplash.com/photo-1581093458791-9f3c3900df4b?w=800&auto=format&fit=crop&q=60"],
-            timestamp: Date.now()
-        },
-        {
-            id: "demo-2",
-            type: "duct",
-            label: "Main Supply Duct",
-            status: "needs-attention",
-            data: {
-                location: "Corridor G.01",
-                cleanliness: "Light Dust",
-                damage: false,
-                leaks: true
-            },
-            photos: ["https://images.unsplash.com/photo-1581094794329-cd13693dd618?w=800&auto=format&fit=crop&q=60"], // Duct photo
-            timestamp: Date.now()
-        },
-        {
-            id: "demo-3",
-            type: "fire_door",
-            label: "FD-G01 (Stair Core)",
-            status: "fail",
-            data: {
-                door_ref: "FD-G01",
-                location: "Ground Floor Stair Lobby",
-                rating: "FD30S",
-                gap_check: "Fail (>4mm)",
-                seals_intact: false,
-                closer_check: true,
-                hinges_grade: true,
-                signage: true,
-                glass_Check: true
+                location: "Ground Floor Plant Room",
+                make: "Schneider",
+                main_switch_size: 100,
+                ip_rating_intact: true,
+                blanks_fitted: true,
+                rcd_protection: true,
+                requires_quote: false,
+                notes: "Board in good condition."
             },
             photos: [],
+            timestamp: Date.now()
+        },
+        {
+            id: "demo-elec-2",
+            type: "circuit_test",
+            label: "Ring Final - Ground Floor",
+            status: "pass",
+            data: {
+                circuit_ref: "L1",
+                circuit_type: "Ring Final",
+                zs_reading: "0.45",
+                ir_reading: ">299",
+                continuity_ok: true,
+                requires_quote: false
+            },
+            photos: [],
+            timestamp: Date.now()
+        },
+        {
+            id: "demo-elec-3",
+            type: "custom",
+            label: "Damaged Socket Outlet",
+            status: "fail",
+            data: {
+                item_name: "Double Socket",
+                location: "Staff Kitchen",
+                condition: "Damaged",
+                notes: "Faceplate cracked, exposing live terminals. Isolated immediately.",
+                action_required: true,
+                requires_quote: true
+            },
+            photos: ["https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=800&auto=format&fit=crop&q=60"], // Example photo
             timestamp: Date.now()
         }
     ] as InspectionItem[]
