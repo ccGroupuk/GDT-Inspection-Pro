@@ -1,6 +1,6 @@
 import { FIRE_DOOR_TEMPLATE } from "./fire-door-template";
 
-export type InspectionItemType = 'fan' | 'duct' | 'hatch' | 'unit' | 'damper' | 'fire_door' | 'custom' | 'other';
+export type InspectionItemType = 'fan' | 'duct' | 'hatch' | 'unit' | 'damper' | 'fire_door' | 'custom' | 'other' | 'consumer_unit' | 'circuit_test' | 'rcd_test';
 
 export interface PhotoItem {
     url: string;
@@ -112,6 +112,43 @@ export const ITEM_TEMPLATES: Record<string, ItemTemplate> = {
             { name: "notes", label: "Inspection Notes", type: "text" }, // Notes can be optional
             { name: "action_required", label: "Action Required?", type: "checkbox" }
         ]
+    },
+    consumer_unit: {
+        type: 'consumer_unit',
+        label: 'Consumer Unit',
+        icon: 'Zap',
+        fields: [
+            { name: "location", label: "Location", type: "text", required: true },
+            { name: "make", label: "Make / Manufacturer", type: "text", required: true },
+            { name: "main_switch_size", label: "Main Switch Rating (A)", type: "number", required: true },
+            { name: "ip_rating_intact", label: "IP Rating Intact?", type: "checkbox" },
+            { name: "blanks_fitted", label: "Blanking Plates Fitted?", type: "checkbox" },
+            { name: "rcd_protection", label: "Overall RCD Protection?", type: "checkbox" }
+        ]
+    },
+    circuit_test: {
+        type: 'circuit_test',
+        label: 'Circuit Test',
+        icon: 'Activity',
+        fields: [
+            { name: "circuit_ref", label: "Circuit Reference", type: "text", required: true },
+            { name: "circuit_type", label: "Circuit Type", type: "select", options: ["Lighting", "Ring Final", "Radial", "Cooker", "Shower"], required: true },
+            { name: "zs_reading", label: "Zs Reading (Ohms)", type: "text", required: true },
+            { name: "ir_reading", label: "Insulation Resistance (M Ohms)", type: "text", required: true },
+            { name: "continuity_ok", label: "Continuity Verified?", type: "checkbox" }
+        ]
+    },
+    rcd_test: {
+        type: 'rcd_test',
+        label: 'RCD / RCBO Test',
+        icon: 'ShieldAlert',
+        fields: [
+            { name: "device_ref", label: "Device Reference", type: "text", required: true },
+            { name: "rating_ma", label: "Trip Rating (mA)", type: "select", options: ["30mA", "100mA", "300mA"], required: true },
+            { name: "trip_1x", label: "Trip Time @ 1x (ms)", type: "number", required: true },
+            { name: "trip_5x", label: "Trip Time @ 5x (ms)", type: "number" },
+            { name: "test_button_ok", label: "Test Button Operational?", type: "checkbox" }
+        ]
     }
 };
 
@@ -165,6 +202,36 @@ export const MOCK_TEMPLATES: InspectionTemplate[] = [
                 title: "Door Schedule",
                 description: "Add each door set found on the route.",
                 component: "route",
+            },
+            {
+                id: "review",
+                title: "Review & Submit",
+                component: "review",
+            },
+        ],
+    },
+    {
+        id: "eicr-report",
+        title: "Electrical Installation Condition Report (EICR)",
+        description: "Standard EICR form for domestic and commercial properties.",
+        steps: [
+            {
+                id: "job-setup",
+                title: "Job Setup",
+                description: "Client and Site Details",
+                fields: [
+                    { name: "clientName", label: "Client Name", type: "text", required: true },
+                    { name: "address", label: "Service Address", type: "text", required: true },
+                    { name: "job_number", label: "Job Number", type: "text" },
+                    { name: "installation_type", label: "Installation Type", type: "select", options: ["Domestic", "Commercial", "Industrial"], required: true }
+                ],
+            },
+            {
+                id: "electrical-inspection",
+                title: "Board & Circuit Tests",
+                description: "Add consumer units, RCD tests, and individual circuit tests.",
+                component: "route",
+                defaultItems: []
             },
             {
                 id: "review",
