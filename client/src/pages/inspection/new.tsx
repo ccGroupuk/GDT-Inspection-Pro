@@ -6,11 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { ChevronRight, FileText, ArrowLeft, Bookmark } from "lucide-react";
 import { Link } from "wouter";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function NewInspection({ params }: { params?: { id?: string } }) {
     const [selectedTemplate, setSelectedTemplate] = useState<InspectionTemplate | null>(null);
     const [customTemplates, setCustomTemplates] = useState<InspectionTemplate[]>([]);
     const [initialData, setInitialData] = useState<any>(null);
+    const [selectedTrade, setSelectedTrade] = useState<string>("hvac");
 
     useEffect(() => {
         setCustomTemplates(getCustomTemplates());
@@ -32,6 +34,7 @@ export default function NewInspection({ params }: { params?: { id?: string } }) 
     }, [params?.id]);
 
     const allTemplates = [...MOCK_TEMPLATES, ...customTemplates];
+    const filteredTemplates = allTemplates.filter(t => !t.category || t.category === selectedTrade);
 
     // If a template is selected (either by user or by edit mode), launch the Wizard
     if (selectedTemplate) {
@@ -64,9 +67,17 @@ export default function NewInspection({ params }: { params?: { id?: string } }) 
                     </div>
                 </div>
 
+                {/* Trade Toggle */}
+                <Tabs value={selectedTrade} onValueChange={setSelectedTrade} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="hvac">HVAC</TabsTrigger>
+                        <TabsTrigger value="electrician">Electrician</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+
                 {/* Templates List */}
                 <div className="grid gap-4">
-                    {allTemplates.map((template) => (
+                    {filteredTemplates.map((template) => (
                         <Card
                             key={template.id}
                             className="cursor-pointer hover:border-blue-500 transition-all duration-300 active:scale-[0.98] dark:hover:shadow-[0_0_20px_rgba(14,165,233,0.2)] dark:border-slate-800"

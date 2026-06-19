@@ -48,6 +48,7 @@ export interface InspectionTemplate {
     id: string;
     title: string;
     description: string;
+    category?: "hvac" | "electrician";
     steps: InspectionStep[];
 }
 
@@ -157,6 +158,7 @@ export const MOCK_TEMPLATES: InspectionTemplate[] = [
         id: "hvac-maintenance-general",
         title: "HVAC Maintenance Checklist",
         description: "Standard comprehensive maintenance for HVAC units.",
+        category: "hvac",
         steps: [
             {
                 id: "job-setup",
@@ -185,6 +187,7 @@ export const MOCK_TEMPLATES: InspectionTemplate[] = [
         id: "fire-door-survey",
         title: "Fire Door Survey",
         description: "Comprehensive inspection of fire door sets (FD30/60).",
+        category: "hvac",
         steps: [
             {
                 id: "survey-setup",
@@ -214,6 +217,7 @@ export const MOCK_TEMPLATES: InspectionTemplate[] = [
         id: "eicr-report",
         title: "Electrical Installation Condition Report (EICR)",
         description: "Standard EICR form for domestic and commercial properties.",
+        category: "electrician",
         steps: [
             {
                 id: "job-setup",
