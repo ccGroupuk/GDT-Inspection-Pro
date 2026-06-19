@@ -111,7 +111,8 @@ export const ITEM_TEMPLATES: Record<string, ItemTemplate> = {
             { name: "location", label: "Location", type: "text", required: true },
             { name: "condition", label: "Condition", type: "select", options: ["Good", "Average", "Poor", "Damaged"], required: true },
             { name: "notes", label: "Inspection Notes", type: "text" }, // Notes can be optional
-            { name: "action_required", label: "Action Required?", type: "checkbox" }
+            { name: "action_required", label: "Action Required?", type: "checkbox" },
+            { name: "requires_quote", label: "Requires Remedial Quote?", type: "checkbox" }
         ]
     },
     consumer_unit: {
@@ -124,7 +125,8 @@ export const ITEM_TEMPLATES: Record<string, ItemTemplate> = {
             { name: "main_switch_size", label: "Main Switch Rating (A)", type: "number", required: true },
             { name: "ip_rating_intact", label: "IP Rating Intact?", type: "checkbox" },
             { name: "blanks_fitted", label: "Blanking Plates Fitted?", type: "checkbox" },
-            { name: "rcd_protection", label: "Overall RCD Protection?", type: "checkbox" }
+            { name: "rcd_protection", label: "Overall RCD Protection?", type: "checkbox" },
+            { name: "requires_quote", label: "Requires Remedial Quote?", type: "checkbox" }
         ]
     },
     circuit_test: {
@@ -136,7 +138,8 @@ export const ITEM_TEMPLATES: Record<string, ItemTemplate> = {
             { name: "circuit_type", label: "Circuit Type", type: "select", options: ["Lighting", "Ring Final", "Radial", "Cooker", "Shower"], required: true },
             { name: "zs_reading", label: "Zs Reading (Ohms)", type: "text", required: true },
             { name: "ir_reading", label: "Insulation Resistance (M Ohms)", type: "text", required: true },
-            { name: "continuity_ok", label: "Continuity Verified?", type: "checkbox" }
+            { name: "continuity_ok", label: "Continuity Verified?", type: "checkbox" },
+            { name: "requires_quote", label: "Requires Remedial Quote?", type: "checkbox" }
         ]
     },
     rcd_test: {
@@ -148,7 +151,8 @@ export const ITEM_TEMPLATES: Record<string, ItemTemplate> = {
             { name: "rating_ma", label: "Trip Rating (mA)", type: "select", options: ["30mA", "100mA", "300mA"], required: true },
             { name: "trip_1x", label: "Trip Time @ 1x (ms)", type: "number", required: true },
             { name: "trip_5x", label: "Trip Time @ 5x (ms)", type: "number" },
-            { name: "test_button_ok", label: "Test Button Operational?", type: "checkbox" }
+            { name: "test_button_ok", label: "Test Button Operational?", type: "checkbox" },
+            { name: "requires_quote", label: "Requires Remedial Quote?", type: "checkbox" }
         ]
     }
 };

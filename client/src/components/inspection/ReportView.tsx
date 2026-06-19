@@ -502,6 +502,38 @@ export default function ReportView() {
                     )}
                 </div>
 
+                {/* Recommended Remedial Works (Upsell) */}
+                {(() => {
+                    const remedialItems = data.items ? data.items.filter((i: any) => 
+                        i.status === 'fail' || i.data?.requires_quote === true || i.data?.requires_quote === 'true'
+                    ) : [];
+
+                    if (remedialItems.length === 0) return null;
+
+                    return (
+                        <div className="mb-8 relative z-10 bg-red-50 p-6 rounded-lg border-2 border-red-200 page-break-inside-avoid">
+                            <h3 className="text-xl font-black text-red-900 uppercase tracking-wider mb-4 border-b-2 border-red-200 pb-2">Recommended Remedial Works</h3>
+                            <p className="text-sm text-red-700 mb-4 font-semibold">
+                                The following items failed inspection or were flagged by the engineer as requiring remedial work or a quote.
+                            </p>
+                            <div className="space-y-3">
+                                {remedialItems.map((item: any, idx: number) => (
+                                    <div key={item.id} className="bg-white p-4 rounded border border-red-100 shadow-sm flex justify-between items-start">
+                                        <div>
+                                            <h4 className="font-bold text-slate-900">{item.label} <span className="text-xs text-slate-500 font-normal ml-2">({item.type.replace('_', ' ')})</span></h4>
+                                            {item.data?.location && <p className="text-xs text-slate-600 mb-1">Location: {item.data.location}</p>}
+                                            {item.data?.notes && <p className="text-sm text-slate-700 italic">"{item.data.notes}"</p>}
+                                        </div>
+                                        <div className="text-xs font-bold px-2 py-1 bg-red-100 text-red-700 rounded uppercase tracking-wider">
+                                            Quote Required
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 {/* Photos Grid - Aggregated from General + Items */}
                 {(() => {
                     const generalPhotos = data.photos || [];
